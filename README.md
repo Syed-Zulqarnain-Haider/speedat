@@ -24,7 +24,15 @@ automatically.
   cost nothing per user. The same engine re-prices logged quotes server-side.
 - **Admin identity = Firebase Auth; admin authorisation = `admins` table.** A valid Google
   account that is not listed gets nothing. Owners publish; editors stage.
-- **Audit log is append-only** and records logins, publishes, imports, intake decisions.
+- **Audit log is append-only** and records logins, publishes, imports, intake decisions,
+  lead and shipment changes.
+- **Leads and shipments.** Booked quotes and contact messages become leads in the admin
+  inbox; a lead becomes a shipment with a status timeline customers can follow at `/track`.
+- **Security.** Per-request nonce CSP and hardening headers (`src/proxy.ts`), database-backed
+  per-IP limits on public endpoints, honeypot + signed-timestamp contact form, optional TOTP
+  two-factor for admins with encrypted secrets.
+- **Operations.** `/api/health`, Prometheus `/api/metrics`, a two-hourly cron that emails the
+  office (once a day per kind) about missing, waiting or stale rates, optional Sentry.
 
 ## Stack
 
@@ -76,17 +84,25 @@ database to include the version-store integration test.
 - The public site shows "Rates updated <date>" and keeps serving the last version if the
   database is ever unreachable.
 
+## Documents
+
+- [docs/admin-guide.md](docs/admin-guide.md) — how the office uses it day to day
+- [docs/runbook.md](docs/runbook.md) — deploy, rollback, restore, rotate secrets, incidents
+- [docs/launch-checklist.md](docs/launch-checklist.md) — everything to tick before go-live
+
 ## Layout
 
 ```
-src/app/(site)/        public pages (static, ISR 5 min, revalidated on publish)
+src/app/(site)/        public pages (rendered per request over cached data, expired on publish)
 src/app/admin/         admin page, login, server actions
-src/app/api/           quotes log, auth session, inbound email webhook, cron
+src/app/api/           quotes log, auth session, inbound email webhook, cron, health, metrics
+src/proxy.ts           CSP nonce + security headers on every HTML response
 src/components/        calculator, admin editor, icons
 src/lib/pricing/       pure pricing engine, dates, formatting, quote text (+ tests)
 src/lib/site/          site document types, seed, migrate, diff/validate, repository
 src/lib/import/        sheet parsing, mapping memory, intake pipeline, workbook reader
-src/lib/auth/          Firebase admin/client, session cookie, admin lookup
+src/lib/auth/          Firebase admin/client, session cookie, admin lookup, TOTP
+src/lib/{leads,shipments,limits,notify,alerts,form-token,log}.ts   operations modules
 src/lib/db/            Drizzle schema and client
 drizzle/               SQL migrations
 scripts/seed.ts        first version + first admin
@@ -95,9 +111,8 @@ tests/fixtures/        realistic carrier workbooks used by the tests
 
 ## Not built (on purpose, for now)
 
-- Notifications (WhatsApp/email) when a sheet is held or missing — the admin shows both;
-  wiring an outbound provider is a small follow-up once one is chosen.
-- Rate limiting on the public quote log beyond input caps — enable Vercel's WAF rate
-  limiting or add an edge limiter if abuse appears.
+- WhatsApp *API* sending. Updates to customers are prefilled `wa.me` links a person taps;
+  automated sending needs a WhatsApp Business API account.
 - Weight-slab *grid* sheets (0.5 / 1 / 1.5 … kg columns). The importer reads
   "first + additional" layouts; a grid mode is straightforward once a real sheet is available.
+- Password reset / email-link sign-in: handled by Firebase's own flows if enabled there.

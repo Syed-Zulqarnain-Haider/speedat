@@ -7,6 +7,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const AUTH_DOMAIN = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+// Browser error reports go to the DSN's host when Sentry is enabled.
+const SENTRY_ORIGIN = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_SENTRY_DSN ? new URL(process.env.NEXT_PUBLIC_SENTRY_DSN).origin : "";
+  } catch {
+    return "";
+  }
+})();
 
 export function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
@@ -21,7 +29,7 @@ export function proxy(request: NextRequest) {
     "img-src 'self' blob: data:",
     "font-src 'self'",
     // Firebase Auth (admin sign-in) talks to Google's identity endpoints and uses an auth iframe on the auth domain.
-    "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://api.postmarkapp.com",
+    `connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com${SENTRY_ORIGIN ? ` ${SENTRY_ORIGIN}` : ""}`,
     `frame-src 'self'${firebaseFrames}`,
     "object-src 'none'",
     "base-uri 'self'",

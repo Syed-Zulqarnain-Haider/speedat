@@ -8,6 +8,7 @@
 import "server-only";
 import { desc, eq } from "drizzle-orm";
 import { revalidateTag } from "next/cache";
+import { alertNow } from "@/lib/alerts";
 import { audit } from "@/lib/audit";
 import { db, schema } from "@/lib/db";
 import { diffSite, summarise, validateSite } from "@/lib/site/diff";
@@ -87,6 +88,7 @@ export async function receiveSheet(args: ReceiveArgs): Promise<ReceiveResult> {
       .values({ source: args.source, fileName: args.fileName, fromEmail: args.fromEmail, status: "failed", error: msg })
       .returning({ id: schema.imports.id });
     await audit(args.actor, "import_failed", { importId: row?.id, fileName: args.fileName, error: msg });
+    if (args.source === "email") void alertNow(`Rate sheet ${args.fileName} could not be read`, `${msg}. The file came from ${args.fromEmail ?? "an unknown sender"}. Ask them to resend it as .xlsx or .csv, or upload it by hand at ${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/admin.`);
     return { importId: row?.id ?? 0, status: "failed", workbook: null, sheet: null, headerRow: 0, map: {}, profileMatched: false, result: null, publishedVersion: null, error: msg };
   }
   const sheet = largestSheet(wb);
@@ -113,6 +115,12 @@ export async function receiveSheet(args: ReceiveArgs): Promise<ReceiveResult> {
 
   // Uploads always go through the mapper (pre-filled); only email uses the remembered layout unattended.
   if (args.source === "upload" || !profile) {
+    if (args.source === "email") {
+      void alertNow(
+        `Rate sheet ${args.fileName} needs a column mapping`,
+        `A sheet from ${args.fromEmail ?? "an unknown sender"} arrived with a layout the admin has not seen before. Nothing was changed. Open ${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/admin, find it under Import from Excel and map its columns once.`,
+      );
+    }
     return { importId, status: "needs_mapping", workbook: wb, sheet, headerRow, map, profileMatched: !!profile, result: null, publishedVersion: null, error: null };
   }
   const opts: ImportOptions = { addNew: true, hideMissing: false, cost: profile.cost, margin: profile.margin, mround: profile.mround };
@@ -176,7 +184,14 @@ export async function applyToDraft(args: ApplyArgs): Promise<ApplyResult> {
         return { status: "published", result, draft: next, publishedVersion: v.version, error: null };
       }
     } else {
-      await audit(args.actor, "import_held", { importId: args.importId, reason: errors[0] ?? (worst ? `${worst.label} moved ${worst.pct.toFixed(1)}%` : "auto-publish off") });
+      const reason = errors[0] ?? (worst ? `${worst.label} moved ${worst.pct.toFixed(1)}%` : "auto-publish is off");
+      await audit(args.actor, "import_held", { importId: args.importId, reason });
+      void alertNow(
+        `Rate sheet ${rec.fileName} is waiting for your review`,
+        `The sheet from ${rec.fromEmail ?? "an unknown sender"} was read and applied to the editor (${result.rows.length} destinations) but not published: ${reason}.
+
+Review and publish at ${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/admin.`,
+      );
     }
   }
   return { status: "applied", result, draft: next, publishedVersion: null, error: null };
