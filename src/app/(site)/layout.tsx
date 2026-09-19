@@ -57,6 +57,9 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
                 <Link href="/about">About us</Link>
               </li>
               <li>
+                <Link href="/track">Track a shipment</Link>
+              </li>
+              <li>
                 <Link href="/contact">Contact</Link>
               </li>
               <li>
