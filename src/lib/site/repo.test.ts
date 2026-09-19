@@ -80,3 +80,15 @@ suite("version store", () => {
     expect(fresh.baseVersion).toBe(5);
   });
 });
+
+suite("rate limiter", () => {
+  it("counts hits per window and resets", async () => {
+    process.env.DATABASE_URL = url;
+    const { rateLimit } = await import("@/lib/limits");
+    const ip = `203.0.113.${Math.floor(Math.random() * 200)}`;
+    const results = [];
+    for (let i = 0; i < 4; i++) results.push((await rateLimit("test", ip, 3, 60)).ok);
+    expect(results).toEqual([true, true, true, false]);
+    expect((await rateLimit("other-bucket", ip, 3, 60)).ok).toBe(true);
+  });
+});

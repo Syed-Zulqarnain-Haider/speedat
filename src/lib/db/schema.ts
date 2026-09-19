@@ -55,6 +55,9 @@ export const admins = pgTable("admins", {
   role: text("role").notNull().default("editor"),
   addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   addedBy: text("added_by").notNull().default(""),
+  /** TOTP secret (base32), encrypted with TOTP_ENCRYPTION_KEY; null until the admin enrols. */
+  totpSecret: text("totp_secret"),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
 });
 
 /** A rate sheet that arrived (upload or email), what we made of it, and what happened to it. */
@@ -127,4 +130,77 @@ export const appSettings = pgTable(
     updatedBy: text("updated_by").notNull().default(""),
   },
   (t) => [primaryKey({ columns: [t.key] })],
+);
+
+/** Someone who wants to ship: a booked quote or a contact-form message. Worked from the admin inbox. */
+export const leads = pgTable(
+  "leads",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** "quote" | "message" */
+    kind: text("kind").notNull(),
+    quoteId: text("quote_id"),
+    name: text("name").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+    email: text("email").notNull().default(""),
+    message: text("message").notNull().default(""),
+    destId: text("dest_id"),
+    weightG: integer("weight_g"),
+    /** "new" | "contacted" | "booked" | "lost" */
+    status: text("status").notNull().default("new"),
+    notes: text("notes").notNull().default(""),
+    updatedBy: text("updated_by").notNull().default(""),
+    ipHash: text("ip_hash"),
+  },
+  (t) => [index("leads_status_idx").on(t.status, t.createdAt), uniqueIndex("leads_quote_idx").on(t.quoteId)],
+);
+
+/** A booked shipment and its progress; ids are random so /track cannot be enumerated. */
+export const shipments = pgTable(
+  "shipments",
+  {
+    id: text("id").primaryKey(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    leadId: integer("lead_id"),
+    quoteId: text("quote_id"),
+    trackingNo: text("tracking_no"),
+    carrier: text("carrier").notNull().default(""),
+    customerName: text("customer_name").notNull().default(""),
+    customerPhone: text("customer_phone").notNull().default(""),
+    receiverName: text("receiver_name").notNull().default(""),
+    destId: text("dest_id").notNull(),
+    serviceId: text("service_id").notNull(),
+    /** booked | picked_up | in_transit | customs | out_for_delivery | delivered | exception */
+    status: text("status").notNull().default("booked"),
+    notes: text("notes").notNull().default(""),
+    createdBy: text("created_by").notNull(),
+  },
+  (t) => [index("shipments_status_idx").on(t.status, t.updatedAt), index("shipments_tracking_idx").on(t.trackingNo), index("shipments_quote_idx").on(t.quoteId)],
+);
+
+export const shipmentEvents = pgTable(
+  "shipment_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    shipmentId: text("shipment_id").notNull(),
+    status: text("status").notNull(),
+    note: text("note").notNull().default(""),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    by: text("by").notNull(),
+  },
+  (t) => [index("shipment_events_shipment_idx").on(t.shipmentId, t.at)],
+);
+
+/** Fixed-window counters for per-IP limits; works across serverless instances because it lives in the database. */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.windowStart] })],
 );

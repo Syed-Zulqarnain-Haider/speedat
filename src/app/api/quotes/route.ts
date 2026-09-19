@@ -8,7 +8,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
-import { priceService } from "@/lib/pricing/engine";
+import { upsertQuoteLead } from "@/lib/leads";
+import { fmtMoney } from "@/lib/pricing/format";
+import { gToKg, priceService } from "@/lib/pricing/engine";
 import { getLiveSite } from "@/lib/site/live";
 
 const Body = z.object({
@@ -53,6 +55,20 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("quote log failed", err);
     return NextResponse.json({ error: { code: "unavailable", message: "Could not save the quote" } }, { status: 503 });
+  }
+  if (booked) {
+    // A tapped Book button is a lead for the inbox; the customer's WhatsApp message is the conversation.
+    try {
+      await upsertQuoteLead({
+        quoteId: id,
+        destId,
+        weightG: billableG,
+        summary: `${service.name} to ${dest.name} · ${gToKg(billableG)} kg · ${fmtMoney(price.total, site.settings.currency)}${rest.piecesText ? ` · ${rest.piecesText}` : ""}`,
+        contents: rest.contents,
+      });
+    } catch (err) {
+      console.error("lead upsert failed", err);
+    }
   }
   return NextResponse.json({ ok: true });
 }

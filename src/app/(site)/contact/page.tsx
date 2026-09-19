@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { CardIcons } from "@/components/Icons";
+import { ContactForm } from "@/components/site/ContactForm";
 import { CtaBand } from "@/components/site/CtaBand";
+import { issueFormToken } from "@/lib/form-token";
 import { fmtHour, fmtPhone } from "@/lib/pricing/format";
 import { getLiveSite } from "@/lib/site/live";
 import { originCities } from "@/lib/site/text";
@@ -14,6 +16,10 @@ export default async function ContactPage() {
   const cities = originCities(co);
   const mapHref = c.mapUrl || (c.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address)}` : "");
   const cutoff = site.settings.cutoffHour;
+  const dests = site.destinations
+    .filter((d) => d.active)
+    .map((d) => ({ id: d.id, name: d.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   return (
     <section className="page">
       <h1>Contact us</h1>
@@ -73,6 +79,8 @@ export default async function ContactPage() {
           {cutoff != null ? <p style={{ marginTop: 8 }}>Book before {fmtHour(cutoff)} for same-day pickup.</p> : null}
         </div>
       </div>
+      <h2>Write to us</h2>
+      <ContactForm destinations={dests} whatsapp={co.whatsapp} token={issueFormToken()} />
       <CtaBand whatsapp={co.whatsapp} />
     </section>
   );
