@@ -74,9 +74,11 @@ export function quoteIdFor(seed: string, now: Date = new Date()): string {
   return quoteId(now, () => 0).slice(0, -4) + tail;
 }
 
-/** Lower-case key used to match destination names across sheets ("U.K." ≡ "uk"). */
+/** Lower-case, accent-free key used to match destination names across sheets ("Türkiye" ≡ "turkiye", "U.K." ≡ "u k"). */
 export const nameKey = (name: string | null | undefined): string =>
   String(name ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();

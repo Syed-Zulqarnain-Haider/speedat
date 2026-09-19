@@ -15,7 +15,7 @@ import { PublishConflict, discardDraft, getDraft, getLatestVersion, getVersion, 
 import { SiteDataSchema } from "@/lib/site/schema";
 import type { SiteData } from "@/lib/site/types";
 
-export type ActionResult<T = Record<string, never>> = ({ ok: true } & T) | { ok: false; code: string; message: string; errors?: string[] };
+export type ActionResult<T = object> = ({ ok: true } & T) | { ok: false; code: string; message: string; errors?: string[] };
 
 function parse(data: unknown): SiteData {
   return migrate(SiteDataSchema.parse(data));

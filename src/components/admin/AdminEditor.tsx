@@ -10,12 +10,14 @@ import { useEffect, useMemo, useState } from "react";
 import { discardDraftAction, publishAction, restoreVersionAction, saveDraftAction } from "@/app/admin/actions";
 import { Toast, useToast } from "@/components/calculator/Toast";
 import type { AdminUser } from "@/lib/auth/session";
+import type { ImportSummary, IntakeSettings } from "@/lib/import/intake";
 import { fmtDateTime } from "@/lib/pricing/format";
 import { diffSite, validateSite, warnSite, type Diff } from "@/lib/site/diff";
 import type { Draft, VersionMeta } from "@/lib/site/repo";
 import type { PublishedVersion, SiteData } from "@/lib/site/types";
 import { BulkAdjust } from "./BulkAdjust";
 import { ContentForm } from "./ContentForm";
+import { ImportPanel } from "./ImportPanel";
 import { RatesTable } from "./RatesTable";
 import { SettingsForm } from "./SettingsForm";
 import { TestPrice } from "./TestPrice";
@@ -25,6 +27,8 @@ interface Props {
   draft: Draft;
   versions: VersionMeta[];
   user: AdminUser;
+  imports: ImportSummary[];
+  intake: IntakeSettings;
 }
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
@@ -43,7 +47,7 @@ function daysAgo(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }
 
-export function AdminEditor({ live, draft: initial, versions, user }: Props) {
+export function AdminEditor({ live, draft: initial, versions, user, imports, intake }: Props) {
   const router = useRouter();
   const liveData: SiteData = useMemo(() => {
     const { version: _v, publishedAt: _p, ...rest } = live;
@@ -188,10 +192,16 @@ export function AdminEditor({ live, draft: initial, versions, user }: Props) {
 
       <RatesTable draft={draft} live={liveData} changed={changes.byDest} readOnly={readOnly} update={update} epoch={epoch} toast={showToast} />
 
-      <section className="block" id="sec-import">
-        <h2>Import from Excel</h2>
-        <p className="desc">Coming in the next step: upload the carrier&apos;s sheet, map its columns once, and the layout is remembered.</p>
-      </section>
+      <ImportPanel
+        draft={draft}
+        imports={imports}
+        intake={intake}
+        isOwner={canPublish}
+        adopt={(data) => replace(data, "saved")}
+        adoptLocal={(data) => replace(data, "dirty")}
+        toast={showToast}
+        refresh={() => router.refresh()}
+      />
 
       <BulkAdjust draft={draft} readOnly={readOnly} update={update} toast={showToast} />
       <TestPrice draft={draft} />

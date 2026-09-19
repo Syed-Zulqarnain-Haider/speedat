@@ -2,13 +2,14 @@ import Link from "next/link";
 import { AdminEditor } from "@/components/admin/AdminEditor";
 import { SignOutButton } from "@/components/admin/SignOutButton";
 import { requireAdminPage } from "@/lib/auth/session";
+import { getIntakeSettings, listImports } from "@/lib/import/intake";
 import { getDraft, getLatestVersion, listVersions } from "@/lib/site/repo";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   const user = await requireAdminPage();
-  const [live, draft, versions] = await Promise.all([getLatestVersion(), getDraft(), listVersions(20)]);
+  const [live, draft, versions, imports, intake] = await Promise.all([getLatestVersion(), getDraft(), listVersions(20), listImports(15), getIntakeSettings()]);
   if (!live) {
     return (
       <div className="wrap">
@@ -41,7 +42,7 @@ export default async function AdminPage() {
           </div>
         </div>
       </header>
-      <AdminEditor live={live} draft={draft} versions={versions} user={user} />
+      <AdminEditor live={live} draft={draft} versions={versions} user={user} imports={imports} intake={intake} />
     </div>
   );
 }
