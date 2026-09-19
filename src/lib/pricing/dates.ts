@@ -53,6 +53,29 @@ export function workingSet(settings: Pick<Settings, "workingDays">): Set<number>
   return set;
 }
 
+const NEWLINE = /\r?\n/;
+
+/** Holidays as a set of "YYYY-MM-DD" keys. Lines that do not start with a date are ignored. */
+export function holidaySet(settings: Pick<Settings, "holidays">): Set<string> {
+  const out = new Set<string>();
+  for (const ln of String(settings.holidays ?? "").split(NEWLINE)) {
+    const m = ln.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) out.add(`${m[1]}-${m[2]}-${m[3]}`);
+  }
+  return out;
+}
+
+/** Holiday lines that are not `YYYY-MM-DD` (for validation). */
+export function badHolidayLines(settings: Pick<Settings, "holidays">): string[] {
+  return String(settings.holidays ?? "")
+    .split(NEWLINE)
+    .map((l) => l.trim())
+    .filter((l) => l && !/^\d{4}-\d{2}-\d{2}(\s*\|.*)?$/.test(l));
+}
+
+const dayKey = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 export function addDays(dt: Date, n: number): Date {
   const x = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
   x.setDate(x.getDate() + n);
@@ -64,20 +87,22 @@ export interface DeliveryEstimate {
   pickup: Date;
   from: Date;
   to: Date;
-  /** True when pickup moved off the requested day (cutoff passed or non-working day). */
+  /** True when pickup moved off the requested day (cutoff passed, holiday or non-working day). */
   moved: boolean;
   range: [number, number];
 }
 
 export function estimateDelivery(
   daysStr: string | null | undefined,
-  settings: Pick<Settings, "workingDays" | "cutoffHour">,
+  settings: Pick<Settings, "workingDays" | "cutoffHour"> & Partial<Pick<Settings, "holidays">>,
   shipDate: Date | null,
   now: Date,
 ): DeliveryEstimate | null {
   const range = parseDaysRange(daysStr);
   if (!range) return null;
   const ws = workingSet(settings);
+  const hol = holidaySet({ holidays: settings.holidays ?? "" });
+  const working = (d: Date) => ws.has(d.getDay()) && !hol.has(dayKey(d));
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   let start = shipDate ? new Date(shipDate.getFullYear(), shipDate.getMonth(), shipDate.getDate()) : today;
   if (start < today) start = today;
@@ -88,7 +113,7 @@ export function estimateDelivery(
     moved = true;
   }
   let guard = 0;
-  while (!ws.has(start.getDay()) && guard++ < 14) {
+  while (!working(start) && guard++ < 60) {
     start = addDays(start, 1);
     moved = true;
   }
@@ -98,7 +123,7 @@ export function estimateDelivery(
     let g = 0;
     while (c < n && g++ < 400) {
       x = addDays(x, 1);
-      if (ws.has(x.getDay())) c++;
+      if (working(x)) c++;
     }
     return x;
   };

@@ -4,7 +4,7 @@
  * enforces them, tests pin them.
  */
 import { isNum, lines, parts, toNumLoose } from "@/lib/pricing/engine";
-import { workingSet } from "@/lib/pricing/dates";
+import { badHolidayLines, workingSet } from "@/lib/pricing/dates";
 import { fmtMoney, nameKey } from "@/lib/pricing/format";
 import type { SiteData } from "./types";
 
@@ -127,6 +127,7 @@ export function validateSite(s: SiteData): string[] {
   if (String(st.workingDays ?? "").trim() && !/mon|tue|wed|thu|fri|sat|sun/i.test(String(st.workingDays))) errs.push("Working days must be day names such as Mon, Tue, Wed.");
   if (String(st.workingDays ?? "").trim() && !workingSet(st).size) errs.push("Working days must be day names such as Mon, Tue, Wed.");
   if (!String(st.currency ?? "").trim() || String(st.currency).length > 8) errs.push("Currency label must be 1–8 characters, such as PKR or Rs.");
+  for (const ln of badHolidayLines(st).slice(0, 5)) errs.push(`Holiday “${ln}” must be written as YYYY-MM-DD, optionally followed by | a name.`);
   if (!s.services.length) errs.push("At least one service is needed.");
   const seen = new Set<string>();
   let activeCount = 0;

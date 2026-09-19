@@ -51,6 +51,8 @@ export interface Settings {
   cutoffHour: number | null;
   /** Day names counted for delivery estimates, e.g. "Mon, Tue, Wed, Thu, Fri, Sat". */
   workingDays: string;
+  /** Dates that are not working days, one per line: `YYYY-MM-DD` optionally followed by `| label`. */
+  holidays: string;
   /** Optional charges, one per line: `Label | Amount | on`. */
   addons: string;
   disclaimer: string;

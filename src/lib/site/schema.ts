@@ -36,6 +36,7 @@ export const SettingsSchema = z.object({
   showEta: z.boolean(),
   cutoffHour: num.nullable(),
   workingDays: text(120),
+  holidays: text(4000),
   addons: text(2000),
   disclaimer: text(2000),
 });

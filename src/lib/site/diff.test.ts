@@ -108,3 +108,15 @@ describe("migrate", () => {
     expect(migrate({ ...SEED, settings: { ...SEED.settings, cutoffHour: 9 } }).settings.cutoffHour).toBe(9);
   });
 });
+
+describe("holiday validation", () => {
+  it("rejects malformed holiday lines and accepts dated ones", () => {
+    const b = clone();
+    b.settings.holidays = "2026-12-25 | Quaid-e-Azam Day\n25/12/2026\n";
+    const errs = validateSite(b);
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toMatch(/25\/12\/2026/);
+    b.settings.holidays = "2026-12-25 | Quaid-e-Azam Day\n2027-03-23";
+    expect(validateSite(b)).toEqual([]);
+  });
+});

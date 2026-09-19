@@ -82,6 +82,17 @@ export function SettingsForm({ draft, readOnly, update, epoch }: Props) {
         />
       </div>
       <Area
+        label="Holidays skipped by delivery estimates (one per line: YYYY-MM-DD | name)"
+        value={st.holidays}
+        placeholder={["2026-12-25 | Quaid-e-Azam Day", "2027-03-23 | Pakistan Day"].join("\n")}
+        onChange={(raw) =>
+          update((d) => {
+            d.settings.holidays = raw;
+          })
+        }
+        disabled={readOnly}
+      />
+      <Area
         label="Optional charges customers can tick (one per line: Label | Amount | on or off = ticked by default)"
         value={st.addons}
         placeholder="Pickup and service charges | 500 | on"

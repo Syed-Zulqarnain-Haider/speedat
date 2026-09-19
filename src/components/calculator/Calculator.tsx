@@ -570,7 +570,10 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
       );
     if (price.tax) how.push(`Tax ${sets.taxPct}% = ${fmtMoney(price.tax, cur)}`);
     if (Number(sets.roundTo) > 1) how.push(`Rounded to the nearest ${fmtNum(sets.roundTo)}`);
-    if (est) how.push(`Delivery estimate counts ${price.days} working days (${String(sets.workingDays || "Mon–Fri").replace(/\s+/g, " ")}) from pickup on ${fmtDay(est.pickup)}`);
+    if (est)
+      how.push(
+        `Delivery estimate counts ${price.days} working days (${String(sets.workingDays || "Mon–Fri").replace(/\s+/g, " ")}${sets.holidays.trim() ? ", holidays skipped" : ""}) from pickup on ${fmtDay(est.pickup)}`,
+      );
   }
 
   const copyQuote = () => {

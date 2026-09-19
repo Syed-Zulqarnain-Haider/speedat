@@ -59,6 +59,7 @@ export const SEED: SiteData = {
     showEta: true,
     cutoffHour: 15,
     workingDays: "Mon, Tue, Wed, Thu, Fri, Sat",
+    holidays: "",
     addons: "Pickup and service charges | 500 | on",
     disclaimer:
       "Prices are for the weight and size entered here and are confirmed when your shipment is weighed and measured at pickup. Delivery dates are estimates and exclude customs delays.",

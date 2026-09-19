@@ -195,3 +195,16 @@ describe("formatting", () => {
     expect(slug("!!!")).toBe("dest");
   });
 });
+
+describe("holidays", () => {
+  it("skips holidays for pickup and transit counting", () => {
+    const sets = { workingDays: "Mon, Tue, Wed, Thu, Fri, Sat", cutoffHour: 15, holidays: "2026-09-21 | Test holiday\n2026-09-23\nnot a date" };
+    // Sat 19 Sep 10:00; Mon 21 is a holiday, Wed 23 is a holiday.
+    const est = estimateDelivery("3", sets, null, new Date(2026, 8, 19, 10, 0))!;
+    expect(est.pickup.getDate()).toBe(19);
+    expect(est.from.getDate()).toBe(25); // Tue 22, Thu 24, Fri 25
+    const onHoliday = estimateDelivery("1", sets, new Date(2026, 8, 21), new Date(2026, 8, 19, 10, 0))!;
+    expect(onHoliday.pickup.getDate()).toBe(22);
+    expect(onHoliday.moved).toBe(true);
+  });
+});
