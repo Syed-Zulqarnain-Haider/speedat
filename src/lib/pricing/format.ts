@@ -59,6 +59,21 @@ export function quoteId(now: Date = new Date(), rand: () => number = Math.random
   return `SP-${String(now.getFullYear()).slice(2)}${p(now.getMonth() + 1)}${p(now.getDate())}-${tail}`;
 }
 
+/**
+ * Deterministic quote id for a given seed (e.g. a per-tab salt plus the
+ * destination, weight and service): the same combination shows the same id
+ * across re-renders without any state, while different tabs get different ids.
+ */
+export function quoteIdFor(seed: string, now: Date = new Date()): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  const tail = (h % 1679616).toString(36).toUpperCase().padStart(4, "0"); // 36^4 combinations
+  return quoteId(now, () => 0).slice(0, -4) + tail;
+}
+
 /** Lower-case key used to match destination names across sheets ("U.K." ≡ "uk"). */
 export const nameKey = (name: string | null | undefined): string =>
   String(name ?? "")
