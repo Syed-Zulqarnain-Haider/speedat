@@ -7,6 +7,9 @@ import { firebaseConfigured } from "@/lib/auth/firebase-admin";
 
 export const metadata: Metadata = { title: "Sign in", robots: { index: false } };
 
+// Reads the session cookie: never prerender.
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage() {
   if (await getAdminUser()) redirect("/admin");
   const dev = devBypassEmail();
