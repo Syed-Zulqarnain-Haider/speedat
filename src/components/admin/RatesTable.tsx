@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { isNum } from "@/lib/pricing/engine";
 import { nameKey, slug } from "@/lib/pricing/format";
 import type { Destination } from "@/lib/pricing/types";
@@ -180,7 +180,7 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
                       </td>
                     );
                     return (
-                      <span key={sv.id} style={{ display: "contents" }}>
+                      <Fragment key={sv.id}>
                         {cell("doc", "document rate")}
                         {cell("first", "first slab")}
                         {cell("addl", "per step")}
@@ -205,7 +205,7 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
                             }
                           />
                         </td>
-                      </span>
+                      </Fragment>
                     );
                   })}
                   <td className="ctr" style={{ whiteSpace: "nowrap" }}>

@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { clientAuth } from "@/lib/auth/firebase-client";
 
-async function establishSession(idToken: string): Promise<string | null> {
-  const res = await fetch("/api/auth/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ idToken }) });
-  if (res.ok) return null;
-  const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-  return body?.error?.message ?? "Sign-in failed";
+type SessionResult = { ok: true } | { ok: false; mfa: boolean; message: string };
+
+async function establishSession(idToken: string, code?: string): Promise<SessionResult> {
+  const res = await fetch("/api/auth/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ idToken, code }) });
+  if (res.ok) return { ok: true };
+  const body = (await res.json().catch(() => null)) as { mfa?: boolean; message?: string; error?: { message?: string } } | null;
+  return { ok: false, mfa: !!body?.mfa, message: body?.error?.message ?? body?.message ?? "Sign-in failed" };
 }
 
 export function LoginForm() {
@@ -18,19 +20,56 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when the server wants a second factor; the Firebase token is kept in memory only until then.
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [code, setCode] = useState("");
 
-  const finish = async (idToken: string) => {
-    const err = await establishSession(idToken);
-    if (err) {
-      // Do not leave a Firebase session lying around for an account that is not an admin.
-      await signOut(clientAuth()).catch(() => {});
-      setError(err);
+  const finish = async (idToken: string, otp?: string) => {
+    const r = await establishSession(idToken, otp);
+    if (r.ok) {
+      router.replace("/admin");
+      router.refresh();
+      return;
+    }
+    if (r.mfa) {
+      setMfaToken(idToken);
+      setError(otp ? r.message : null);
       setBusy(false);
       return;
     }
-    router.replace("/admin");
-    router.refresh();
+    // Do not leave a Firebase session lying around for an account that is not an admin.
+    await signOut(clientAuth()).catch(() => {});
+    setError(r.message);
+    setBusy(false);
   };
+
+  if (mfaToken) {
+    return (
+      <form
+        className="panel"
+        style={{ paddingBottom: 18 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          setBusy(true);
+          void finish(mfaToken, code);
+        }}
+      >
+        <p style={{ marginBottom: 12 }}>Enter the 6-digit code from your authenticator app.</p>
+        <label className="field">
+          <span>Code</span>
+          <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
+        </label>
+        <button className="btn primary" type="submit" disabled={busy || code.replace(/\s/g, "").length < 6} style={{ width: "100%" }}>
+          Continue
+        </button>
+        {error ? (
+          <div className="notice err" role="alert">
+            {error}
+          </div>
+        ) : null}
+      </form>
+    );
+  }
 
   const withGoogle = async () => {
     setBusy(true);

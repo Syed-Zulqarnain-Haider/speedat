@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { upsertQuoteLead } from "@/lib/leads";
+import { clientIp, rateLimit } from "@/lib/limits";
 import { fmtMoney } from "@/lib/pricing/format";
 import { gToKg, priceService } from "@/lib/pricing/engine";
 import { getLiveSite } from "@/lib/site/live";
@@ -32,6 +33,10 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
+  const limit = await rateLimit("quotes", await clientIp(), 60, 60);
+  if (!limit.ok) {
+    return NextResponse.json({ error: { code: "rate_limited", message: "Too many requests" } }, { status: 429, headers: { "retry-after": String(limit.retryAfter) } });
+  }
   let parsed: z.infer<typeof Body>;
   try {
     parsed = Body.parse(await req.json());

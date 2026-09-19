@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 import { Nav } from "@/components/site/Nav";
 import { ShellWrap } from "@/components/site/ShellWrap";
@@ -5,6 +6,8 @@ import { fmtDate } from "@/lib/pricing/format";
 import { getLiveSite } from "@/lib/site/live";
 
 export default async function SiteLayout({ children }: LayoutProps<"/">) {
+  // Reading the nonce makes every page dynamic, which the per-request CSP requires; site data stays cached.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   const site = await getLiveSite();
   const c = site.company;
   const ct = site.content;
@@ -92,7 +95,7 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
           <Link href="/admin">Rates admin</Link>
         </div>
       </footer>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />
+      <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />
     </ShellWrap>
   );
 }

@@ -15,6 +15,13 @@
       "when": 1789857764834,
       "tag": "0001_leads_shipments_limits_totp",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789858625210,
+      "tag": "0002_totp_last_step",
+      "breakpoints": true
     }
   ]
 }

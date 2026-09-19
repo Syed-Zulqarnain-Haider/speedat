@@ -9,8 +9,10 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { adminAuth, firebaseConfigured } from "@/lib/auth/firebase-admin";
 import { SESSION_COOKIE, SESSION_DAYS, lookupAdmin } from "@/lib/auth/session";
+import { totpStatus, verifyCode } from "@/lib/auth/totp";
+import { clientIp, rateLimit } from "@/lib/limits";
 
-const Body = z.object({ idToken: z.string().min(20).max(4096) });
+const Body = z.object({ idToken: z.string().min(20).max(4096), code: z.string().max(12).optional() });
 
 const cookieOpts = {
   httpOnly: true,
@@ -21,9 +23,12 @@ const cookieOpts = {
 
 export async function POST(req: Request) {
   if (!firebaseConfigured()) return NextResponse.json({ error: { code: "unavailable", message: "Sign-in is not configured" } }, { status: 503 });
+  const limit = await rateLimit("login", await clientIp(), 20, 15 * 60);
+  if (!limit.ok) return NextResponse.json({ error: { code: "rate_limited", message: "Too many sign-in attempts. Try again in a few minutes." } }, { status: 429 });
   let idToken: string;
+  let code: string | undefined;
   try {
-    idToken = Body.parse(await req.json()).idToken;
+    ({ idToken, code } = Body.parse(await req.json()));
   } catch {
     return NextResponse.json({ error: { code: "bad_request", message: "Invalid request" } }, { status: 400 });
   }
@@ -40,11 +45,19 @@ export async function POST(req: Request) {
     await audit(email ?? "unknown", "login_denied", {});
     return NextResponse.json({ error: { code: "not_admin", message: "This account is not an admin" } }, { status: 403 });
   }
+  const totp = await totpStatus(admin.email);
+  if (totp.enabled) {
+    if (!code) return NextResponse.json({ mfa: true, message: "Enter the code from your authenticator app" }, { status: 401 });
+    if (!(await verifyCode(admin.email, code))) {
+      await audit(admin.email, "login_mfa_failed", {});
+      return NextResponse.json({ mfa: true, error: { code: "bad_code", message: "That code did not match" } }, { status: 401 });
+    }
+  }
   const expiresIn = SESSION_DAYS * 24 * 60 * 60 * 1000;
   const session = await adminAuth().createSessionCookie(idToken, { expiresIn });
   const jar = await cookies();
   jar.set(SESSION_COOKIE, session, { ...cookieOpts, maxAge: expiresIn / 1000 });
-  await audit(admin.email, "login", { role: admin.role });
+  await audit(admin.email, "login", { role: admin.role, mfa: totp.enabled });
   return NextResponse.json({ ok: true, role: admin.role });
 }
 

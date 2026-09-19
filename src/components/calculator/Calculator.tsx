@@ -6,7 +6,7 @@
  * the browser with the published document handed in as props; the only
  * network call is a fire-and-forget log when someone taps Book.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { UI } from "@/components/Icons";
 import { setSession, useMounted, useSession } from "@/lib/client/session";
 import { addonsList, gToKg, kgToG, lines, priceAll, toNumLoose } from "@/lib/pricing/engine";
@@ -776,10 +776,10 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
                 <dt>Shipping</dt>
                 <dd>{fmtMoney(quote.total, cur)}</dd>
                 {selectedAddons.map((a) => (
-                  <span key={a.id} style={{ display: "contents" }}>
+                  <Fragment key={a.id}>
                     <dt>{a.label}</dt>
                     <dd>{fmtMoney(a.amount, cur)}</dd>
-                  </span>
+                  </Fragment>
                 ))}
                 <dt>Total</dt>
                 <dd className="display" style={{ fontSize: "1.6rem" }}>

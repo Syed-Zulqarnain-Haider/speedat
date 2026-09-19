@@ -58,6 +58,8 @@ export const admins = pgTable("admins", {
   /** TOTP secret (base32), encrypted with TOTP_ENCRYPTION_KEY; null until the admin enrols. */
   totpSecret: text("totp_secret"),
   totpEnabled: boolean("totp_enabled").notNull().default(false),
+  /** Last accepted TOTP time-step, so a code cannot be replayed within its window. */
+  totpLastStep: integer("totp_last_step"),
 });
 
 /** A rate sheet that arrived (upload or email), what we made of it, and what happened to it. */
