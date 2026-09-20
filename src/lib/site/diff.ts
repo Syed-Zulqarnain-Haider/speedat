@@ -3,7 +3,7 @@
  * published. Pure functions: the admin shows them, the publish action
  * enforces them, tests pin them.
  */
-import { isNum, lines, parts, toNumLoose } from "@/lib/pricing/engine";
+import { gridWeights, isNum, lines, parts, toNumLoose } from "@/lib/pricing/engine";
 import { badHolidayLines, workingSet } from "@/lib/pricing/dates";
 import { fmtMoney, nameKey } from "@/lib/pricing/format";
 import type { SiteData } from "./types";
@@ -75,6 +75,25 @@ export function diffSite(a: SiteData, b: SiteData): Diff {
           flag: pct !== null && Math.abs(pct) >= FLAG_PCT ? `${pct > 0 ? "+" : ""}${pct}% — please double-check` : undefined,
         });
       }
+      // Grid prices, one line per kilogram that changed.
+      const g1 = r1.grid ?? {};
+      const g2 = r2.grid ?? {};
+      const kgs = [...new Set([...Object.keys(g1), ...Object.keys(g2)])].sort((p, q) => Number(p) - Number(q));
+      for (const k of kgs) {
+        const v1 = g1[k];
+        const v2 = g2[k];
+        if ((v1 ?? "") === (v2 ?? "")) continue;
+        out.count++;
+        out.byDest[id] = true;
+        const pct = isNum(v1) && isNum(v2) && v1 > 0 ? Math.round(((v2 - v1) / v1) * 100) : null;
+        out.lines.push({
+          kind: "rate",
+          label: `${x.name} · ${sv.name} ${k} kg`,
+          old: money(v1),
+          new: money(v2),
+          flag: pct !== null && Math.abs(pct) >= FLAG_PCT ? `${pct > 0 ? "+" : ""}${pct}% — please double-check` : undefined,
+        });
+      }
     }
   }
   for (const [id, y] of am) {
@@ -129,6 +148,8 @@ export function validateSite(s: SiteData): string[] {
   if (!String(st.currency ?? "").trim() || String(st.currency).length > 8) errs.push("Currency label must be 1–8 characters, such as PKR or Rs.");
   for (const ln of badHolidayLines(st).slice(0, 5)) errs.push(`Holiday “${ln}” must be written as YYYY-MM-DD, optionally followed by | a name.`);
   if (!s.services.length) errs.push("At least one service is needed.");
+  const grid = st.pricingMode === "grid";
+  if (grid && !(st.maxKg >= 1)) errs.push("Grid pricing needs a cargo threshold of at least 1 kg (Settings), which sets the last kilogram box.");
   const seen = new Set<string>();
   let activeCount = 0;
   for (const x of s.destinations) {
@@ -147,6 +168,16 @@ export function validateSite(s: SiteData): string[] {
       const r = x.rates[sv.id];
       if (!r) continue;
       if (r.doc != null && !(isNum(r.doc) && r.doc > 0)) errs.push(`${nm} · ${sv.name}: document price must be greater than 0 or left blank.`);
+      if (grid) {
+        const entries = Object.entries(r.grid ?? {}).filter(([, v]) => v != null);
+        if (!entries.length) {
+          if (r.doc != null) errs.push(`${nm} · ${sv.name}: has a document price but no kilogram prices — customers sending packages would see it as unavailable.`);
+          continue;
+        }
+        for (const [k, v] of entries) if (!(isNum(v) && v > 0)) errs.push(`${nm} · ${sv.name} ${k} kg: price must be greater than 0 or left blank.`);
+        priced++;
+        continue;
+      }
       if (r.first == null && r.addl == null) {
         if (r.doc != null) errs.push(`${nm} · ${sv.name}: has a document price but no package prices — customers sending packages would see it as unavailable.`);
         continue;
@@ -166,28 +197,52 @@ export function warnSite(s: SiteData): string[] {
   const w: string[] = [];
   const cur = s.settings.currency;
   const [ex, no] = s.services;
+  const grid = s.settings.pricingMode === "grid";
+  const firstOf = (q: { first?: number | null; grid?: Record<string, number> } | undefined): number | null => {
+    if (!q) return null;
+    if (grid) {
+      const ks = Object.keys(q.grid ?? {}).sort((a, b) => Number(a) - Number(b));
+      return ks.length ? (q.grid?.[ks[0]!] ?? null) : null;
+    }
+    return isNum(q.first) ? q.first : null;
+  };
   for (const x of s.destinations) {
     if (!x.active) continue;
     const r = x.rates;
     for (const sv of s.services) {
       const q = r[sv.id];
-      if (q && isNum(q.first) && isNum(q.addl) && q.addl > q.first)
+      if (!grid && q && isNum(q.first) && isNum(q.addl) && q.addl > q.first)
         w.push(`${x.name} · ${sv.name}: the per-step price (${fmtMoney(q.addl, cur)}) is higher than the first slab (${fmtMoney(q.first, cur)}).`);
+      if (grid && q?.grid) {
+        // A heavier parcel should not be cheaper than a lighter one.
+        const ks = Object.keys(q.grid).sort((a, b) => Number(a) - Number(b));
+        for (let i = 1; i < ks.length; i++) {
+          const prev = q.grid[ks[i - 1]!];
+          const cur2 = q.grid[ks[i]!];
+          if (isNum(prev) && isNum(cur2) && cur2 < prev) {
+            w.push(`${x.name} · ${sv.name}: ${ks[i]} kg (${fmtMoney(cur2, cur)}) is cheaper than ${ks[i - 1]} kg (${fmtMoney(prev, cur)}).`);
+            break;
+          }
+        }
+        const missing = gridWeights(s.settings).filter((k) => !isNum(q.grid?.[String(k)]));
+        if (missing.length && missing.length < gridWeights(s.settings).length)
+          w.push(`${x.name} · ${sv.name}: no price for ${missing.length} weight${missing.length === 1 ? "" : "s"} (${missing.slice(0, 6).join(", ")}${missing.length > 6 ? "…" : ""} kg) — those parcels are charged at the next heavier priced kg.`);
+      }
     }
     if (ex && no) {
-      const a = r[ex.id];
-      const b = r[no.id];
-      if (a && b && isNum(a.first) && isNum(b.first) && a.first < b.first)
-        w.push(`${x.name}: ${ex.name} is cheaper than ${no.name} (${fmtMoney(a.first, cur)} vs ${fmtMoney(b.first, cur)}).`);
+      const a = firstOf(r[ex.id]);
+      const b = firstOf(r[no.id]);
+      if (a != null && b != null && a < b) w.push(`${x.name}: ${ex.name} is cheaper than ${no.name} (${fmtMoney(a, cur)} vs ${fmtMoney(b, cur)}).`);
     }
     for (const sv of s.services) {
       const q = r[sv.id];
-      if (q && isNum(q.first) && !q.days) w.push(`${x.name} · ${sv.name}: no transit days, so no delivery date can be shown.`);
+      if (q && firstOf(q) != null && !q.days) w.push(`${x.name} · ${sv.name}: no transit days, so no delivery date can be shown.`);
     }
     for (const sv of s.services) {
       const q = r[sv.id];
-      if (q && isNum(q.doc) && isNum(q.first) && q.doc > q.first)
-        w.push(`${x.name} · ${sv.name}: the document price (${fmtMoney(q.doc, cur)}) is higher than the package first slab (${fmtMoney(q.first, cur)}).`);
+      const f = firstOf(q);
+      if (q && isNum(q.doc) && f != null && q.doc > f)
+        w.push(`${x.name} · ${sv.name}: the document price (${fmtMoney(q.doc, cur)}) is higher than the lightest package price (${fmtMoney(f, cur)}).`);
     }
   }
   return w;

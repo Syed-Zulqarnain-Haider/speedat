@@ -37,6 +37,22 @@ export function SettingsForm({ draft, readOnly, update, epoch }: Props) {
         <Fld label="Shipping from" value={c.origin} onChange={setCompany("origin")} disabled={readOnly} />
         <Fld label="What is included (shown under prices)" value={c.includes} onChange={setCompany("includes")} placeholder="Door-to-door · Pickup · Tracking" disabled={readOnly} />
         <Fld label="Pickup cities, comma-separated (shown as “From”)" value={c.originCities} onChange={setCompany("originCities")} placeholder="Lahore, Faisalabad" disabled={readOnly} />
+        <label className="field">
+          <span>Pricing model</span>
+          <select
+            defaultValue={st.pricingMode}
+            disabled={readOnly}
+            onChange={(e) =>
+              update((d) => {
+                d.settings.pricingMode = e.target.value === "grid" ? "grid" : "slab";
+              })
+            }
+          >
+            <option value="grid">Price per kilogram (1 kg … cargo threshold)</option>
+            <option value="slab">First slab + each additional step</option>
+          </select>
+          <span className="hint">Per-kilogram: every country gets a price box for each whole kg; parcels are charged at the next whole kg up.</span>
+        </label>
         <Fld
           label="Currency shown with prices (e.g. PKR or Rs.)"
           value={st.currency}

@@ -19,8 +19,9 @@ that was added as an admin. Owners can publish; editors can prepare changes for 
 opens pre-filled. Check:
 
 - *Header row number* highlights the row with the column names.
-- Each field points at the right column (Destination, Express first slab, Express each
-  additional step, Express days, documents…).
+- Each field points at the right column. Sheets with one column per kilogram (1 kg, 2 kg …)
+  are recognised and map to the price boxes; a sheet with "first" and "additional" columns
+  fills the boxes from those slabs.
 - Tick *Prices in this file are carrier costs — add my margin* if the sheet is what the
   airline charges you; set your margin % and rounding.
 - The preview lists every destination with old → new prices; rows that will be skipped are
@@ -42,11 +43,40 @@ cheaper than Normal, document price above the first slab) are advice.
 
 ## Editing rates by hand
 
-The *Rates* table has, per destination and service: **Docs** (flat price for documents up to
-the weight in Settings), **First** (price of the first 0.5 kg), **Each** (price of every
-further 0.5 kg) and **Days** (transit time such as 3–5). Leave First and Each blank to not
-offer a service for that destination. Untick *On site* to hide a destination without deleting
-its prices. Changed rows are marked; *Undo* restores that row.
+The *Rates* table has one row per destination. Per service it shows **Docs** (flat price for
+documents up to the weight in Settings) and **Days** (transit time such as 3–5); the prices
+themselves sit behind **Prices ▾**, which opens a box for every whole kilogram from 1 kg up
+to the cargo threshold (25 kg by default). Type the price for each kilogram; a parcel is
+charged at the next whole kilogram up (1.2 kg pays the 2 kg price). A blank box means that
+kilogram is not offered — the customer is told to ask on WhatsApp — and a service with no
+boxes at all is not offered for that destination.
+
+*Quick fill* saves typing a run of boxes: enter the 1 kg price and the amount per extra
+kilogram, then *Fill blanks* (only empty boxes) or *Fill all* (overwrite the lot), and adjust
+the odd box by hand. *Add country* appends a destination; give it a name and fill its boxes.
+Untick *On site* to hide a destination without deleting its prices. Changed rows are marked;
+*Undo* restores that row. *Download as CSV* exports every box for a spreadsheet.
+
+(Settings → *Pricing model* can switch back to the older "first slab + each additional step"
+model; per-kilogram is the default.)
+
+## Holding prices while rates change
+
+When new airline rates arrive and the old prices must stop showing at once, press **Hold
+prices** at the top of *Rates* and confirm. Within seconds the website replaces the
+calculator with your message (editable in the confirmation box) and a short WhatsApp form —
+customers can still send you their destination and weight, so no enquiry is lost, but no
+price is shown or sent to their browser, and no quote can be logged.
+
+Nothing in the editor changes: key in the new rates as usual (by hand or from a sheet),
+then *Review and publish*. The review shows a ticked box *Show prices again after
+publishing*; publishing with it ticked puts the new prices on the site in the same
+moment. Untick it to publish quietly and keep holding. **Resume showing prices** on the hold
+banner lifts the hold with the current live rates, for when nothing needed changing after all.
+
+Any admin can hold; only an owner resumes or publishes. A hold that has lasted twelve hours
+raises an alert email (and shows in the `/api/metrics` gauge `speedat_prices_held`) so a
+forgotten hold does not quietly stop quotes for a day. Every hold and resume is in the audit log.
 
 *Bulk adjust* raises or lowers many prices at once (by percent or amount, rounded).
 *Test a price* prices any shipment against the editor, including unpublished changes.

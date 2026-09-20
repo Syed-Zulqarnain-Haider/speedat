@@ -4,6 +4,7 @@
  * `live: false` keeps the "sample rates" notice on the site until real rates
  * are published.
  */
+import { slabToGrid } from "@/lib/pricing/engine";
 import type { Destination } from "@/lib/pricing/types";
 import type { SiteData } from "./types";
 
@@ -48,6 +49,7 @@ export const SEED: SiteData = {
     ].join("\n"),
   },
   settings: {
+    pricingMode: "slab",
     currency: "PKR",
     volumetricDivisor: 5000,
     firstKg: 0.5,
@@ -119,3 +121,18 @@ export const SEED: SiteData = {
   },
   importProfiles: [],
 };
+
+/**
+ * The sample data as it ships to a new site: per-kilogram price boxes up to
+ * the 25 kg cargo threshold, each box filled from the slab prices above so
+ * the numbers stay the ones the prototype was checked against.
+ */
+export function gridSeed(): SiteData {
+  const s = structuredClone(SEED);
+  s.settings.pricingMode = "grid";
+  s.settings.maxKg = 25;
+  for (const dest of s.destinations) {
+    for (const rate of Object.values(dest.rates)) if (rate) rate.grid = slabToGrid(s.settings, rate);
+  }
+  return s;
+}

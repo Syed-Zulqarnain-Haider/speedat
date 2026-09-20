@@ -83,8 +83,61 @@ const SYN: Record<string, string[]> = {
   normal: ["normal", "economy", "eco", "standard", "saver", "regular", "budget", "std"],
 };
 
-/** Best-guess column mapping from header text. Returns -1 for fields not found. */
-export function autoMap(headers: string[], services: Service[]): Record<string, number> {
+/**
+ * "1 kg", "1KG", "Express 3 Kgs", "3" → whole kilograms; anything else → null.
+ * Fractions ("0.5 KG", "2.5 kg") are not grid columns — they belong to slab layouts.
+ */
+export function weightHeader(h: string): number | null {
+  const k = nameKey(h);
+  const m = k.match(/^(\d{1,3})$/) ?? k.match(/(?:^|[^\d\s]\s+)(\d{1,3})\s*(?:kg|kgs|kilo|kilos)$/);
+  if (!m) return null;
+  const kg = Number(m[1]);
+  return Number.isInteger(kg) && kg > 0 && kg <= 500 ? kg : null;
+}
+
+/**
+ * Weight columns per service, e.g. { express: { "1": 3, "2": 4 }, normal: { "1": 8 } } (kg → column).
+ * A service is read from the header itself or from the group row above it (forward-filled, the way
+ * merged cells export); without any service words, successive runs of weights are assigned in service order.
+ */
+export function weightColumns(headers: string[], services: Service[], groupRow?: string[]): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  let group = "";
+  const groups = headers.map((_, i) => {
+    const g = groupRow?.[i]?.trim();
+    if (g) group = g;
+    return group;
+  });
+  const serviceOf = (text: string): string | null => {
+    const t = ` ${nameKey(text)} `;
+    for (const sv of services) {
+      const keys = [nameKey(sv.name), sv.id, ...(SYN[sv.id] ?? [])].filter(Boolean);
+      if (keys.some((k) => t.includes(` ${k} `) || t.includes(` ${k}`))) return sv.id;
+    }
+    return null;
+  };
+  let run = -1;
+  let lastKg = 0;
+  headers.forEach((h, i) => {
+    const kg = weightHeader(h);
+    if (kg == null) return;
+    let svc = serviceOf(h) ?? serviceOf(groups[i] ?? "");
+    if (!svc) {
+      // A new run of weights (first one, or the weight went down) belongs to the next service in order.
+      if (kg <= lastKg || run < 0) run++;
+      svc = services[Math.min(run, services.length - 1)]?.id ?? null;
+    }
+    lastKg = kg;
+    if (!svc) return;
+    (out[svc] ??= {})[String(kg)] = i;
+  });
+  // One or two weight-looking columns are a slab layout ("Express 1 kg" = first slab), not a grid.
+  for (const svc of Object.keys(out)) if (Object.keys(out[svc]!).length < 3) delete out[svc];
+  return out;
+}
+
+/** Best-guess column mapping from header text. Returns -1 for fields not found. Weight columns map as `<service>.kg.<n>`. */
+export function autoMap(headers: string[], services: Service[], groupRow?: string[]): Record<string, number> {
   const n = headers.map((h) => nameKey(h));
   const map: Record<string, number> = {};
   const find = (re: RegExp, from?: number[]): number => {
@@ -93,13 +146,16 @@ export function autoMap(headers: string[], services: Service[]): Record<string, 
   };
   map.name = find(/\b(dest|destination|country|countries|city|zone|region|location|to)\b/);
   if (map.name < 0) map.name = 0;
+  const wcols = weightColumns(headers, services, groupRow);
+  const weightIdx = new Set(Object.values(wcols).flatMap((m) => Object.values(m)));
+  for (const [svc, m] of Object.entries(wcols)) for (const [kg, i] of Object.entries(m)) map[`${svc}.kg.${kg}`] = i;
   for (const sv of services) {
     const keys = [nameKey(sv.name), sv.id, ...(SYN[sv.id] ?? [])].filter(Boolean);
     let cand: number[] = [];
     n.forEach((h, i) => {
-      if (i !== map.name && keys.some((k) => ` ${h} `.includes(` ${k}`))) cand.push(i);
+      if (i !== map.name && !weightIdx.has(i) && keys.some((k) => ` ${h} `.includes(` ${k}`))) cand.push(i);
     });
-    if (!cand.length && services.length === 1) cand = n.map((_, i) => i).filter((i) => i !== map.name);
+    if (!cand.length && services.length === 1) cand = n.map((_, i) => i).filter((i) => i !== map.name && !weightIdx.has(i));
     const dc = find(/(doc|document|envelope|letter|dox)/, cand);
     const rest = cand.filter((i) => i !== dc);
     let f = find(/(first|base|min|initial|start|upto|up to|0 5|1st|slab)/, rest);
@@ -193,8 +249,30 @@ export function buildImport({ rows, headerRow, map, opts, draft, fileName }: Bui
         out.errors.push(`${line} (${name}): ${sv.name} price is not a number`);
         return;
       }
-      if (f === null && a === null && dc === null) continue;
-      if ((f === null) !== (a === null)) out.warnings.push(`${line} (${name}): ${sv.name} has only one of the two package prices`);
+      // Weight-grid columns for this service.
+      const prefix = `${sv.id}.kg.`;
+      const grid: Record<string, number> = {};
+      const costGrid: Record<string, number> = {};
+      let badKg: string | null = null;
+      for (const [key, ci2] of Object.entries(map)) {
+        if (!key.startsWith(prefix) || ci2 < 0) continue;
+        const kg = key.slice(prefix.length);
+        const v = toNumLoose(r[ci2]);
+        if (v === null) continue;
+        if (Number.isNaN(v)) {
+          badKg = kg;
+          break;
+        }
+        costGrid[kg] = v;
+        grid[kg] = v;
+      }
+      if (badKg) {
+        out.errors.push(`${line} (${name}): ${sv.name} ${badKg} kg price is not a number`);
+        return;
+      }
+      const hasGrid = Object.keys(grid).length > 0;
+      if (f === null && a === null && dc === null && !hasGrid) continue;
+      if (!hasGrid && (f === null) !== (a === null)) out.warnings.push(`${line} (${name}): ${sv.name} has only one of the two package prices`);
       const costF = f;
       const costA = a;
       const costD = dc;
@@ -204,8 +282,13 @@ export function buildImport({ rows, headerRow, map, opts, draft, fileName }: Bui
         if (f !== null) f = roundTo(f * m, rr);
         if (a !== null) a = roundTo(a * m, rr);
         if (dc !== null) dc = roundTo(dc * m, rr);
+        for (const k of Object.keys(grid)) grid[k] = roundTo(grid[k]! * m, rr);
       }
       const rate: ImportRowRate = { first: f, addl: a, days: dd, doc: dc, costFirst: costF, costAddl: costA, costDoc: costD };
+      if (hasGrid) {
+        rate.grid = grid;
+        rate.costGrid = costGrid;
+      }
       rec.rates[sv.id] = rate;
       any = true;
     }
@@ -300,6 +383,8 @@ export function applyImport(draft: SiteData, im: ImportResult): SiteData {
       if (isNum(merged.addl)) cleaned.addl = merged.addl;
       if (merged.days) cleaned.days = merged.days;
       if (isNum(merged.doc)) cleaned.doc = merged.doc;
+      const grid = { ...(old.grid ?? {}), ...(nv.grid ?? {}) };
+      if (Object.keys(grid).length) cleaned.grid = grid;
       if (Object.keys(cleaned).length) dest.rates[svc] = cleaned;
       else delete dest.rates[svc];
     }
@@ -332,6 +417,12 @@ export function largestMove(draft: SiteData, im: ImportResult): { pct: number; l
         if (!isNum(a) || !isNum(b) || a <= 0) continue;
         const pct = Math.abs(((b - a) / a) * 100);
         if (!worst || pct > worst.pct) worst = { pct, label: `${dest.name} ${svc} ${f}` };
+      }
+      for (const [kg, b] of Object.entries(nv.grid ?? {})) {
+        const a = old.grid?.[kg];
+        if (!isNum(a) || !isNum(b) || a <= 0) continue;
+        const pct = Math.abs(((b - a) / a) * 100);
+        if (!worst || pct > worst.pct) worst = { pct, label: `${dest.name} ${svc} ${kg} kg` };
       }
     }
   }

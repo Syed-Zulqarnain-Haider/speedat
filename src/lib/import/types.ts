@@ -21,6 +21,9 @@ export interface ImportRowRate {
   costFirst: number | null;
   costAddl: number | null;
   costDoc: number | null;
+  /** Grid prices (kg → price) when the sheet has weight columns; `costGrid` holds the raw values before margin. */
+  grid?: Record<string, number>;
+  costGrid?: Record<string, number>;
 }
 
 export interface ImportRow {

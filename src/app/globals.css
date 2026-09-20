@@ -1618,3 +1618,120 @@ textarea.long {
     color: #000;
   }
 }
+
+/* Header actions: call + WhatsApp; the number hides on narrow phones, the icon stays. */
+.head-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: none;
+}
+.btn.call .ico-sm {
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+}
+@media (max-width: 560px) {
+  .btn.call .call-num {
+    display: none;
+  }
+  .btn.call {
+    padding: 6px 9px;
+  }
+}
+
+/* Grid pricing editor (admin): one row of kilogram boxes per service. */
+table.rates-grid {
+  min-width: 760px;
+}
+tr.grid-row > td {
+  background: var(--bg);
+  padding: 12px 10px 14px;
+}
+.grid-service + .grid-service {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.grid-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.grid-head input.num {
+  width: 110px;
+}
+.grid-boxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 6px;
+}
+.grid-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.grid-box > span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+.grid-box input {
+  min-height: 36px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: right;
+}
+
+/* ---------- price hold ---------- */
+.hold-panel .hold-msg {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 600;
+  line-height: 1.45;
+}
+.hold-panel .btn.wa.big {
+  width: 100%;
+  min-height: 52px;
+  font-size: 1.05rem;
+  margin-top: 4px;
+}
+.hold-panel .btn.wa.soft {
+  opacity: 0.75;
+}
+.hold-panel > .hint {
+  margin: 8px 0 12px;
+  text-align: center;
+}
+.hold-bar {
+  margin: 6px 0 4px;
+}
+.notice.hold .hold-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.notice.hold .hold-row > div {
+  flex: 1 1 320px;
+}
+.notice.hold .hold-row .meta {
+  margin-top: 4px;
+  display: block;
+}
+.notice.hold .field {
+  margin: 10px 0;
+}
+.notice.hold .desc {
+  margin: 4px 0 0;
+}
+.tag.hold-tag {
+  background: var(--warn-soft);
+  color: var(--warn);
+}

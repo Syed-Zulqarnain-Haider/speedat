@@ -192,6 +192,15 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
               </tbody>
             </table>
           </div>
+          {Object.keys(map).some((k) => k.includes(".kg.")) ? (
+            <div className="notice ok">
+              Weight columns detected:{" "}
+              {draft.services
+                .map((sv) => `${sv.name} ${Object.keys(map).filter((k) => k.startsWith(`${sv.id}.kg.`) && map[k]! >= 0).length}`)
+                .join(", ")}{" "}
+              — they import as per-kilogram prices.
+            </div>
+          ) : null}
           {profile ? (
             <div className="notice ok">This layout is recognised — the column mapping saved on {fmtDate(profile.savedAt)} is applied. Adjust it below if needed.</div>
           ) : (
@@ -341,6 +350,12 @@ function Preview({ im, draft, onApply, busy }: { im: ImportResult; draft: SiteDa
                   .map((sv) => {
                     const x = r.rates[sv.id];
                     if (!x) return "";
+                    if (x.grid) {
+                      const kgs = Object.keys(x.grid).sort((a, b) => Number(a) - Number(b));
+                      const lo = kgs[0]!;
+                      const hi = kgs[kgs.length - 1]!;
+                      return `${sv.name} ${kgs.length} kg prices (${lo}–${hi} kg: ${fv(x.costGrid?.[lo] ?? null, x.grid[lo]!)} … ${fv(x.costGrid?.[hi] ?? null, x.grid[hi]!)})${x.days ? ` (${x.days})` : ""}${x.doc != null ? `, docs ${fv(x.costDoc, x.doc)}` : ""}`;
+                    }
                     return `${sv.name} ${fv(x.costFirst, x.first)} / +${fv(x.costAddl, x.addl)}${x.days ? ` (${x.days})` : ""}${x.doc != null ? `, docs ${fv(x.costDoc, x.doc)}` : ""}`;
                   })
                   .filter(Boolean)

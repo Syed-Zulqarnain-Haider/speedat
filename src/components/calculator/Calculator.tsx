@@ -9,7 +9,7 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { UI } from "@/components/Icons";
 import { setSession, useMounted, useSession } from "@/lib/client/session";
-import { addonsList, gToKg, kgToG, lines, priceAll, toNumLoose } from "@/lib/pricing/engine";
+import { addonsList, gToKg, gridWeights, isGrid, kgToG, lines, priceAll, toNumLoose } from "@/lib/pricing/engine";
 import { estimateDelivery, parseDaysRange, type DeliveryEstimate } from "@/lib/pricing/dates";
 import { fmtDay, fmtHour, fmtMoney, fmtNum, fmtRange, inputDate, localDateFromInput, quoteId, quoteIdFor } from "@/lib/pricing/format";
 import { IN, LB, cargoText, piecesText, quoteText, waLink, weightSentence, type Quote, type Units } from "@/lib/pricing/quote";
@@ -32,7 +32,10 @@ interface PieceRow {
 
 const newRow = (key: number, kg = ""): PieceRow => ({ key, kg, qty: "1", L: "", W: "", H: "" });
 
-function weightOptions(maxKg: number): number[] {
+function weightOptions(sets: PublishedVersion["settings"]): number[] {
+  const maxKg = sets.maxKg;
+  // Grid pricing: exactly the whole kilograms that have a price box.
+  if (isGrid(sets)) return gridWeights(sets);
   const out: number[] = [];
   for (let k = 0.5; k <= 10; k += 0.5) out.push(k);
   for (let k = 11; k <= 30; k += 1) out.push(k);
@@ -314,7 +317,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, addon
           <option value="" disabled>
             Choose weight
           </option>
-          {weightOptions(sets.maxKg).map((k) => (
+          {weightOptions(sets).map((k) => (
             <option key={k} value={String(k)}>
               {k} kg
             </option>
@@ -565,8 +568,10 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
           (l.qty > 1 ? ", each" : ""),
       );
     }
-    how.push(`Chargeable weight ${gToKg(res.weights.chargeG)} kg, billed as ${gToKg(res.weights.billableG)} kg (${sets.stepKg} kg steps, minimum ${sets.firstKg} kg)`);
+    if (isGrid(sets)) how.push(`Chargeable weight ${gToKg(res.weights.chargeG)} kg, billed as ${gToKg(res.weights.billableG)} kg (rounded up to the next whole kilogram)`);
+    else how.push(`Chargeable weight ${gToKg(res.weights.chargeG)} kg, billed as ${gToKg(res.weights.billableG)} kg (${sets.stepKg} kg steps, minimum ${sets.firstKg} kg)`);
     if (price.docRate) how.push(`Document rate for up to ${sets.docMaxKg} kg: ${fmtMoney(price.base, cur)}`);
+    else if (isGrid(sets)) how.push(`${quote.service} price for ${price.gridKg ?? gToKg(res.weights.billableG)} kg: ${fmtMoney(price.base, cur)}`);
     else
       how.push(
         `First ${sets.firstKg} kg ${fmtMoney(price.first ?? 0, cur)}${price.steps ? ` + ${price.steps} × ${sets.stepKg} kg at ${fmtMoney(price.addl ?? 0, cur)}` : ""} = ${fmtMoney(price.base, cur)}`,

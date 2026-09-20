@@ -17,6 +17,7 @@ export function migrate(input: SiteData | Loose): SiteData {
   settings.cutoffHour = rawCutoff === "" || rawCutoff == null ? null : Number(rawCutoff);
   if (!Number.isFinite(settings.cutoffHour as number)) settings.cutoffHour = null;
   if (settings.docMaxKg == null) settings.docMaxKg = settings.firstKg;
+  if (settings.pricingMode !== "grid") settings.pricingMode = "slab";
   const company = { ...SEED.company, ...(s.company ?? {}) };
   const content = { ...SEED.content, ...(s.content ?? {}) };
   return {

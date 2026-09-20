@@ -29,9 +29,33 @@ export function roundTo(n: number, r: number): number {
   return Math.round(n / step) * step;
 }
 
+/** Whole-kilogram weights the grid prices, 1 … cargo threshold (30 when there is no threshold). */
+export function gridWeights(settings: Pick<Settings, "maxKg">): number[] {
+  const top = settings.maxKg > 0 ? Math.min(Math.floor(settings.maxKg), 200) : 30;
+  return Array.from({ length: Math.max(top, 1) }, (_, i) => i + 1);
+}
+
+export const isGrid = (settings: Pick<Settings, "pricingMode">): boolean => settings.pricingMode === "grid";
+
+/** Grid price for a billable weight: the entered price at that kg, or the next heavier kg that has one. */
+export function gridPrice(grid: Record<string, number> | undefined, kg: number, maxKg: number): { kg: number; price: number } | null {
+  if (!grid) return null;
+  const top = maxKg > 0 ? Math.floor(maxKg) : 200;
+  for (let k = Math.max(1, Math.ceil(kg)); k <= top; k++) {
+    const p = grid[String(k)];
+    if (isNum(p) && p > 0) return { kg: k, price: p };
+  }
+  return null;
+}
+
+/** Slab settings the weight maths should use: grid mode bills whole kilograms from 1 kg up. */
+const effectiveSteps = (settings: Settings): { firstKg: number; stepKg: number } =>
+  isGrid(settings) ? { firstKg: 1, stepKg: 1 } : { firstKg: settings.firstKg, stepKg: settings.stepKg };
+
 export function computeWeights(settings: Settings, rows: PieceInput[]): Weights {
-  const stepG = kgToG(settings.stepKg);
-  const firstG = kgToG(settings.firstKg);
+  const eff = effectiveSteps(settings);
+  const stepG = kgToG(eff.stepKg);
+  const firstG = kgToG(eff.firstKg);
   let pieces = 0;
   let actualG = 0;
   let volG = 0;
@@ -63,18 +87,27 @@ export function priceService(
   serviceId: string,
   billableG: number,
   type: ShipmentType,
+  /** Chargeable grams before step rounding; the document limit is judged on this (a 0.3 kg letter is not a 1 kg parcel). */
+  chargeG: number = billableG,
 ): ServicePrice | null {
   const r = dest.rates[serviceId];
   if (!r) return null;
-  const firstG = kgToG(settings.firstKg);
-  const stepG = kgToG(settings.stepKg);
+  const eff = effectiveSteps(settings);
+  const firstG = kgToG(eff.firstKg);
+  const stepG = kgToG(eff.stepKg);
   let base: number;
   let steps = 0;
   let docRate = false;
-  const docLimitG = kgToG(settings.docMaxKg > 0 ? settings.docMaxKg : settings.firstKg);
-  if (type === "doc" && isNum(r.doc) && r.doc > 0 && billableG <= docLimitG) {
+  let gridKg: number | undefined;
+  const docLimitG = kgToG(settings.docMaxKg > 0 ? settings.docMaxKg : eff.firstKg);
+  if (type === "doc" && isNum(r.doc) && r.doc > 0 && Math.min(chargeG, billableG) <= docLimitG) {
     base = r.doc;
     docRate = true;
+  } else if (isGrid(settings)) {
+    const hit = gridPrice(r.grid, billableG / 1000, settings.maxKg);
+    if (!hit) return null;
+    base = hit.price;
+    gridKg = hit.kg;
   } else {
     if (!isNum(r.first) || !isNum(r.addl)) return null;
     steps = billableG <= firstG ? 0 : Math.ceil((billableG - firstG) / stepG);
@@ -87,6 +120,7 @@ export function priceService(
     doc: r.doc,
     docRate,
     steps,
+    gridKg,
     base,
     tax,
     total: roundTo(base + tax, settings.roundTo),
@@ -104,7 +138,7 @@ export function priceAll(card: RateCard, input: PriceInput): PriceResult {
   if (maxG && weights.billableG > maxG) return { ok: false, reason: "overmax", dest, weights };
   const type: ShipmentType = input.type ?? "pkg";
   const prices: Partial<Record<string, ServicePrice | null>> = {};
-  for (const s of card.services) prices[s.id] = priceService(card.settings, dest, s.id, weights.billableG, type);
+  for (const s of card.services) prices[s.id] = priceService(card.settings, dest, s.id, weights.billableG, type, weights.chargeG);
   return { ok: true, dest, weights, prices, type };
 }
 
@@ -143,4 +177,24 @@ export function addonsList(settings: Pick<Settings, "addons">): Addon[] {
     out.push({ id: `a${i}`, label: p[0], amount: amt, on: /^(on|yes|true|1|checked|default)$/i.test(p[2]) });
   });
   return out;
+}
+
+/**
+ * Derive whole-kilogram grid prices from slab prices (first slab + steps),
+ * so switching a document to grid mode keeps the same prices until the
+ * boxes are edited. Existing grid values are kept.
+ */
+export function slabToGrid(settings: Settings, rate: { first?: number | null; addl?: number | null; grid?: Record<string, number> }): Record<string, number> | undefined {
+  const out: Record<string, number> = { ...(rate.grid ?? {}) };
+  if (isNum(rate.first) && isNum(rate.addl)) {
+    const firstG = kgToG(settings.firstKg);
+    const stepG = kgToG(settings.stepKg);
+    for (const kg of gridWeights(settings)) {
+      if (isNum(out[String(kg)])) continue;
+      const g = kg * 1000;
+      const steps = g <= firstG ? 0 : Math.ceil((g - firstG) / stepG);
+      out[String(kg)] = roundTo(rate.first + steps * rate.addl, settings.roundTo);
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
 }

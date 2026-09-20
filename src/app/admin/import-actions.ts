@@ -59,7 +59,7 @@ export async function loadImportAction(importId: number): Promise<ActionResult<S
     const draft = await getDraft();
     const headers = headerNames(rows[headerRow] ?? []);
     const profile = findProfile(draft.data.importProfiles, headerSignature(headers));
-    const map = rec.result?.map ?? profile?.map ?? autoMap(headers, draft.data.services);
+    const map = rec.result?.map ?? profile?.map ?? autoMap(headers, draft.data.services, headerRow > 0 ? rows[headerRow - 1] : undefined);
     return { ok: true, importId, names, sheets: rec.rows, sheet, headerRow, map, profileMatched: !!profile, fileName: rec.fileName };
   } catch (err) {
     return onError(err);

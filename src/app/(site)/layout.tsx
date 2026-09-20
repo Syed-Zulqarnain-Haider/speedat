@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import Link from "next/link";
+import { CardIcons } from "@/components/Icons";
 import { Nav } from "@/components/site/Nav";
 import { ShellWrap } from "@/components/site/ShellWrap";
 import { Tagline } from "@/components/site/Tagline";
@@ -34,9 +35,17 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
               <Tagline text={c.tagline} />
             </span>
           </Link>
-          <a className="btn wa small" href={wa} target="_blank" rel="noopener">
-            WhatsApp us
-          </a>
+          <div className="head-actions">
+            {c.phone ? (
+              <a className="btn small call" href={`tel:${c.phone.replace(/[^0-9+]/g, "")}`} aria-label={`Call ${c.phone}`}>
+                <CardIcons.phone className="ico-sm" />
+                <span className="call-num">{c.phone}</span>
+              </a>
+            ) : null}
+            <a className="btn wa small" href={wa} target="_blank" rel="noopener">
+              WhatsApp us
+            </a>
+          </div>
         </div>
         <Nav />
       </header>

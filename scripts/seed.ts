@@ -6,7 +6,7 @@
  *   ADMIN_EMAIL=you@x.com pnpm db:seed  # also allowlist the first owner
  */
 import { db, schema } from "@/lib/db";
-import { SEED } from "@/lib/site/seed";
+import { gridSeed } from "@/lib/site/seed";
 import { getLatestVersion, publishVersion } from "@/lib/site/repo";
 
 async function main() {
@@ -14,7 +14,7 @@ async function main() {
   if (live) {
     console.log(`Database already has version ${live.version}; leaving rates alone.`);
   } else {
-    const v = await publishVersion({ data: SEED, by: "seed", source: "seed", summary: "Sample rates from the prototype", changeCount: 0 });
+    const v = await publishVersion({ data: gridSeed(), by: "seed", source: "seed", summary: "Sample rates from the prototype", changeCount: 0 });
     console.log(`Published version ${v.version} with ${v.destinations.length} sample destinations (live=${v.live}).`);
   }
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();

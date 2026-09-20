@@ -97,7 +97,7 @@ export async function receiveSheet(args: ReceiveArgs): Promise<ReceiveResult> {
   const headers = headerNames(rows[headerRow] ?? []);
   const draft = await getDraft();
   const profile = findProfile(draft.data.importProfiles, headerSignature(headers));
-  const map = profile ? profile.map : autoMap(headers, draft.data.services);
+  const map = profile ? profile.map : autoMap(headers, draft.data.services, headerRow > 0 ? rows[headerRow - 1] : undefined);
   const [row] = await db
     .insert(schema.imports)
     .values({

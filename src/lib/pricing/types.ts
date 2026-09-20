@@ -22,6 +22,8 @@ export interface Rate {
   days?: string;
   /** Flat price for documents up to `settings.docMaxKg`; blank = charge like a package. */
   doc?: number | null;
+  /** Grid pricing: price per whole kilogram, keyed "1", "2", … up to the cargo threshold. Used when `settings.pricingMode === "grid"`. */
+  grid?: Record<string, number>;
 }
 
 export interface Destination {
@@ -32,7 +34,11 @@ export interface Destination {
   rates: Partial<Record<string, Rate>>;
 }
 
+export type PricingMode = "slab" | "grid";
+
 export interface Settings {
+  /** "slab": first slab + per-step price. "grid": a price per whole kg from 1 kg to the cargo threshold. */
+  pricingMode: PricingMode;
   /** Label printed with prices, e.g. "PKR". */
   currency: string;
   /** L×W×H in cm ÷ this = volumetric kg. */
@@ -112,6 +118,8 @@ export interface ServicePrice {
   doc: number | null | undefined;
   docRate: boolean;
   steps: number;
+  /** Grid mode: the kilogram whose price was charged (billable weight rounded up to a priced kg). */
+  gridKg?: number;
   base: number;
   tax: number;
   total: number;

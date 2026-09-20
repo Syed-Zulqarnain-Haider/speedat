@@ -15,6 +15,7 @@ export const RateSchema = z.object({
   addl: money,
   days: text(40).optional(),
   doc: money,
+  grid: z.record(z.string().regex(/^\d{1,3}$/), num.min(0).max(100_000_000)).optional(),
 });
 
 export const DestinationSchema = z.object({
@@ -25,6 +26,7 @@ export const DestinationSchema = z.object({
 });
 
 export const SettingsSchema = z.object({
+  pricingMode: z.enum(["slab", "grid"]),
   currency: text(8),
   volumetricDivisor: num,
   firstKg: num,
@@ -65,7 +67,7 @@ export const ContentSchema = z.object({
   address: text(300),
   hours: text(120),
   mapUrl: text(500),
-  phone2: text(40),
+  phone2: text(80),
   faq: text(12000),
 });
 
