@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { Calculator } from "@/components/calculator/Calculator";
 import { Hero, type HeroStat } from "@/components/site/Hero";
+import { HoldPanel } from "@/components/site/HoldPanel";
 import { parseDaysRange } from "@/lib/pricing/dates";
 import { lines, parts } from "@/lib/pricing/engine";
-import { getLiveSite } from "@/lib/site/live";
+import { getLiveHold, getLiveSite } from "@/lib/site/live";
 import { originCities } from "@/lib/site/text";
 import type { PublishedVersion } from "@/lib/site/types";
 
@@ -34,7 +35,20 @@ function heroStats(site: PublishedVersion): HeroStat[] {
 }
 
 export default async function QuotePage() {
-  const site = await getLiveSite();
+  const [site, hold] = await Promise.all([getLiveSite(), getLiveHold()]);
+  if (hold.on) {
+    // On hold: the rate document stays on the server; the browser gets names, the message and a WhatsApp form.
+    const destinations = site.destinations
+      .filter((x) => x.active)
+      .map((x) => ({ id: x.id, name: x.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return (
+      <section className="calc">
+        <Hero title={site.content.heroTitle} sub={site.content.heroSub} stats={heroStats(site)} />
+        <HoldPanel companyName={site.company.name} whatsapp={site.company.whatsapp} message={hold.message} destinations={destinations} maxKg={site.settings.maxKg} />
+      </section>
+    );
+  }
   return (
     <section className="calc">
       {site.live ? null : <p className="sample">Sample rates shown for demonstration. Prices will be confirmed on WhatsApp.</p>}

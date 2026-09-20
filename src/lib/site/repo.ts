@@ -5,6 +5,7 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { migrate } from "./migrate";
+import { SiteDataSchema } from "./schema";
 import type { PublishedVersion, SiteData } from "./types";
 
 const DRAFT_ID = 1;
@@ -102,8 +103,18 @@ export class PublishConflict extends Error {
   }
 }
 
-/** Insert the next version atomically and re-base the draft onto it. */
+/**
+ * Insert the next version atomically and re-base the draft onto it. Every
+ * publish path (admin, email auto-publish, seed, scripts) passes through
+ * here, so the document is checked against the schema once more: a version
+ * the admin's own save would reject must never become the live one.
+ */
 export async function publishVersion(args: PublishArgs): Promise<PublishedVersion> {
+  const check = SiteDataSchema.safeParse(args.data);
+  if (!check.success) {
+    const first = check.error.issues[0];
+    throw new Error(`refusing to publish an invalid document: ${first ? `${first.path.join(".")}: ${first.message}` : "schema error"}`);
+  }
   return db.transaction(async (tx) => {
     // Serialise publishers: two admins clicking Publish at once get versions n+1 and n+2, never a duplicate.
     await tx.execute(sql`SELECT pg_advisory_xact_lock(7331)`);

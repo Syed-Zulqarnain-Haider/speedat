@@ -12,7 +12,7 @@ import { upsertQuoteLead } from "@/lib/leads";
 import { clientIp, rateLimit } from "@/lib/limits";
 import { fmtMoney } from "@/lib/pricing/format";
 import { gToKg, priceService } from "@/lib/pricing/engine";
-import { getLiveSite } from "@/lib/site/live";
+import { getLiveHold, getLiveSite } from "@/lib/site/live";
 
 const Body = z.object({
   id: z.string().regex(/^SP-\d{6}-[A-Z0-9]{4}$/),
@@ -43,7 +43,9 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: { code: "bad_request", message: "Invalid quote" } }, { status: 400 });
   }
-  const site = await getLiveSite();
+  const [site, hold] = await Promise.all([getLiveSite(), getLiveHold()]);
+  // No quotes are issued while prices are on hold: nothing on the site offers one, so any arriving here is stale or forged.
+  if (hold.on) return NextResponse.json({ error: { code: "held", message: "Prices are being updated" } }, { status: 409 });
   const dest = site.destinations.find((d) => d.id === parsed.destId && d.active);
   const service = site.services.find((s) => s.id === parsed.serviceId);
   if (!dest || !service) return NextResponse.json({ error: { code: "not_found", message: "Unknown destination or service" } }, { status: 404 });

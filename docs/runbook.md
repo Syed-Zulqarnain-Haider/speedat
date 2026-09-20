@@ -69,6 +69,14 @@ procedure once a quarter and note the date here: _last tested: —_.
 4. Quotes customers already made are stored with the version that priced them
    (`quotes.version`), so disputes can be checked.
 
+### "Prices must come off the site now"
+
+`/admin` → *Hold prices* (any admin). The site shows the hold message and a WhatsApp form
+instead of prices; `/api/quotes` answers 409 `held`. Publishing new rates with *Show prices
+again after publishing* ticked, or *Resume showing prices* (owner), puts them back. The switch
+is the `hold` row in `app_settings`, outside the published document, so it never touches the
+draft or the version history; the cron alerts once a hold passes `HOLD_ALERT_HOURS` (12).
+
 ### "No rates arrived today"
 
 The cron emails once per day when nothing came by the expected hour. Check the airline

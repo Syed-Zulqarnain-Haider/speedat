@@ -60,6 +60,14 @@ suite("version store", () => {
     expect((await repo.getLatestVersion())?.version).toBe(2);
   });
 
+  it("refuses a document the admin's own save would reject, whoever publishes it", async () => {
+    const d = await repo.getDraft();
+    const bad = structuredClone(d.data);
+    bad.content.phone2 = "x".repeat(81);
+    await expect(repo.publishVersion({ data: bad, by: "script", source: "convert", summary: "x", changeCount: 1 })).rejects.toThrow(/content\.phone2/);
+    expect((await repo.getLatestVersion())?.version).toBe(2);
+  });
+
   it("numbers concurrent publishes consecutively", async () => {
     const d = await repo.getDraft();
     const results = await Promise.all(

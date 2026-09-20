@@ -13,10 +13,12 @@ import type { AdminUser } from "@/lib/auth/session";
 import type { ImportSummary, IntakeSettings } from "@/lib/import/intake";
 import { fmtDateTime } from "@/lib/pricing/format";
 import { diffSite, validateSite, warnSite, type Diff } from "@/lib/site/diff";
+import type { Hold } from "@/lib/site/hold-shared";
 import type { Draft, VersionMeta } from "@/lib/site/repo";
 import type { PublishedVersion, SiteData } from "@/lib/site/types";
 import { BulkAdjust } from "./BulkAdjust";
 import { ContentForm } from "./ContentForm";
+import { HoldBar } from "./HoldBar";
 import { ImportPanel } from "./ImportPanel";
 import { RatesTable } from "./RatesTable";
 import { SettingsForm } from "./SettingsForm";
@@ -29,6 +31,7 @@ interface Props {
   user: AdminUser;
   imports: ImportSummary[];
   intake: IntakeSettings;
+  hold: Hold;
 }
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
@@ -47,7 +50,7 @@ function daysAgo(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }
 
-export function AdminEditor({ live, draft: initial, versions, user, imports, intake }: Props) {
+export function AdminEditor({ live, draft: initial, versions, user, imports, intake, hold: initialHold }: Props) {
   const router = useRouter();
   const liveData: SiteData = useMemo(() => {
     const { version: _v, publishedAt: _p, ...rest } = live;
@@ -62,6 +65,8 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
   const [toast, showToast] = useToast();
   const [review, setReview] = useState<{ errors: string[]; diff: Diff; warnings: string[] } | null>(null);
   const [goLive, setGoLive] = useState(true);
+  const [hold, setHold] = useState<Hold>(initialHold);
+  const [resume, setResume] = useState(true);
   const [pubMsg, setPubMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const readOnly = false;
@@ -124,7 +129,7 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
   const publish = async () => {
     setBusy(true);
     setPubMsg("Publishing…");
-    const res = await publishAction({ data: draft, expectedBase: live.version, goLive: live.live || goLive });
+    const res = await publishAction({ data: draft, expectedBase: live.version, goLive: live.live || goLive, resume: hold.on && resume });
     setBusy(false);
     if (!res.ok) {
       setPubMsg(res.message);
@@ -133,7 +138,9 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
     }
     // What we sent is now the live document; adopt it (with the live flag the server applied).
     replace({ ...draft, live: live.live || goLive });
-    setPubMsg(`Published version ${res.version}. Customers see the new prices now.`);
+    if (res.resumed) setHold((h) => ({ ...h, on: false, by: user.email, since: new Date().toISOString() }));
+    const held = hold.on && !res.resumed;
+    setPubMsg(held ? `Published version ${res.version}. Prices stay on hold until you resume them.` : `Published version ${res.version}. Customers see the new prices now.`);
     showToast(`Version ${res.version} is live`);
     router.refresh();
   };
@@ -163,8 +170,10 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
         <h1>Rates</h1>
         <span className={`meta${age >= 7 ? " warn" : ""}`}>
           Live version {live.version}, published {fmtDateTime(live.publishedAt)} ({age === 0 ? "today" : age === 1 ? "yesterday" : `${age} days ago`})
+          {hold.on ? <span className="tag hold-tag">prices on hold</span> : null}
         </span>
       </div>
+      <HoldBar hold={hold} isOwner={canPublish} onChange={setHold} toast={showToast} />
       <nav className="subnav" aria-label="Sections">
         {SECTIONS.map(([id, label]) => (
           <a
@@ -247,8 +256,8 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
           </div>
         ) : review ? (
           <div className="notice info">
-            <strong>Publishing version {live.version + 1}</strong> — {review.diff.count} change{review.diff.count === 1 ? "" : "s"}. Customers see the new prices as
-            soon as it is published.
+            <strong>Publishing version {live.version + 1}</strong> — {review.diff.count} change{review.diff.count === 1 ? "" : "s"}.{" "}
+            {hold.on ? "Prices are on hold; choose below whether this publish shows them again." : "Customers see the new prices as soon as it is published."}
             <ul className="diff">
               {review.diff.lines.map((l, i) => (
                 <li key={i}>
@@ -276,6 +285,11 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
                 <input type="checkbox" checked={goLive} onChange={(e) => setGoLive(e.target.checked)} /> Rates are live — remove the sample notice from the website
               </label>
             ) : null}
+            {hold.on ? (
+              <label className="chk" style={{ marginTop: 12 }}>
+                <input type="checkbox" checked={resume} onChange={(e) => setResume(e.target.checked)} /> Show prices again after publishing (lifts the hold)
+              </label>
+            ) : null}
             <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button className="btn primary" type="button" disabled={busy || !canPublish || save === "saving"} onClick={publish}>
                 Publish version {live.version + 1}
@@ -300,7 +314,7 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
           <div>
             <strong>{changes.count ? `${changes.count} unpublished change${changes.count === 1 ? "" : "s"}` : "No unpublished changes"}</strong>{" "}
             <span className="meta">
-              {changes.count ? `Customers still see version ${live.version}. ` : ""}
+              {changes.count ? (hold.on ? "Customers see no prices (on hold). " : `Customers still see version ${live.version}. `) : ""}
               {save === "saving" ? "Saving…" : save === "dirty" ? "Unsaved edits…" : save === "error" ? "Save failed — retrying on next edit" : `Draft saved ${fmtDateTime(savedAt)}`}
             </span>
           </div>

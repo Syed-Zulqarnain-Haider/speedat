@@ -6,6 +6,7 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db, schema } from "@/lib/db";
+import { getHold } from "@/lib/site/hold";
 import { getLatestVersion } from "@/lib/site/repo";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export async function GET(req: Request) {
   if (!token || req.headers.get("authorization") !== `Bearer ${token}`) return NextResponse.json({ error: { code: "unauthorized", message: "Bad or missing token" } }, { status: 401 });
   const since = new Date(Date.now() - 86_400_000);
   const n = sql<number>`count(*)::int`;
-  const [quotes24h, booked24h, leadsNew, shipmentsOpen, shipmentsException, importsFailed24h, importsHeld, notifyFailed24h, live] = await Promise.all([
+  const [quotes24h, booked24h, leadsNew, shipmentsOpen, shipmentsException, importsFailed24h, importsHeld, notifyFailed24h, live, hold] = await Promise.all([
     count(db.select({ n }).from(schema.quotes).where(gte(schema.quotes.createdAt, since))),
     count(db.select({ n }).from(schema.quotes).where(and(gte(schema.quotes.createdAt, since), eq(schema.quotes.booked, true)))),
     count(db.select({ n }).from(schema.leads).where(eq(schema.leads.status, "new"))),
@@ -27,9 +28,17 @@ export async function GET(req: Request) {
     count(db.select({ n }).from(schema.imports).where(sql`${schema.imports.status} in ('needs_mapping', 'applied')`)),
     count(db.select({ n }).from(schema.auditLog).where(and(gte(schema.auditLog.at, since), sql`${schema.auditLog.action} in ('notify_failed', 'notify_skipped')`))),
     getLatestVersion(),
+    getHold(),
   ]);
+  const holdAge = hold.on && hold.since ? Math.floor((Date.now() - new Date(hold.since).getTime()) / 1000) : 0;
   const publishAge = live ? Math.floor((Date.now() - new Date(live.publishedAt).getTime()) / 1000) : -1;
   const lines = [
+    "# HELP speedat_prices_held Whether prices are hidden from the website (1) or shown (0)",
+    "# TYPE speedat_prices_held gauge",
+    `speedat_prices_held ${hold.on ? 1 : 0}`,
+    "# HELP speedat_prices_held_seconds How long prices have been on hold, 0 when shown",
+    "# TYPE speedat_prices_held_seconds gauge",
+    `speedat_prices_held_seconds ${holdAge}`,
     "# HELP speedat_quotes_24h Quotes logged in the last 24 hours",
     "# TYPE speedat_quotes_24h gauge",
     `speedat_quotes_24h ${quotes24h}`,

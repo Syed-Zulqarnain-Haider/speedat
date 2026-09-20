@@ -3,18 +3,21 @@
  * two hours. Checks, in order, and emails the office at most once a day each:
  *  1. no rate sheet arrived by the expected hour,
  *  2. rate sheets are waiting for mapping or publish,
- *  3. the live rates are older than the staleness threshold.
+ *  3. the live rates are older than the staleness threshold;
+ *  4. prices have been on hold for longer than a working day.
  * Vercel authenticates the call with `Authorization: Bearer $CRON_SECRET`.
  */
 import { NextResponse } from "next/server";
 import { alertOnce } from "@/lib/alerts";
 import { audit } from "@/lib/audit";
 import { getIntakeSettings, latestSheetToday, listImports } from "@/lib/import/intake";
+import { getHold } from "@/lib/site/hold";
 import { getLatestVersion } from "@/lib/site/repo";
 
 export const dynamic = "force-dynamic";
 
 const STALE_DAYS = Number(process.env.RATES_STALE_DAYS ?? 7);
+const HOLD_ALERT_HOURS = Number(process.env.HOLD_ALERT_HOURS ?? 12);
 
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -55,6 +58,14 @@ export async function GET(req: Request) {
   if (ageDays != null && ageDays >= STALE_DAYS) {
     await audit("cron", "rates_stale", { ageDays, version: live?.version });
     out.staleAlert = await alertOnce("rates-stale", `Rates were last published ${ageDays} days ago`, `Version ${live?.version} has been live since ${live?.publishedAt.slice(0, 10)}. If newer airline rates exist, import and publish them at ${base}/admin.`);
+  }
+  // 4. A hold nobody lifted: the site is taking no quotes while it lasts.
+  const hold = await getHold();
+  const holdHours = hold.on && hold.since ? Math.floor((now.getTime() - new Date(hold.since).getTime()) / 3_600_000) : 0;
+  out.holdHours = hold.on ? holdHours : null;
+  if (hold.on && holdHours >= HOLD_ALERT_HOURS) {
+    await audit("cron", "hold_long", { hours: holdHours, by: hold.by });
+    out.holdAlert = await alertOnce("hold-long", `Prices have been off the website for ${holdHours} hours`, `${hold.by || "An admin"} put prices on hold at ${hold.since?.slice(0, 16).replace("T", " ")}. Customers see the hold message and no prices. Publish the new rates, or press Resume, at ${base}/admin.`);
   }
   return NextResponse.json(out);
 }
