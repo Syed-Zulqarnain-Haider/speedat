@@ -45,7 +45,6 @@ export default async function ShipmentPage(props: PageProps<"/admin/shipments/[i
           }}
           events={found.events.map((e) => ({ id: e.id, status: e.status, note: e.note, at: e.at.toISOString(), by: e.by }))}
           companyName={live.company.name}
-          siteUrl={process.env.NEXT_PUBLIC_SITE_URL ?? ""}
         />
       </section>
     </AdminShell>

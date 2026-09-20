@@ -1,11 +1,11 @@
 /**
  * Shipments: a booked job moving through statuses until delivered. Ids are
- * random (not sequential) so the public /track page cannot be walked; every
- * status change is an event with a note, written by a named admin.
+ * random (not sequential); every status change is an event with a note,
+ * written by a named admin. Customers get updates on WhatsApp.
  */
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { desc, eq, or, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 
 export const SHIPMENT_STATUSES = ["booked", "picked_up", "in_transit", "customs", "out_for_delivery", "delivered", "exception"] as const;
@@ -21,7 +21,7 @@ export const STATUS_LABEL: Record<ShipmentStatus, string> = {
   exception: "Needs attention",
 };
 
-/** What the customer reads for each status, used on /track and in WhatsApp updates. */
+/** What the customer reads for each status in WhatsApp updates. */
 export const STATUS_CUSTOMER_TEXT: Record<ShipmentStatus, string> = {
   booked: "Your shipment is booked. We will collect it and hand it to the airline.",
   picked_up: "We have collected your shipment and it is being prepared for the flight.",
@@ -115,20 +115,6 @@ export async function getShipment(id: string): Promise<{ shipment: Shipment; eve
   const [shipment] = await db.select().from(schema.shipments).where(eq(schema.shipments.id, id)).limit(1);
   if (!shipment) return null;
   const events = await db.select().from(schema.shipmentEvents).where(eq(schema.shipmentEvents.shipmentId, id)).orderBy(schema.shipmentEvents.at);
-  return { shipment, events };
-}
-
-/** Public lookup by shipment id, tracking number or quote id. Exact matches only. */
-export async function findForTracking(query: string): Promise<{ shipment: Shipment; events: ShipmentEvent[] } | null> {
-  const q = query.trim().toUpperCase();
-  if (q.length < 6 || q.length > 40) return null;
-  const [shipment] = await db
-    .select()
-    .from(schema.shipments)
-    .where(or(eq(schema.shipments.id, q), eq(schema.shipments.quoteId, q), sql`upper(${schema.shipments.trackingNo}) = ${q}`))
-    .limit(1);
-  if (!shipment) return null;
-  const events = await db.select().from(schema.shipmentEvents).where(eq(schema.shipmentEvents.shipmentId, shipment.id)).orderBy(schema.shipmentEvents.at);
   return { shipment, events };
 }
 

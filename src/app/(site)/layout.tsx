@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { Nav } from "@/components/site/Nav";
 import { ShellWrap } from "@/components/site/ShellWrap";
+import { Tagline } from "@/components/site/Tagline";
 import { fmtDate } from "@/lib/pricing/format";
 import { getLiveSite } from "@/lib/site/live";
 
@@ -30,7 +31,7 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
             <span className="mark" aria-hidden="true" />
             <span>
               <span className="brand-name">{c.name}</span>
-              <span className="brand-tag">{c.tagline}</span>
+              <Tagline text={c.tagline} />
             </span>
           </Link>
           <a className="btn wa small" href={wa} target="_blank" rel="noopener">
@@ -58,9 +59,6 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
               </li>
               <li>
                 <Link href="/about">About us</Link>
-              </li>
-              <li>
-                <Link href="/track">Track a shipment</Link>
               </li>
               <li>
                 <Link href="/contact">Contact</Link>
@@ -92,7 +90,6 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
           <span>
             Rates updated {site.version ? fmtDate(site.publishedAt) : "—"} · © {new Date().getFullYear()} {c.name}
           </span>
-          <Link href="/admin">Rates admin</Link>
         </div>
       </footer>
       <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />

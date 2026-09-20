@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CtaBand } from "@/components/site/CtaBand";
+import { Reveal } from "@/components/site/Reveal";
 import { lines, parts } from "@/lib/pricing/engine";
 import { getLiveSite } from "@/lib/site/live";
 
@@ -16,10 +17,12 @@ export default async function FaqPage() {
         {items.map((ln, i) => {
           const p = parts(ln, 2);
           return (
-            <details key={i}>
-              <summary>{p[0]}</summary>
-              <p>{p[1]}</p>
-            </details>
+            <Reveal key={i} delay={Math.min(i, 6) * 0.05} distance={20}>
+              <details>
+                <summary>{p[0]}</summary>
+                <p>{p[1]}</p>
+              </details>
+            </Reveal>
           );
         })}
       </div>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CARD_ICON_ORDER, CardIcons, isCardIcon } from "@/components/Icons";
 import { CtaBand } from "@/components/site/CtaBand";
+import { ServiceCard } from "@/components/site/ServiceCard";
 import { lines, parts } from "@/lib/pricing/engine";
 import { getLiveSite } from "@/lib/site/live";
 
@@ -29,11 +30,11 @@ export default async function ServicesPage() {
           const desc = named ? p[2] : p[1] || p[2];
           const Icon = CardIcons[iconName];
           return (
-            <div className="card" key={i}>
+            <ServiceCard key={i} index={i}>
               <Icon />
               <h3>{title}</h3>
               <p>{desc}</p>
-            </div>
+            </ServiceCard>
           );
         })}
       </div>

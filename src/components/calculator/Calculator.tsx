@@ -17,6 +17,7 @@ import type { Addon, PieceInput, PriceResult, ServicePrice, ShipmentType } from 
 import type { PublishedVersion } from "@/lib/site/types";
 import { originCities } from "@/lib/site/text";
 import { Toast, useToast } from "./Toast";
+import ClickSpark from "@/components/bits/ClickSpark";
 
 type Mode = "quick" | "detail";
 
@@ -380,6 +381,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, addon
         ) : null}
         <span className="tnote">{note}</span>
       </div>
+      <ClickSpark sparkColor="#ea580c" sparkSize={10} sparkRadius={22} sparkCount={10} duration={450}>
       <div className="ctas">
         <a className="btn chat" href={`https://wa.me/${site.company.whatsapp}`} target="_blank" rel="noopener">
           <UI.chat />
@@ -398,6 +400,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, addon
           {bookLabel}
         </a>
       </div>
+      </ClickSpark>
     </div>
   );
 }

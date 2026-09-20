@@ -1,65 +1,97 @@
 @import "tailwindcss";
 
 /* ---------- design tokens (ported from the prototype) ---------- */
+/* Palette: deep navy ink, vivid orange for action and speed, teal for "good", warm neutrals.
+   The variable names --blue/--red are historical: --blue is the text-level accent
+   (links, icons, selected outlines), --red the hot accent (stripes, highlights, prices). */
 :root {
-  --bg: #f2f4f8;
+  --bg: #f6f3ec;
   --surface: #ffffff;
-  --ink: #101c3a;
-  --muted: #5c6578;
-  --line: #d4dae6;
-  --blue: #1f4fbf;
-  --red: #d62839;
-  --blue-soft: #e7edfb;
-  --red-soft: #fce9ec;
-  --ok: #1b7f4e;
-  --ok-soft: #e3f5ea;
+  --ink: #0b1f3a;
+  --muted: #5b6472;
+  --line: #e2dcd1;
+  --blue: #c2410c;
+  --red: #ea580c;
+  --blue-soft: #fff1e8;
+  --red-soft: #ffe4d6;
+  --ok: #0f766e;
+  --ok-soft: #d9f2ee;
   --warn: #b45309;
   --warn-soft: #fef3c7;
   --gap: #ffffff;
-  --focus: #1f4fbf;
+  --focus: #ea580c;
   --wa: #128c4a;
   --wa-hover: #0f7a40;
-  --book: #f5b01e;
+  --book: #f97316;
+  --hot-a: #ea580c;
+  --hot-b: #b3410e;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e1527;
-    --surface: #161f38;
-    --ink: #eaf0fb;
-    --muted: #a3adc4;
-    --line: #2b3756;
-    --blue: #7ca0f5;
-    --red: #f26b80;
-    --blue-soft: #1c2a50;
-    --red-soft: #3a1e28;
-    --ok: #4cc38a;
-    --ok-soft: #153426;
-    --warn: #f5b44d;
-    --warn-soft: #3a2e12;
-    --gap: #161f38;
-    --focus: #7ca0f5;
+    --bg: #0c1524;
+    --surface: #15213a;
+    --ink: #f3f4f6;
+    --muted: #a7b0c0;
+    --line: #2a3650;
+    --blue: #fdba74;
+    --red: #fb923c;
+    --blue-soft: #3a2416;
+    --red-soft: #4a2413;
+    --ok: #5eead4;
+    --ok-soft: #10322f;
+    --warn: #fcd34d;
+    --warn-soft: #3b2f0b;
+    --gap: #15213a;
+    --focus: #fb923c;
+    --hot-a: #f97316;
+    --hot-b: #c2410c;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0e1527;
-  --surface: #161f38;
-  --ink: #eaf0fb;
-  --muted: #a3adc4;
-  --line: #2b3756;
-  --blue: #7ca0f5;
-  --red: #f26b80;
-  --blue-soft: #1c2a50;
-  --red-soft: #3a1e28;
-  --ok: #4cc38a;
-  --ok-soft: #153426;
-  --warn: #f5b44d;
-  --warn-soft: #3a2e12;
-  --gap: #161f38;
-  --focus: #7ca0f5;
+  --bg: #0c1524;
+  --surface: #15213a;
+  --ink: #f3f4f6;
+  --muted: #a7b0c0;
+  --line: #2a3650;
+  --blue: #fdba74;
+  --red: #fb923c;
+  --blue-soft: #3a2416;
+  --red-soft: #4a2413;
+  --ok: #5eead4;
+  --ok-soft: #10322f;
+  --warn: #fcd34d;
+  --warn-soft: #3b2f0b;
+  --gap: #15213a;
+  --focus: #fb923c;
+  --hot-a: #f97316;
+  --hot-b: #c2410c;
 }
 
 @theme inline {
+  /* React Bits StarBorder keyframes. */
+  --animate-star-movement-bottom: star-movement-bottom linear infinite alternate;
+  --animate-star-movement-top: star-movement-top linear infinite alternate;
+  @keyframes star-movement-bottom {
+    0% {
+      transform: translate(0%, 0%);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-100%, 0%);
+      opacity: 0;
+    }
+  }
+  @keyframes star-movement-top {
+    0% {
+      transform: translate(0%, 0%);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(100%, 0%);
+      opacity: 0;
+    }
+  }
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-ink: var(--ink);
@@ -128,6 +160,10 @@ textarea {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
+input[type="radio"],
+input[type="checkbox"] {
+  accent-color: var(--red);
+}
 [hidden] {
   display: none !important;
 }
@@ -174,11 +210,12 @@ textarea {
   width: 38px;
   height: 38px;
   border-radius: 9px;
+  /* Speed stripes: orange and navy. */
   background: repeating-linear-gradient(
     135deg,
-    var(--red) 0 7px,
+    var(--hot-a) 0 7px,
     var(--gap) 7px 11px,
-    var(--blue) 11px 18px,
+    var(--ink) 11px 18px,
     var(--gap) 18px 22px
   );
   border: 1px solid var(--line);
@@ -311,9 +348,9 @@ footer.site-foot a {
   background: var(--wa-hover);
 }
 .btn.chat {
-  background: var(--blue);
-  color: #fff;
-  border-color: var(--blue);
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 .btn.book {
   background: var(--book);
@@ -345,6 +382,36 @@ footer.site-foot a {
 /* ---------- pages ---------- */
 .hero {
   padding: 34px 0 22px;
+}
+/* Animated hero: dot field behind, text in front; the field bleeds past the column edges. */
+.hero-animated {
+  position: relative;
+}
+.hero-bg {
+  position: absolute;
+  inset: -20px -40px;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  mask-image: radial-gradient(ellipse 75% 85% at 35% 45%, #000 35%, transparent 95%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 85% at 35% 45%, #000 35%, transparent 95%);
+}
+.hero-bg .hero-dots {
+  padding: 0;
+  height: 100%;
+}
+.hero-fg {
+  position: relative;
+  z-index: 1;
+}
+.hero-animated h1 {
+  display: block;
+}
+.split-parent {
+  overflow: visible !important;
+}
+.split-line {
+  overflow: visible !important;
 }
 .hero h1 {
   font-size: clamp(2.2rem, 7vw, 3.4rem);
@@ -439,7 +506,7 @@ footer.site-foot a {
   border-top: 6px solid var(--red);
 }
 .card.accent.blue {
-  border-top-color: var(--blue);
+  border-top-color: var(--ok);
 }
 .two {
   display: grid;
@@ -557,6 +624,21 @@ footer.site-foot a {
   background: var(--bg);
   color: var(--ink);
   border-color: var(--bg);
+}
+/* StarBorder wrapper around a CTA: let the button keep its own shape. */
+.cta-star {
+  border-radius: 10px !important;
+  vertical-align: middle;
+}
+.cta-star > div:last-child {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+}
+.cta-star .btn {
+  display: inline-flex;
+  width: 100%;
 }
 
 /* ---------- forms ---------- */
@@ -785,8 +867,8 @@ h2.step svg {
   min-height: 36px;
 }
 .chip[aria-pressed="true"] {
-  background: var(--blue);
-  border-color: var(--blue);
+  background: var(--red);
+  border-color: var(--red);
   color: #fff;
 }
 .modes {
@@ -911,7 +993,7 @@ h2.step svg {
   padding: 20px 16px;
   text-align: center;
   color: #fff;
-  background: linear-gradient(135deg, #e23b4e, #c2182b);
+  background: linear-gradient(135deg, var(--hot-a), var(--hot-b));
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -935,7 +1017,7 @@ h2.step svg {
   opacity: 0.92;
 }
 .total.idle {
-  background: linear-gradient(135deg, #8a93a8, #5c6578);
+  background: linear-gradient(135deg, #6b7280, #4b5563);
 }
 .tlines {
   display: flex;
@@ -996,9 +1078,9 @@ h2.step svg {
   height: 10px;
   background: repeating-linear-gradient(
     135deg,
-    var(--red) 0 14px,
+    var(--hot-a) 0 14px,
     var(--gap) 14px 22px,
-    var(--blue) 22px 36px,
+    var(--ink) 22px 36px,
     var(--gap) 36px 44px
   );
 }
@@ -1339,7 +1421,7 @@ th.grp.express {
   color: var(--red);
 }
 th.grp.normal {
-  color: var(--blue);
+  color: var(--ok);
 }
 td {
   padding: 6px 6px;

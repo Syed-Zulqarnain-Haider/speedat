@@ -56,7 +56,7 @@ function waDigits(phone: string): string | null {
   return digits.startsWith("0") ? `92${digits.slice(1)}` : digits;
 }
 
-export function ShipmentDesk({ shipment, events: initialEvents, companyName, siteUrl }: { shipment: ShipmentView; events: EventView[]; companyName: string; siteUrl: string }) {
+export function ShipmentDesk({ shipment, events: initialEvents, companyName }: { shipment: ShipmentView; events: EventView[]; companyName: string }) {
   const [s, setS] = useState(shipment);
   const [events, setEvents] = useState(initialEvents);
   const [status, setStatus] = useState<Status>((STATUSES as readonly string[]).includes(s.status) ? (s.status as Status) : "booked");
@@ -86,7 +86,6 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName, sit
     `Hi${s.customerName ? ` ${s.customerName}` : ""}, an update from ${companyName} on your shipment ${s.id} to ${s.destination}:`,
     CUSTOMER_TEXT[(s.status as Status) in LABEL ? (s.status as Status) : "booked"],
     s.trackingNo ? `Tracking number: ${s.trackingNo}${s.carrier ? ` (${s.carrier})` : ""}` : "",
-    siteUrl ? `Track it any time: ${siteUrl}/track?q=${s.id}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -145,7 +144,7 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName, sit
               </select>
             </label>
             <label className="field" style={{ flex: 2 }}>
-              <span>Note (shown to the customer on the tracking page)</span>
+              <span>Note (included in the WhatsApp update)</span>
               <input type="text" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Handed to Emirates flight EK623" />
             </label>
             <button className="btn primary" type="button" disabled={busy} onClick={addEvent}>

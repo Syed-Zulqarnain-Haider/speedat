@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CardIcons } from "@/components/Icons";
 import { ContactForm } from "@/components/site/ContactForm";
+import { Reveal } from "@/components/site/Reveal";
 import { CtaBand } from "@/components/site/CtaBand";
 import { issueFormToken } from "@/lib/form-token";
 import { fmtHour, fmtPhone } from "@/lib/pricing/format";
@@ -26,7 +27,7 @@ export default async function ContactPage() {
       <p className="lede">
         WhatsApp is the fastest way to reach us. We reply during working hours and confirm every pickup in the chat.
       </p>
-      <div className="contact-grid">
+      <Reveal className="contact-grid">
         <div className="card">
           <CardIcons.phone />
           <h3>WhatsApp</h3>
@@ -58,9 +59,9 @@ export default async function ContactPage() {
             </a>
           ) : null}
         </div>
-      </div>
+      </Reveal>
       <h2>Visit us</h2>
-      <div className="two">
+      <Reveal className="two" delay={0.05}>
         <div className="card">
           <h3>Office</h3>
           <p>{c.address}</p>
@@ -78,7 +79,7 @@ export default async function ContactPage() {
           {cities.length ? <p style={{ marginTop: 8 }}>Pickup on request in {cities.join(" and ")}.</p> : null}
           {cutoff != null ? <p style={{ marginTop: 8 }}>Book before {fmtHour(cutoff)} for same-day pickup.</p> : null}
         </div>
-      </div>
+      </Reveal>
       <h2>Write to us</h2>
       <ContactForm destinations={dests} whatsapp={co.whatsapp} token={issueFormToken()} />
       <CtaBand whatsapp={co.whatsapp} />
