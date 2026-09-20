@@ -18,7 +18,7 @@ unticked box.
 - [ ] Optional: `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN`.
 
 ## Content and rates
-- [ ] Real rates imported (upload) and published; *Rates are live* ticked so the sample notice
+- [ ] Real per-kilogram rates keyed in or imported and published; *Rates are live* ticked so the sample notice
       is gone. Evidence: version number and date.
 - [ ] Company details, address, hours, WhatsApp number checked on the live Contact page.
 - [ ] FAQ, Services and About text reviewed by the owner.
@@ -30,7 +30,7 @@ unticked box.
 - [ ] Quick rate → Book now → WhatsApp opens with the right message on the office phone.
 - [ ] Detailed quote with two packages, dimensions and documents.
 - [ ] Contact form message arrives in the admin Inbox and by email.
-- [ ] Lead → shipment → status update → `/track` shows it; WhatsApp update message correct.
+- [ ] Lead → shipment → status update in the Shipments desk; WhatsApp update message correct.
 - [ ] Airline sheet emailed to the intake address is applied (known layout) or waits for
       mapping (new layout), and the office receives the alert.
 - [ ] Admin sign-in with Google; 2FA enrolled for every owner.
