@@ -53,13 +53,6 @@ export function ContactForm({ destinations, whatsapp, token }: Props) {
           {err("phone")}
         </label>
       </div>
-      <label className="field">
-        <span>
-          Email <span className="hint">(optional)</span>
-        </span>
-        <input type="email" name="email" defaultValue={v.email} autoComplete="email" maxLength={120} />
-        {err("email")}
-      </label>
       <div className="row">
         <label className="field">
           <span>

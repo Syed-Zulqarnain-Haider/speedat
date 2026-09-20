@@ -17,14 +17,13 @@ const Fields = z.object({
     .trim()
     .regex(/^\+?[0-9 ()-]{7,20}$/, "Enter a phone number we can call or WhatsApp")
     .max(20),
-  email: z.string().trim().max(120).refine((v) => v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "That email address does not look right"),
   message: z.string().trim().min(5, "Tell us what you would like to send").max(2000, "Please keep the message under 2000 characters"),
   destId: z.string().max(60).optional().default(""),
   weight: z.string().trim().max(10).optional().default(""),
 });
 
 export async function contactAction(_prev: ContactState, form: FormData): Promise<ContactState> {
-  const values = Object.fromEntries(["name", "phone", "email", "message", "destId", "weight"].map((k) => [k, String(form.get(k) ?? "")]));
+  const values = Object.fromEntries(["name", "phone", "message", "destId", "weight"].map((k) => [k, String(form.get(k) ?? "")]));
   const fail = (errors: Record<string, string>): ContactState => ({ ok: false, errors, values });
 
   // Bots fill the hidden field; humans never see it.
@@ -57,7 +56,7 @@ export async function contactAction(_prev: ContactState, form: FormData): Promis
   const lead = await createMessageLead({
     name: parsed.data.name,
     phone: parsed.data.phone,
-    email: parsed.data.email,
+    email: "",
     message: parsed.data.message,
     destId: dest?.id ?? null,
     weightG,
@@ -70,7 +69,6 @@ export async function contactAction(_prev: ContactState, form: FormData): Promis
     text: [
       `Name: ${parsed.data.name}`,
       `Phone: ${parsed.data.phone}`,
-      parsed.data.email ? `Email: ${parsed.data.email}` : "",
       dest ? `Destination: ${dest.name}` : "",
       weightG ? `Weight: ${weightG / 1000} kg` : "",
       "",
