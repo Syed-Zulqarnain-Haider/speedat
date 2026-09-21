@@ -8,7 +8,9 @@
  */
 import { useState } from "react";
 import { UI } from "@/components/Icons";
+import { Flag } from "@/components/site/Flag";
 import { waLink } from "@/lib/pricing/quote";
+import { flagCode } from "@/lib/site/countries";
 
 export interface HoldDestination {
   id: string;
@@ -43,19 +45,25 @@ export function HoldPanel({ companyName, whatsapp, message, destinations, maxKg 
 
   return (
     <div className="panel quick hold-panel">
-      <h2 className="step">
+      <h2 className="step-head">
         <UI.clock />
-        Prices are being updated
+        <span className="step-name">Prices are being updated</span>
       </h2>
       <p className="hold-msg">{message}</p>
       <label className="field">
         <span className="lab">
           <UI.pin />
-          Destination country
+          Country
+          {dest ? (
+            <span className="step-done">
+              <Flag code={flagCode(dest.name, dest.id)} name={dest.name} size={24} />
+              <UI.check />
+            </span>
+          ) : null}
         </span>
         <select value={destId} onChange={(e) => setDestId(e.target.value)}>
           <option value="" disabled>
-            Choose a country
+            Tap to choose
           </option>
           {destinations.map((d) => (
             <option key={d.id} value={d.id}>
@@ -67,16 +75,16 @@ export function HoldPanel({ companyName, whatsapp, message, destinations, maxKg 
       <label className="field">
         <span className="lab">
           <UI.scale />
-          Parcel weight (kg)
+          Weight (kg)
         </span>
-        <input type="number" inputMode="decimal" min={0.1} step={0.1} max={10_000} placeholder={maxKg > 0 ? `up to ${maxKg} kg, or more for cargo` : "e.g. 2.5"} value={kg} onChange={(e) => setKg(e.target.value)} />
+        <input type="number" inputMode="decimal" min={0.1} step={0.1} max={10_000} placeholder={maxKg > 0 ? `1 to ${maxKg}, or more for cargo` : "e.g. 2.5"} value={kg} onChange={(e) => setKg(e.target.value)} />
         {!kgOk ? <span className="hint">Enter a weight above 0.</span> : null}
       </label>
       <label className="field">
         <span className="lab">What is inside (optional)</span>
         <input type="text" maxLength={120} placeholder="Clothes, documents, gifts…" value={contents} onChange={(e) => setContents(e.target.value.slice(0, 120))} />
       </label>
-      <a className={`btn wa big${ready ? "" : " soft"}`} href={href} target="_blank" rel="noopener">
+      <a className={`btn wa giant${ready ? "" : " soft"}`} href={href} target="_blank" rel="noopener">
         <UI.wa />
         Ask for today&apos;s rate on WhatsApp
       </a>

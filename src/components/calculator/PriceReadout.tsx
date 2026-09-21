@@ -1,54 +1,72 @@
 "use client";
 
 /**
- * The readout's number. The server (and anyone who asked for less motion)
- * gets the plain formatted text; in the browser each digit becomes a
- * vertical strip of 0–9 that rolls to its value like an odometer, keyed by
- * its distance from the units column so a longer price adds columns on the
- * left and the existing ones keep rolling in place. Each column also holds
- * its current digit in flow but invisible (`.w`): the display face has no
- * tabular figures, so that digit — not the widest of the ten — sets the
- * column's width and the number keeps the same proportions as the plain
- * text. The text lives once in a visually hidden span, so the live region
- * announces "PKR 4,500" — never the ten digits of every strip.
+ * The readout's number. Idle renders nothing — the readout's note says what
+ * to do next, never "PKR 0". Live, the server (and anyone who asked for less
+ * motion) gets the plain formatted text; in the browser the figure counts up
+ * from the previous price (or from 60 % of the first one) to its value over
+ * 700 ms, ease-out cubic, through a short rAF loop driven by React state,
+ * with a settle timer so a hidden tab still lands on the real figure. The
+ * text lives once in a visually hidden span, so the live region announces
+ * "PKR 4,500" once per change — never every frame of the count.
  */
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "@/lib/client/motion";
 import { useMounted } from "@/lib/client/session";
 import { fmtMoney, fmtNum } from "@/lib/pricing/format";
 
-const DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
+const DURATION = 700;
+
+interface Shown {
+  /** The value this frame belongs to; a stale frame for an older value is ignored. */
+  for: number;
+  n: number;
+}
 
 export function PriceReadout({ value, currency, idle }: { value: number; currency: string; idle: boolean }) {
   const mounted = useMounted();
   const reduced = useReducedMotion();
-  const text = idle ? `${currency} 0` : fmtMoney(value, currency);
+  const [shown, setShown] = useState<Shown | null>(null);
+  // The last value the count settled on; only the effect reads or writes it.
+  const lastRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (idle || reduced) return;
+    const from = lastRef.current ?? Math.round(value * 0.6);
+    lastRef.current = value;
+    if (from === value) return;
+    let raf = 0;
+    let settle = 0;
+    let started = 0;
+    const tick = (now: number) => {
+      if (!started) started = now;
+      const t = Math.min(1, (now - started) / DURATION);
+      const eased = 1 - (1 - t) ** 3;
+      setShown({ for: value, n: t < 1 ? Math.round(from + eased * (value - from)) : value });
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else clearTimeout(settle);
+    };
+    raf = requestAnimationFrame(tick);
+    settle = window.setTimeout(() => {
+      cancelAnimationFrame(raf);
+      setShown({ for: value, n: value });
+    }, DURATION + 100);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(settle);
+    };
+  }, [value, idle, reduced]);
+
+  if (idle) return null;
+  const text = fmtMoney(value, currency);
   if (!mounted || reduced) return <span className="tval">{text}</span>;
-  const chars = fmtNum(idle ? 0 : value).split("");
+  // Before the first frame: the previous settled figure, or 60 % of a first price — the same start the count uses.
+  const n = shown ? shown.n : Math.round(value * 0.6);
   return (
     <span className="tval">
       <span className="sr">{text}</span>
-      <span className="odo" aria-hidden="true">
-        <span className="cur">{currency}</span>
-        {chars.map((ch, i) => {
-          const key = chars.length - 1 - i;
-          if (ch >= "0" && ch <= "9")
-            return (
-              <span key={key} className="col">
-                <span className="w">{ch}</span>
-                <span className="strip" style={{ "--d": Number(ch) } as CSSProperties}>
-                  {DIGITS.map((d) => (
-                    <span key={d}>{d}</span>
-                  ))}
-                </span>
-              </span>
-            );
-          return (
-            <span key={key} className="sym">
-              {ch}
-            </span>
-          );
-        })}
+      <span className="num" aria-hidden="true">
+        <span className="cur">{currency}</span> {fmtNum(n)}
       </span>
     </span>
   );

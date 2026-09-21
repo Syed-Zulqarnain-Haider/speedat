@@ -106,6 +106,8 @@ src/lib/{leads,shipments,limits,notify,alerts,form-token,log}.ts   operations mo
 src/lib/db/            Drizzle schema and client
 drizzle/               SQL migrations
 scripts/seed.ts        first version + first admin
+scripts/copy-flags.mjs `pnpm flags`: copies flag-icons' SVGs into public/flags (committed; rerun after upgrading)
+public/flags/          country flags served locally (MIT, see LICENSE.txt there); src/lib/site/countries.ts maps names
 tests/fixtures/        realistic carrier workbooks used by the tests
 ```
 

@@ -2,8 +2,6 @@ import type { ReactNode } from "react";
 import { Accent } from "@/components/site/Accent";
 
 interface Props {
-  /** The mono eyebrow above the rule, e.g. "Visit us" or "05 — Book". */
-  eyebrow: string;
   /** The h2; accepts one `*word*` for the italic accent. */
   title: string;
   /** Optional line under the heading, in the lede style. */
@@ -12,14 +10,14 @@ interface Props {
   id?: string;
   className?: string;
   children?: ReactNode;
+  /** Kept for callers from the first round; no eyebrow line renders any more. */
+  eyebrow?: string;
 }
 
-/** The section title block every inner-page h2 gets: eyebrow → rule → h2 (→ lede). Server component. */
-export function SectionHead({ eyebrow, title, lede, id, className, children }: Props) {
+/** The section title block every inner-page h2 gets: the h2 (→ optional lede), nothing to decode. Server component. */
+export function SectionHead({ title, lede, id, className, children }: Props) {
   return (
     <div className={className ? `page-sec ${className}` : "page-sec"}>
-      <p className="eyebrow">{eyebrow}</p>
-      <span className="rule" aria-hidden="true" />
       <h2 id={id}>
         <Accent text={title} />
       </h2>

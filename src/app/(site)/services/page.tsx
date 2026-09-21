@@ -7,18 +7,19 @@ import { getLiveHold, getLiveSite } from "@/lib/site/live";
 
 export const metadata: Metadata = { title: "Services" };
 
-/** 02 — Services: every `content.services` card, then the route board (linking back to the instrument), then the stamp band. */
+/** Services: every `content.services` card, the flag grid of where we deliver (each tile leads back to the calculator), the WhatsApp / Call band. */
 export default async function ServicesPage() {
   const [site, hold] = await Promise.all([getLiveSite(), getLiveHold()]);
   const c = site.content;
+  const co = site.company;
   return (
     <>
       <section className="page">
-        <PageHead no="02" name="Services" title="Services" lede={c.servicesLede} />
+        <PageHead title="Services" lede={c.servicesLede} />
         <ServiceGrid services={c.services} />
-        <RouteBoard site={site} holdOn={hold.on} eyebrow="Where we deliver" href="/#quote-instrument" />
+        <RouteBoard site={site} holdOn={hold.on} href="/#quote-instrument" />
       </section>
-      <CtaBand whatsapp={site.company.whatsapp} title={c.ctaTitle} sub={c.ctaSub} eyebrow="Book" />
+      <CtaBand whatsapp={co.whatsapp} phone={co.phone} title={c.ctaTitle} sub={c.ctaSub} />
     </>
   );
 }

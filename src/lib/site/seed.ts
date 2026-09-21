@@ -83,32 +83,32 @@ export const SEED: SiteData = {
     d("my", "Malaysia", 4100, 1000, "3–5", 3000, 780, "6–9", 3600, 2600),
   ],
   content: {
-    heroTitle: "Send anything *abroad* from Lahore. Priced in seconds.",
-    // Names no region: the route line above the headline lists the live destinations, so the lede never
-    // promises a route the calculator cannot price.
-    heroSub: "Documents, parcels and cargo, collected from your door and delivered to the receiver’s. Get an instant price, then book on WhatsApp.",
-    heroEyebrow: "",
+    // Short words for a first-time visitor: two lines at 1366, three on a phone; nothing names a region the
+    // calculator cannot price.
+    heroTitle: "Send anything *abroad*. See your price now.",
+    heroSub: "Tap your country and the weight. Your price appears — then book on WhatsApp.",
     stats: "",
-    promise: "The price you see here is the price at pickup, unless the parcel weighs or measures differently.",
-    routesTitle: "Where we fly from Lahore",
-    routesNote: "Fastest service in working days. 1 kg parcel, shipping only; pickup charges are added in the quote.",
-    stepsTitle: "Three steps, no surprises",
+    promise: "The price you see is the price at pickup, unless the parcel weighs or measures differently.",
+    routesTitle: "Where we deliver",
+    routesNote: "Price for a 1 kg parcel with the cheapest service. Pickup is added in your price.",
+    stepsTitle: "Three taps, one price",
     steps: [
-      "Price it | Choose the destination and weight. The price on this page is the price at pickup unless the parcel weighs or measures differently.",
-      "Book on WhatsApp | Tap Book, send the ready-made message, and we confirm the pickup time and receiver details in the chat.",
-      "Track to the door | We share the tracking number and updates on WhatsApp until it is delivered.",
+      "Tap your country | Pick where the parcel is going.",
+      "Tap the weight | 1 to 25 kg. Not sure? Pick the nearest — we weigh it at pickup.",
+      "See the price and book | Tap the green button. We reply on WhatsApp and collect from your door.",
     ].join("\n"),
-    servicesTitle: "What we carry",
+    servicesTitle: "Two ways to send",
     servicesLede: "Every service is door to door: we collect from you and deliver to the receiver. Prices are on the quote page.",
-    ctaTitle: "Ready to send something?",
-    ctaSub: "Get an instant price and book on WhatsApp in two minutes.",
+    ctaTitle: "Ready to send?",
+    ctaSub: "Tap WhatsApp or call. A person answers.",
     contactLede: "WhatsApp is the fastest way to reach us. We reply during working hours and confirm every pickup in the chat.",
     faqLede: "If yours is not here, ask us on WhatsApp.",
     services: [
       "plane | Express international | Priority air service to most destinations in 3–6 working days, picked up from your door and delivered to the receiver’s.",
       "globe | Economy international | A lower-cost air service for parcels that are not urgent. Same door-to-door handling, a few days longer.",
       "doc | Documents | Passports, certificates, contracts and letters at a flat document rate, with tracking shared on WhatsApp.",
-      "box | Cargo and bulk shipments | Over 70 kg, commercial goods or many boxes? Send us the details and we quote a cargo rate within the hour.",
+      // No weight here: the cargo threshold is settings.maxKg, which the calculator and the deliver band print themselves.
+      "box | Cargo and bulk shipments | A very heavy parcel, commercial goods or many boxes? Send us the details and we quote a cargo rate within the hour.",
       "truck | Pickup on request | We collect from homes and offices in Lahore and Faisalabad. Tell us the address when you book.",
       "shield | Packing and paperwork | Advice on safe packing, what can fly, and the customs paperwork your destination needs.",
     ].join("\n"),

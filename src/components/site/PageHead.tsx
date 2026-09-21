@@ -1,23 +1,19 @@
 import { Accent } from "./Accent";
 
 interface Props {
-  /** Section number in the nav order, e.g. "02". */
-  no: string;
-  /** Section name after the number, e.g. "Services". */
-  name: string;
   /** The h1; accepts one `*word*` for the italic accent. */
   title: string;
   lede?: string;
+  /** Kept for callers from the first round; no eyebrow line renders any more. */
+  no?: string;
+  /** Kept for callers from the first round; ignored. */
+  name?: string;
 }
 
-/** The shared page header: numbered mono eyebrow, editorial rule, h1 and an optional lede. Server component. */
-export function PageHead({ no, name, title, lede }: Props) {
+/** The shared page header: a big h1 and an optional lede, nothing to decode. Server component. */
+export function PageHead({ title, lede }: Props) {
   return (
     <header className="page-head">
-      <p className="eyebrow">
-        {no} — {name}
-      </p>
-      <span className="rule" aria-hidden="true" />
       <h1>
         <Accent text={title} />
       </h1>

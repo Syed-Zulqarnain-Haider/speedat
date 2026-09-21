@@ -1,6 +1,6 @@
 /* =====================================================================
-   print.css — owner: FOUNDATION
-   A quote printed from the browser: paper, ink, no chrome, no effects.
+   print.css — owner: SHELL+HOME
+   A quote printed from the browser: white paper, black ink, no chrome.
    ===================================================================== */
 
 @media print {
@@ -10,7 +10,7 @@
   .nav,
   footer a,
   .quote .actions,
-  .ghost {
+  .ctas {
     display: none !important; /* print: chrome must never win over a screen display rule */
   }
   .admin-app {
@@ -20,11 +20,6 @@
   .admin-top,
   .pubbar,
   .subnav {
-    display: none;
-  }
-  .hero-bg,
-  .silk,
-  .hero-canvas {
     display: none;
   }
   .site-head {

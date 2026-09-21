@@ -107,4 +107,36 @@ export const UI = {
       <path d="M9 6.5h1.8l.9 2.2-1.1.7a4.9 4.9 0 0 0 2.2 2.2l.7-1.1 2.2.9v1.8a.9.9 0 0 1-.9.9A7.2 7.2 0 0 1 8.1 7.4a.9.9 0 0 1 .9-.9z" />
     </svg>
   ),
+  /** A price tag: step 3 of the calculator ("Your price"). */
+  tag: (p: P) => (
+    <svg {...base} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <path d="M3 12.5V4h8.5l9.5 9.5-8.5 8.5z" />
+      <circle cx="7.5" cy="8.5" r="1.5" />
+    </svg>
+  ),
+  /** The tick beside a finished step. */
+  check: (p: P) => (
+    <svg {...base} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  ),
+  /** The theme toggle while dark mode is on (tap for light). */
+  sun: (p: P) => (
+    <svg {...base} strokeWidth={2} strokeLinecap="round" {...p}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" />
+    </svg>
+  ),
+  /** The theme toggle while light mode is on (tap for dark). */
+  moon: (p: P) => (
+    <svg {...base} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" />
+    </svg>
+  ),
+  /** A handset: the Call buttons. */
+  phone: (p: P) => (
+    <svg {...base} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z" />
+    </svg>
+  ),
 } as const;

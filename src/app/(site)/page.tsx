@@ -5,7 +5,6 @@ import { CardIcons } from "@/components/Icons";
 import { CtaBand } from "@/components/site/CtaBand";
 import { Hero, type HeroStat } from "@/components/site/Hero";
 import { HoldPanel } from "@/components/site/HoldPanel";
-import { heroEyebrow } from "@/components/site/home/eyebrow";
 import { RouteBoard } from "@/components/site/home/RouteBoard";
 import { Steps } from "@/components/site/home/Steps";
 import { Teaser } from "@/components/site/home/Teaser";
@@ -16,25 +15,22 @@ import { getLiveHold, getLiveSite } from "@/lib/site/live";
 import { originCities } from "@/lib/site/text";
 import type { PublishedVersion } from "@/lib/site/types";
 
-export const metadata: Metadata = { title: "Get a quote" };
+export const metadata: Metadata = { title: "Get a price" };
 
 /**
- * The manifest strip under the headline: the owner's `content.stats` lines
+ * The proof points under the headline: the owner's `content.stats` lines
  * (`Label | Value`) when set, otherwise the three numbers the rate document
- * itself carries — active destinations, the fastest first-service lower
- * bound in days, and the pickup cities. A single pickup city is true but no
- * proof point, so with one city the third cell shows the instant-price
- * ceiling (`settings.maxKg`) instead; nothing here is ever invented. `text`
- * is the whole value as typed; `value` + `suffix` split it so the number can
- * count up on its own.
+ * itself carries — active countries, the fastest first-service lower bound
+ * in days, and the pickup cities. A single pickup city is true but no proof
+ * point, so with one city the third cell shows the instant-price ceiling
+ * (`settings.maxKg`) instead; nothing here is ever invented.
  */
 function heroStats(site: PublishedVersion): HeroStat[] {
   const custom = lines(site.content.stats);
   if (custom.length)
     return custom.map((ln) => {
       const p = parts(ln, 2);
-      const m = p[1].match(/^(\d+)(.*)$/);
-      return { value: m ? Number(m[1]) : null, text: p[1], suffix: m ? m[2] : "", label: p[0] };
+      return { text: p[1], label: p[0] };
     });
   const active = site.destinations.filter((x) => x.active);
   const cities = originCities(site.company);
@@ -43,22 +39,33 @@ function heroStats(site: PublishedVersion): HeroStat[] {
     .map((x) => (first ? parseDaysRange(x.rates[first]?.days) : null))
     .filter((r): r is [number, number] => r != null)
     .map((r) => r[0]);
-  const out: HeroStat[] = [{ value: active.length, text: String(active.length), label: `destination${active.length === 1 ? "" : "s"}` }];
+  const out: HeroStat[] = [{ text: String(active.length), label: active.length === 1 ? "country" : "countries" }];
   if (fastest.length) {
     const min = Math.min(...fastest);
-    out.push({ value: min, text: `${min}+ days`, suffix: "+ days", label: "fastest delivery" });
+    out.push({ text: `${min} ${min === 1 ? "day" : "days"}`, label: "at the fastest" });
   }
   const maxKg = site.settings.maxKg;
-  if (cities.length > 1) out.push({ value: cities.length, text: String(cities.length), label: "pickup cities" });
-  else if (maxKg > 0) out.push({ value: maxKg, text: `${maxKg} kg`, suffix: " kg", label: "priced instantly" });
-  else if (cities.length) out.push({ value: 1, text: "1", label: "pickup city" });
+  if (cities.length > 1) out.push({ text: String(cities.length), label: "pickup cities" });
+  else if (maxKg > 0) out.push({ text: `${maxKg} kg`, label: "priced instantly" });
+  else if (cities.length) out.push({ text: "1", label: "pickup city" });
   return out;
 }
 
+/**
+ * Home: hero + calculator (the whole product), how it works, where we
+ * deliver, two services, the WhatsApp / Call band. The h1 is the LCP and
+ * every word on the page is server-rendered text.
+ *
+ * "How it works" is a child of the hero grid: on a phone it is the section
+ * right after the calculator; from 1024 the grid places it under the proof
+ * points in the copy column, so the three steps teach the calculator that
+ * sits beside them and the column never ends in a field of white.
+ */
 export default async function QuotePage() {
   const [site, hold] = await Promise.all([getLiveSite(), getLiveHold()]);
   const c = site.content;
   const promise = c.promise.trim();
+  const updated = site.version ? `Rates updated ${fmtDate(site.publishedAt)}` : "";
   let instrument: ReactNode;
   if (hold.on) {
     // On hold: the rate document stays on the server; the browser gets names, the message and a WhatsApp form.
@@ -70,33 +77,29 @@ export default async function QuotePage() {
   } else {
     instrument = (
       <>
-        {site.live ? null : <p className="sample">Sample rates shown for demonstration. Prices will be confirmed on WhatsApp.</p>}
+        {site.live ? null : <p className="sample">Sample prices for now. We confirm the real price on WhatsApp.</p>}
         <Calculator site={site} />
       </>
     );
   }
   return (
     <div className="home">
-      <section className="calc" aria-label="Get a quote">
-        <Hero eyebrow={heroEyebrow(site)} title={c.heroTitle} sub={c.heroSub} stats={heroStats(site)} />
+      <section className="calc" aria-label="Get your price">
+        <Hero title={c.heroTitle} sub={c.heroSub} stats={heroStats(site)} />
         <div id="quote-instrument" className="instrument">
-          <div className="instrument-head">
-            <p className="eyebrow">01 — Rate</p>
-            {site.version ? <span className="meta">Rates updated {fmtDate(site.publishedAt)}</span> : null}
-          </div>
           {instrument}
-          {promise ? (
+          {promise || updated ? (
             <p className="promise">
               <CardIcons.shield />
-              <span>{promise}</span>
+              <span>{[promise, updated].filter(Boolean).join(" · ")}</span>
             </p>
           ) : null}
         </div>
+        <Steps content={c} />
       </section>
       <RouteBoard site={site} holdOn={hold.on} />
-      <Steps content={c} />
       <Teaser content={c} />
-      <CtaBand whatsapp={site.company.whatsapp} title={c.ctaTitle} sub={c.ctaSub} />
+      <CtaBand whatsapp={site.company.whatsapp} phone={site.company.phone} title={c.ctaTitle} sub={c.ctaSub} quoteLink={false} />
     </div>
   );
 }

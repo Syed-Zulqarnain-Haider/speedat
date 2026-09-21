@@ -2,12 +2,13 @@
 
 /**
  * One FAQ entry: a native `<details>` (works without JavaScript, opens with
- * Enter/Space on the focused summary, and its state is the browser's own),
- * enhanced after mount so the answer folds open and shut instead of popping.
- * The fold is a Web Animations API tween on the answer's height (no runtime
- * styles, so the CSP is untouched); a click mid-fold reverses it from where
- * it is. With reduced motion, or where `animate` is missing, the click is
- * left to the browser and the answer just toggles.
+ * Enter/Space on the focused summary, and its state is the browser's own)
+ * with a 56px summary row — the question and a plus that turns into a
+ * minus — enhanced after mount so the answer folds open and shut instead
+ * of popping. The fold is a Web Animations API tween on the answer's
+ * height (no runtime styles, so the CSP is untouched); a click mid-fold
+ * reverses it from where it is. With reduced motion, or where `animate` is
+ * missing, the click is left to the browser and the answer just toggles.
  */
 import { useRef, type MouseEvent, type ReactNode } from "react";
 import { useReducedMotion } from "@/lib/client/motion";
@@ -15,13 +16,11 @@ import { useReducedMotion } from "@/lib/client/motion";
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 interface Props {
-  /** The index shown in the margin, e.g. "01". */
-  no: string;
   question: string;
   children: ReactNode;
 }
 
-export function FaqItem({ no, question, children }: Props) {
+export function FaqItem({ question, children }: Props) {
   const ref = useRef<HTMLDetailsElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<Animation | null>(null);
@@ -62,9 +61,6 @@ export function FaqItem({ no, question, children }: Props) {
   return (
     <details ref={ref} className="faq-item">
       <summary onClick={onClick}>
-        <span className="faq-n" aria-hidden="true">
-          {no}
-        </span>
         <span className="faq-q">{question}</span>
         <span className="faq-x" aria-hidden="true" />
       </summary>

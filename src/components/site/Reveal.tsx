@@ -1,9 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
-import AnimatedContent from "@/components/bits/AnimatedContent";
+import { useEffect, useRef, type ReactNode } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useReducedMotion } from "@/lib/client/motion";
-import { useMounted } from "@/lib/client/session";
+
+gsap.registerPlugin(ScrollTrigger);
 
 interface Props {
   children: ReactNode;
@@ -18,17 +20,45 @@ interface Props {
   stagger?: number;
   /** Highest index that still adds delay, so long lists do not wait forever (default 8). */
   cap?: number;
+  /**
+   * How far into the viewport the block's top must be before it reveals, as a fraction of the viewport
+   * height (default 0.12). Use ~0 for blocks that may sit partly inside the first screen, so nothing that
+   * is already on screen waits, invisible, for a scroll.
+   */
+  threshold?: number;
 }
 
-/** Slides content in as it scrolls into view; plain markup before mount or when motion is reduced. */
-export function Reveal({ children, delay = 0, distance = 36, className, index = 0, stagger = 0, cap = 8 }: Props) {
+/**
+ * Slides content in as it scrolls into view.
+ *
+ * The markup is always the plain server-rendered div, so what the visitor sees before hydration is what
+ * stays. On mount the block is measured once: only a block whose top is below the viewport is hidden and
+ * given the slide-in when it scrolls up; a block already on the first screen (or scrolled past) is left
+ * exactly as it painted. Nothing on screen ever vanishes and returns. Reduced motion: never animates.
+ */
+export function Reveal({ children, delay = 0, distance = 36, className, index = 0, stagger = 0, cap = 8, threshold = 0.12 }: Props) {
   const reduced = useReducedMotion();
-  const mounted = useMounted();
-  if (!mounted || reduced) return <div className={className}>{children}</div>;
+  const ref = useRef<HTMLDivElement>(null);
   const wait = delay + Math.min(index, cap) * stagger;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || reduced) return;
+    // On the first screen already (or above it): leave it as it painted.
+    if (el.getBoundingClientRect().top < window.innerHeight) return;
+    gsap.set(el, { y: distance, opacity: 0 });
+    const tl = gsap.timeline({ paused: true, delay: wait }).to(el, { y: 0, opacity: 1, duration: 0.7, ease: "power3.out" });
+    const st = ScrollTrigger.create({ trigger: el, start: `top ${(1 - threshold) * 100}%`, once: true, onEnter: () => tl.play() });
+    return () => {
+      st.kill();
+      tl.kill();
+      gsap.set(el, { clearProps: "transform,opacity" });
+    };
+  }, [reduced, distance, wait, threshold]);
+
   return (
-    <AnimatedContent className={className} distance={distance} direction="vertical" duration={0.7} ease="power3.out" initialOpacity={0} threshold={0.12} delay={wait}>
+    <div ref={ref} className={className}>
       {children}
-    </AnimatedContent>
+    </div>
   );
 }

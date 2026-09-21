@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Barlow, Big_Shoulders, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import { getLiveSite } from "@/lib/site/live";
+import { readTheme } from "@/lib/site/theme";
 import "./globals.css";
 
 // Four self-hosted families (CSP font-src 'self'): Barlow for body, Big Shoulders for display,
-// Instrument Serif italic for the one accent word, JetBrains Mono for eyebrows and readouts.
+// Instrument Serif italic for the one accent word, JetBrains Mono for the admin's eyebrows and readouts.
 // Only the first two preload — they are on the LCP path; the serif and mono load on first use.
 const barlow = Barlow({ variable: "--font-barlow", subsets: ["latin"], weight: ["400", "500", "600"], display: "swap" });
 // next/font has no metric overrides for Big Shoulders (the build warns and skips the fallback), so say so explicitly.
@@ -25,17 +26,21 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F5F0E7" },
-    { media: "(prefers-color-scheme: dark)", color: "#0B1424" },
-  ],
-  viewportFit: "cover",
-};
+/** The address-bar colour follows the chosen theme (the toggle updates the meta tag in place). */
+export async function generateViewport(): Promise<Viewport> {
+  const theme = await readTheme();
+  return { themeColor: theme === "dark" ? "#0B1424" : "#FFFFFF", viewportFit: "cover" };
+}
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+/**
+ * `data-theme` is always present on the server HTML — "light" unless the
+ * "theme" cookie says dark — so tokens.css never needs the OS preference
+ * and there is no flash of the wrong theme.
+ */
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const theme = await readTheme();
   return (
-    <html lang="en" className={`${barlow.variable} ${display.variable} ${serif.variable} ${mono.variable}`}>
+    <html lang="en" data-theme={theme} className={`${barlow.variable} ${display.variable} ${serif.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

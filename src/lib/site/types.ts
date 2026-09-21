@@ -28,17 +28,16 @@ export interface Company {
  * an unbalanced or empty pair prints literally (see `accent.ts`).
  */
 export interface Content {
+  /** The home headline: under 45 characters, two short sentences read best. */
   heroTitle: string;
   heroSub: string;
-  /** Mono route line above the headline; blank = automatic (`origin → first five destinations · and N more`). */
-  heroEyebrow: string;
-  /** Optional numbers strip, one per line: `Label | Value`; blank = automatic. */
+  /** Optional proof points under the headline, one per line: `Label | Value`; blank = automatic. */
   stats: string;
-  /** Mono promise line under the calculator; blank hides it. */
+  /** Promise line under the calculator; blank hides it. */
   promise: string;
-  /** Route board heading (home + /services). */
+  /** "Where we deliver" heading (home + /services). */
   routesTitle: string;
-  /** Note under the route board heading. */
+  /** Note under the "Where we deliver" heading. */
   routesNote: string;
   /** "How it works" heading. */
   stepsTitle: string;

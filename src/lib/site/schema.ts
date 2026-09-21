@@ -59,7 +59,6 @@ export const ContentSchema = z.object({
   heroTitle: text(200),
   heroSub: text(400),
   stats: text(1000),
-  heroEyebrow: text(160),
   promise: text(240),
   routesTitle: text(120),
   routesNote: text(300),

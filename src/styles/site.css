@@ -1,25 +1,51 @@
 /* =====================================================================
    site.css — the public site in three labelled blocks. Engineers edit
    only inside their own banner; shared skins live in tokens.css.
-     SHELL  (FOUNDATION): header, brand, nav, footer, ghost, page head,
-                          the living background's SVG/canvas geometry
-     HOME   (HOME):       .calc, .hero*, .manifest, .jump, .instrument
-                          geometry, .promise, .routes, .route-*, .steps,
-                          .step-*, .teaser, .hold-*
-     PAGES  (INNER):      .page, .cards, .card, .story*, .drop,
-                          .mv, .values, .contact-sheet, .contact-form,
-                          .visit, .faq, .cta-band, .nf, .err
+     SHELL  (SHELL+HOME): .site container, header, brand, nav, theme
+                          toggle, footer, page head
+     HOME   (SHELL+HOME): .calc, .hero-copy, .proof, .instrument geometry,
+                          .promise, .how*, .deliver*, .dest*,
+                          .services-home*, .hold-*
+     PAGES  (INNER):      .page, .cards, .card, .story*, .mv, .values,
+                          .contact-*, .faq*, .cta-band, .nf, .err
    A block may only add rules whose first selector is a prefix it owns.
+   Light is the default theme; dark rules use :root[data-theme="dark"] only.
    ===================================================================== */
 
 /* ===== SHELL ===== */
-/* owner: FOUNDATION */
+/* owner: SHELL+HOME */
 
-/* Header: full bleed, one row from 900 (brand | nav | actions), brand row + scrollable nav row below. */
+/* The container: 1360px of content at 1920, 1286 at 1366, 944 at 1024, 720 at 768, 343 at 375. */
+.site.wrap,
+.site .wrap {
+  max-width: calc(var(--wrap) + var(--gutter) * 2);
+}
+.site h1 {
+  max-width: 20ch;
+  text-wrap: balance;
+}
+
+/* Full-bleed bands the shell owns (header, footer, "Where we deliver"): the negative margin reaches the viewport
+   edges and the matching padding brings the content back to exactly the page column's edges, scrollbar or not
+   (a centred inner .wrap would sit half a scrollbar to the left of the rest of the page). */
+.site-head,
+footer.site-foot,
+.deliver {
+  margin-inline: calc(50% - 50vw);
+  padding-inline: calc(50vw - 50%);
+}
+.site-head > .wrap,
+footer.site-foot > .wrap,
+.deliver > .wrap {
+  max-width: none;
+  padding-inline: 0;
+}
+
+/* Header: one 64px row from 1024 (brand | nav | actions); below that a brand row (56px; 64 from 900) with the
+   nav as a full-width tab strip under it. */
 .site-head {
   position: relative;
   z-index: var(--z-head);
-  margin-inline: calc(50% - 50vw);
   background: var(--glass);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
@@ -66,7 +92,7 @@
   font-family: var(--font-display);
   font-optical-sizing: auto;
   font-weight: 700;
-  font-size: 1.4rem;
+  font-size: 1.41rem; /* 24px */
   line-height: 1;
   letter-spacing: 0;
   color: var(--ink);
@@ -76,14 +102,10 @@
 }
 .brand-tag {
   display: block;
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 0.68rem;
+  font-size: var(--fs-small);
   line-height: 1.2;
-  text-transform: uppercase;
-  letter-spacing: var(--ls-eyebrow);
   color: var(--muted);
-  margin-top: 4px;
+  margin-top: 3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -98,47 +120,61 @@
 .head-actions .btn {
   white-space: nowrap;
 }
-.btn.call .ico-sm {
-  width: 18px;
-  height: 18px;
-  color: currentColor;
+.head-actions .btn svg {
+  width: 22px;
+  height: 22px;
 }
-@media (max-width: 560px) {
-  .btn.call .call-num {
-    display: none;
-  }
-  .btn.call {
-    padding: 0 9px;
-  }
+/* The theme toggle: a 48px square, the glyph alone. */
+.btn.theme {
+  width: var(--tap);
+  padding: 0;
 }
-@media (max-width: 639px) {
+/* The split brand ("Speedat" over "International Courier", both lines always whole) wherever the full name would
+   squeeze its neighbours: below 720, and the 1024–1199 one-row header where the nav sits between the brand and
+   three buttons. The brand column is minmax(0, 1fr), so it is the actions that give way (below), never the name:
+   at 375 the two-line brand (≈ 200px) sits beside two 48px squares with 28px to spare; at 640 beside Call,
+   "WhatsApp" and the toggle (≈ 290px) with 90px to spare. */
+@media (max-width: 719px), (min-width: 1024px) and (max-width: 1199px) {
   .brand-link.has-short .brand-full {
     display: none;
   }
   .brand-link.has-short .brand-short {
     display: block;
   }
-  .brand-short .brand-tag {
-    font-size: 0.6rem;
-    letter-spacing: 0.06em;
-  }
 }
-/* At phone widths the header keeps one primary action: the call button lives on in the footer and /contact. */
-@media (max-width: 479px) {
-  .head-actions .btn.call {
-    display: none;
-  }
+/* Below 720 the WhatsApp button drops "us"; below 560 it is the glyph alone on its 48px green square (the one
+   symbol every visitor knows; its name stays "WhatsApp us"); below 480 the Call button lives on in the footer,
+   /contact and the band. */
+@media (max-width: 719px) {
   .head-actions .wa-us {
     display: none;
   }
 }
-/* Nav: scrollable second row below 900, centred single row above. */
+@media (max-width: 559px) {
+  .head-actions .btn.wa {
+    width: var(--tap);
+    padding: 0;
+  }
+  .head-actions .btn.wa .wa-word {
+    display: none;
+  }
+}
+@media (max-width: 479px) {
+  .head-actions .btn.call {
+    display: none;
+  }
+}
+/* Nav: a second row below 1024 whose links share the width evenly (a tab strip), centred single row above;
+   every link a 48px target. All five links stay on every phone: below 480 the words are 15px with 6px
+   padding, which fits the five (≈256px of words) inside a 360px phone's 328px row with room to spare and a
+   375px phone's with 27px. Narrower still (under 340px) the row scrolls and snaps to a whole link. */
 .nav {
   grid-area: nav;
   display: flex;
   gap: 2px;
   overflow-x: auto;
   scrollbar-width: none;
+  scroll-snap-type: x proximity;
   margin: 0 calc(var(--gutter) * -1);
   padding: 0 var(--gutter);
   border-top: 1px solid var(--line);
@@ -147,13 +183,28 @@
   display: none;
 }
 .nav a {
-  flex: none;
+  flex: 1 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  padding: 0 12px;
+  scroll-snap-align: start;
   color: var(--muted);
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: var(--fs-label);
   line-height: 1;
-  padding: 14px 12px;
+  white-space: nowrap;
+}
+@media (max-width: 479px) {
+  .nav {
+    gap: 0;
+  }
+  .nav a {
+    padding: 0 6px;
+    font-size: 0.9rem; /* 15.3px: still inside the 14–16px label range */
+  }
 }
 .nav a:hover {
   color: var(--ink);
@@ -165,7 +216,10 @@
   text-decoration-color: var(--hot-a);
   text-underline-offset: 6px;
 }
-@media (min-width: 900px) {
+/* One row from 1024 (brand · nav · Call / WhatsApp / theme). Between 1024 and 1199 the row is tightened —
+   8px link padding, 16px column gaps, "WhatsApp" without "us" — so the three parts fit 976px without the
+   nav spilling over its neighbours. */
+@media (min-width: 1024px) {
   .site-head {
     position: sticky;
     top: 0;
@@ -185,39 +239,31 @@
     gap: 4px;
   }
   .nav a {
-    padding: 10px 12px;
+    flex: none;
+  }
+}
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .head-row {
+    column-gap: 16px;
+  }
+  .nav a {
+    padding: 0 8px;
+  }
+  .head-actions .wa-us {
+    display: none;
   }
 }
 
-/* Footer: full bleed, the tagline as a ghost watermark under three columns. */
+/* Footer: full bleed, three plain columns, 17px words. 40px from its hairline to the words, so the page under
+   the closing navy band never reads as a void (every page ends with that band, 40-48px above the hairline). */
 footer.site-foot {
-  position: relative;
-  overflow: clip;
-  margin-inline: calc(50% - 50vw);
   margin-top: var(--section);
-  padding: var(--s8) 0 var(--s6);
+  padding-block: 40px 32px;
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: var(--fs-small);
-}
-.ghost {
-  position: absolute;
-  left: 0;
-  bottom: -0.12em;
-  font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-weight: 200;
-  font-size: var(--fs-ghost);
-  line-height: 0.9;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  opacity: 0.06;
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
+  font-size: 1rem;
 }
 .foot-grid {
-  position: relative;
   display: grid;
   grid-template-columns: 1fr;
   gap: 28px 32px;
@@ -231,7 +277,7 @@ footer.site-foot {
   font-family: var(--font-display);
   font-optical-sizing: auto;
   font-weight: 700;
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   line-height: 1;
   letter-spacing: 0;
   color: var(--ink);
@@ -239,728 +285,688 @@ footer.site-foot {
 }
 .foot-brand .brand-tag {
   margin: 0 0 12px;
+  font-size: 1rem;
   white-space: normal;
 }
 .foot-address {
   max-width: 38ch;
 }
-.foot-grid h3.eyebrow {
-  margin: 0 0 12px;
+.foot-grid h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1.3;
+  color: var(--ink);
+  margin: 0 0 6px;
 }
 .foot-grid ul {
   list-style: none;
   margin: 0;
   padding: 0;
 }
+/* Every footer row is 48px tall and a link fills its row, so the whole line is the tap target (not just a
+   three-letter word); the growing underline lives on the inner .link span, under the words alone. */
 .foot-grid li {
-  margin: 6px 0;
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  margin: 0;
+  padding: 0;
 }
 footer.site-foot a {
   color: var(--muted);
 }
-footer.site-foot a:hover {
+footer.site-foot a:hover,
+footer.site-foot a:focus-visible {
   color: var(--ink);
 }
+.foot-grid li a {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-height: var(--tap);
+  text-decoration: none;
+}
+.foot-grid li a:hover .link,
+.foot-grid li a:focus-visible .link {
+  background-size: 100% 1px;
+}
 .foot-bottom {
-  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 6px 18px;
   justify-content: space-between;
-  margin-top: var(--s6);
+  margin-top: 32px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: var(--ls-mono);
+  font-size: var(--fs-small);
   color: var(--muted);
 }
 
-/* Page header (PageHead.tsx): numbered eyebrow → rule → h1 → lede. */
+/* Page header (PageHead.tsx): h1 → lede. */
 .page-head {
-  margin-bottom: var(--s7);
+  margin-bottom: 32px;
 }
 .page-head h1 {
   font-size: var(--fs-h1);
-  max-width: 18ch;
+  max-width: 20ch;
+  text-wrap: balance;
 }
 .page-head .lede {
-  margin-bottom: 0;
-}
-
-/* Living background (fx/LivingBackground.tsx): the SVG threads always, the WebGL canvas fading over them when allowed. */
-.hero-bg {
-  position: absolute;
-  inset: -24px -40px;
-  z-index: var(--z-bg);
-  pointer-events: none;
-  color: var(--ink);
-  -webkit-mask-image: radial-gradient(ellipse 75% 85% at 35% 45%, #000 35%, transparent 95%);
-  mask-image: radial-gradient(ellipse 75% 85% at 35% 45%, #000 35%, transparent 95%);
-}
-.silk {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-.hero-canvas {
-  position: absolute;
-  inset: 0;
-  opacity: 0.32;
-}
-/* Paper-coloured threads on the dark page read brighter than ink on paper at the same alpha; keep the headline first. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .hero-canvas {
-    opacity: 0.2;
-  }
-}
-:root[data-theme="dark"] .hero-canvas {
-  opacity: 0.2;
-}
-@media (prefers-reduced-motion: no-preference) {
-  /* Only a `from`: the canvas settles at its own opacity (.32 / .2 dark). `fadein` would pin it at 1. */
-  @keyframes canvas-in {
-    from {
-      opacity: 0;
-    }
-  }
-  .hero-canvas {
-    animation: canvas-in 600ms var(--ease-out) both;
-  }
+  margin: 12px 0 0;
 }
 
 /* ===== HOME ===== */
-/* owner: HOME — the manifest: 01 hero + instrument, 02 route board, 03 steps, 04 teaser, the hold panel.
-   Section rhythm is --section; inside a section 32px (--s6) separates the title block from its content. */
+/* owner: SHELL+HOME — hero + calculator, how it works, where we deliver, two services, the hold panel.
+   Sections sit --section apart (72px; 48 below 720); --gap-title between a title and its content. */
 
-/* 01 — hero + instrument (page.tsx, Hero.tsx). Stacked below 1024; a 6/6 split above, the hero sticky
-   beside the instrument on tall screens. */
+/* Hero + calculator (page.tsx, Hero.tsx, home/Steps.tsx): one column below 1024 (copy → calculator → how it
+   works); a 42/58 split above with the copy and the three steps stacked in the left column against the
+   calculator, both columns starting at the same top edge, nothing sticky. */
 .calc {
-  position: relative;
-  padding: var(--s6) 0 0;
+  padding-top: 24px;
   margin-bottom: var(--section);
 }
-.hero {
-  position: relative;
-  margin-bottom: var(--s7);
+/* Below 1024 the steps are the section after the calculator: a section gap above, the grid's own gap below. */
+.calc > .how {
+  margin: var(--section) 0 0;
 }
-/* The threads' box: keep the SVG inside the gutters on phones so nothing overflows the viewport. */
-.hero .hero-bg {
-  inset: -24px calc(var(--gutter) * -1) -8px;
+.hero-copy {
+  margin-bottom: 28px;
 }
-/* The living threads (fx/LivingBackground.tsx) gather at the vertical middle of their box, so the box covers
-   only the top 70% of the hero and the band sits behind the headline; a radial mask fades it out before the
-   lede and the manifest and at every edge (no hard line where the dense band ends), and the low opacity keeps
-   it a texture under the type rather than a pencil smudge. */
-.hero .hero-canvas {
-  inset: 0 0 auto;
-  height: 70%;
-  opacity: 0.18;
-  -webkit-mask-image: radial-gradient(ellipse 80% 72% at 42% 50%, #000 18%, transparent 70%);
-  mask-image: radial-gradient(ellipse 80% 72% at 42% 50%, #000 18%, transparent 70%);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .hero .hero-canvas {
-    opacity: 0.14;
-  }
-}
-:root[data-theme="dark"] .hero .hero-canvas {
-  opacity: 0.14;
-}
-.hero-fg {
-  position: relative;
-  z-index: var(--z-fg);
-}
-.hero-eyebrow {
-  margin-bottom: 18px;
-  max-width: 64ch;
-}
-.hero-title {
-  font-size: var(--fs-hero);
-  font-weight: 800;
-  line-height: var(--lh-display);
-  letter-spacing: var(--ls-display);
-  max-width: 11ch;
+.hero-copy h1 {
+  max-width: 20ch;
   text-wrap: balance;
-  margin: 0;
 }
-/* Hero title (home/HeroTitle.tsx): each word is its own box so the words can rise in from first paint (CSS only). */
-.hero-title .w {
-  display: inline-block;
+.hero-copy .accent {
+  /* the serif's taller ascent must not grow that line box */
+  line-height: 0.9;
 }
-.hero-title .accent {
-  /* the serif's taller ascent must not grow that line box; the condensed face's negative tracking is eased for the italic */
-  line-height: 0.8;
-  letter-spacing: -0.01em;
+.hero-copy .lede {
+  margin: 16px 0 0;
+  max-width: 52ch;
 }
-.hero .lede {
-  margin: 22px 0 28px;
-  max-width: 46ch;
-}
-/* The manifest strip: three hairline-separated cells (destinations, fastest days, pickup cities). */
-.manifest {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: auto; /* each cell takes its value's width; the slack is shared equally */
-  margin: 0;
-  padding: 0;
+/* Proof points: icon · number · short label, wrapping as a row under a hairline. */
+.proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin: 24px 0 0;
+  padding: 20px 0 0;
   list-style: none;
   border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
 }
-.manifest li {
+@media (max-width: 719px) {
+  .proof {
+    gap: 10px 20px;
+    margin-top: 20px;
+    padding-top: 16px;
+  }
+}
+.proof li {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px 16px 16px 0;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
-.manifest li + li {
-  border-left: 1px solid var(--line);
-  padding-left: 16px;
+.proof-ico {
+  display: inline-flex;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  color: var(--orange-ink);
 }
-.manifest strong {
-  display: block;
+.proof-ico svg {
+  width: 24px;
+  height: 24px;
+}
+.proof strong {
   font-family: var(--font-display);
   font-optical-sizing: auto;
   font-weight: 700;
   font-size: var(--fs-stat);
   line-height: 1;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
-  min-width: 2ch;
+  color: var(--ink);
   white-space: nowrap;
 }
-/* The word after a number ("days") set as a unit; the symbol ("+") stays at full size with the number. */
-.manifest .unit {
-  font-size: 0.42em;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-.manifest li > span {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: var(--fs-eyebrow);
+.proof li > span:last-child {
+  font-size: var(--fs-label);
   line-height: 1.2;
-  text-transform: uppercase;
-  letter-spacing: var(--ls-eyebrow);
   color: var(--muted);
 }
-/* Phones: tighter label tracking so a one-word label ("destinations") fits its cell in a row of three. */
-@media (max-width: 479px) {
-  .manifest li > span {
-    font-size: 0.64rem;
-    letter-spacing: 0.1em;
-  }
-  .manifest li {
-    padding-right: 12px;
-  }
-  .manifest li + li {
-    padding-left: 12px;
-  }
-}
-@media (max-width: 339px) {
-  .manifest {
-    grid-auto-flow: row;
-    grid-template-columns: 1fr 1fr;
-  }
-  .manifest li:nth-child(3) {
-    grid-column: 1 / -1;
-    border-left: 0;
-    border-top: 1px solid var(--line);
-    padding-left: 0;
-  }
-}
-/* The phone-only jump to the instrument; the split layout makes it redundant from 1024. */
-.jump {
-  margin-top: 24px;
-  gap: 10px;
-}
-.jump-arrow {
-  display: inline-block;
-  font-family: var(--font-mono);
-}
-/* The instrument column (#quote-instrument): geometry only — its skin lives in calculator.css. */
+/* The calculator column (#quote-instrument): geometry only — its skin lives in calculator.css. */
 .instrument {
   position: relative;
   width: 100%;
   min-width: 0;
 }
-.instrument-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.instrument-head .meta {
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-/* The promise line under the instrument: mono, with the shield. */
+/* The promise and "Rates updated" line under the calculator: two short lines at most (62ch), never one long
+   run across the whole calculator column. */
 .promise {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin-top: 16px;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
+  margin-top: 14px;
+  font-size: var(--fs-small);
   line-height: 1.45;
-  letter-spacing: var(--ls-mono);
   color: var(--muted);
+}
+.promise span {
+  max-width: 62ch;
 }
 .promise svg {
   width: 16px;
   height: 16px;
   flex: none;
-  margin-top: 2px;
+  margin-top: 3px;
   color: var(--orange-ink);
 }
-@media (min-width: 720px) {
-  .calc {
-    padding-top: var(--s7);
+@media (min-width: 768px) {
+  .instrument {
+    max-width: 780px;
   }
 }
 @media (min-width: 1024px) {
+  /* Two columns, two rows: the copy and the steps share the left column; the calculator spans both rows on the
+     right. Row 1 is the copy's own height and row 2 is 1fr, so the calculator's height lands entirely in row 2
+     (two auto rows would share it and push the steps away from the proof points). The steps align to the
+     START of that row and keep their natural height (≈ 90–115px a card at 1920), so when the calculator grows
+     (a weight chosen, the detailed view) the slack falls in the column BELOW the last card, never inside it. */
   .calc {
     display: grid;
-    grid-template-columns: minmax(0, 6fr) minmax(0, 6fr);
-    gap: 48px;
+    grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "copy inst"
+      "how inst";
+    gap: 32px 40px;
     align-items: start;
-    padding-top: var(--s8);
+    padding-top: 32px;
   }
-  .hero {
-    position: sticky;
-    top: calc(var(--head-h) + 24px);
-    align-self: start;
-    max-height: calc(100vh - var(--head-h) - 24px);
+  .hero-copy {
+    grid-area: copy;
     margin-bottom: 0;
   }
-  .hero .hero-bg {
-    inset: -32px -48px -24px calc(var(--gutter) * -1);
+  .calc .instrument {
+    grid-area: inst;
+    min-height: 520px; /* CLS guard while the calculator's session snapshots settle */
   }
-  .instrument {
-    max-width: 600px;
-    min-height: 560px; /* CLS guard while the calculator's session snapshots settle */
-    justify-self: end;
+  .calc > .how {
+    grid-area: how;
+    align-self: start;
+    min-width: 0;
+    margin: 0;
   }
-  .jump {
-    display: none;
-  }
-}
-/* Short screens (a 768-tall laptop): the hero stays sticky beside the instrument but shrinks to fit — a smaller
-   headline, a tighter lede and strip — so the left column never sits empty while the detailed form scrolls. */
-@media (min-width: 1024px) and (max-height: 820px) {
-  .hero-title {
-    font-size: clamp(3rem, 0.5rem + 5vw, 6rem);
-  }
-  .hero-eyebrow {
+  .calc .how h2 {
+    font-size: 1.75rem; /* 30px: a sub-heading of the hero, under the 57px h1 */
     margin-bottom: 14px;
   }
-  .hero .lede {
-    margin: 16px 0 20px;
-    max-width: 44ch;
+  .calc .how-list {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+    gap: 12px;
   }
-  .manifest li {
-    padding-top: 12px;
-    padding-bottom: 12px;
+  /* One step as a row: number · icon · title over one line, the words underneath; natural height. */
+  .calc .how-item {
+    grid-template-columns: 36px 32px minmax(0, 1fr);
+    grid-template-areas:
+      "n ico title"
+      "n ico text";
+    gap: 2px 14px;
+    align-content: start;
+    padding: 14px 18px;
+  }
+  .calc .how-item .n {
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+    align-self: center;
+  }
+  .calc .how-ico,
+  .calc .how-ico svg {
+    width: 32px;
+    height: 32px;
+  }
+  .calc .how-ico {
+    align-self: center;
+  }
+  .calc .how-item h3 {
+    margin: 0;
+    font-size: var(--fs-h3);
+    max-width: none;
+  }
+  .calc .how-item p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.4;
+    max-width: none;
   }
 }
-@media (min-width: 1024px) and (max-height: 680px) {
-  .hero-title {
-    font-size: clamp(2.75rem, 0.25rem + 4vw, 4.75rem);
-  }
-}
-@media (min-width: 1200px) {
+@media (min-width: 1366px) {
   .calc {
-    gap: 64px;
+    gap: 32px 56px;
+  }
+  /* The wider column gives the step rows room: a 40px number, a 36px icon, body-size text; still their
+     natural height. */
+  .calc .how-item {
+    grid-template-columns: 40px 36px minmax(0, 1fr);
+    gap: 4px 16px;
+    padding: 14px 20px;
+  }
+  .calc .how-item .n {
+    width: 40px;
+    height: 40px;
+    font-size: 22px;
+  }
+  .calc .how-ico,
+  .calc .how-ico svg {
+    width: 36px;
+    height: 36px;
+  }
+  .calc .how-item p {
+    font-size: var(--fs-body);
   }
 }
-/* 02 — route board (home/RouteBoard.tsx): navy, full bleed; the title block left, the note and chips
-   right at >= 900; then the rows in one column, two from 900. */
-.routes {
-  padding: var(--section) 0;
+/* The 1366×768 density tier: the calculator's readout and green button must sit inside the fold. */
+@media (min-width: 1024px) and (max-height: 820px) {
+  .calc {
+    padding-top: 24px;
+  }
 }
-.routes-head {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px 48px;
+
+/* How it works (home/Steps.tsx): three picture cards — number circle, icon, two lines of words. */
+.how {
+  margin-bottom: var(--section);
 }
-.routes-title h2 {
-  max-width: 14ch;
+.how h2 {
+  max-width: 24ch;
   text-wrap: balance;
+  margin-bottom: var(--gap-title);
 }
-.routes-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.route-note {
-  font-family: var(--font-mono);
-  font-size: var(--fs-small);
-  line-height: 1.5;
-  letter-spacing: var(--ls-mono);
-  color: var(--paper-70);
-  max-width: 48ch;
-  margin: 0;
-}
-.route-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0;
-}
-.route-chips .tag {
-  margin: 0;
-  padding: 5px 11px;
-  background: var(--navy-2);
-  color: var(--paper-ink);
-  border: 1px solid var(--navy-line);
-}
-@media (min-width: 900px) {
-  .routes-head {
-    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-    align-items: end;
-  }
-  .routes-meta {
-    padding-bottom: 6px;
-  }
-}
-.route-list {
+.how-list {
   list-style: none;
-  margin: var(--s6) 0 0;
+  margin: 0;
   padding: 0;
   display: grid;
   grid-template-columns: 1fr;
-  column-gap: 48px;
-  border-bottom: 1px solid var(--navy-line);
+  gap: 16px;
 }
-@media (min-width: 900px) {
-  .route-list {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+.how-list li {
+  display: flex;
+  min-width: 0;
+}
+.how-item {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-areas:
+    "n ico"
+    "title title"
+    "text text";
+  gap: 14px 12px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  padding: var(--card-pad);
+}
+.how-item .n {
+  grid-area: n;
+  width: 40px;
+  height: 40px;
+  font-size: 22px;
+}
+.how-ico {
+  grid-area: ico;
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  color: var(--orange-ink);
+}
+.how-ico svg {
+  width: 40px;
+  height: 40px;
+}
+.how-item h3 {
+  grid-area: title;
+  max-width: 22ch;
+  margin-top: 2px;
+}
+.how-item p {
+  grid-area: text;
+  margin-top: -6px;
+  font-size: var(--fs-body);
+  color: var(--muted);
+  max-width: 32ch;
+}
+@media (min-width: 720px) {
+  .how-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
   }
 }
-/* One row: code | name | days | price | arrow. On phones the price drops under the name. */
-.route-row {
-  appearance: none;
+
+/* Where we deliver (home/RouteBoard.tsx): a warm full-bleed band of flag tiles; also rendered by /services.
+   The band's EDGES keep the page rhythm — a full section gap (72px; 48 on a phone) of page above the top edge
+   (the hero's margin) and below the bottom edge — and inside them the band gives its words 48px (40 on a
+   phone) above and below. No stretch of empty page is ever taller than the section gap, and the h2 after the
+   band sits as far from the tint as every other h2 sits from what precedes it. */
+.deliver {
+  background: var(--paper-2);
+  padding-block: 48px;
+  margin-bottom: var(--section);
+}
+@media (max-width: 719px) {
+  .deliver {
+    padding-block: 40px;
+  }
+}
+.deliver h2 {
+  max-width: 24ch;
+  text-wrap: balance;
+}
+.deliver-note {
+  margin: 10px 0 0;
+  font-size: var(--fs-body);
+  color: var(--muted);
+  max-width: 60ch;
+}
+/* auto-fit, not auto-fill: with four destinations the four tiles share the whole row (≈ 308px each at 1366)
+   instead of sitting in six 200px tracks with a third of the band empty on the right; a phone still gets two
+   per row. A tile never grows past 440px, so one or two destinations do not become banners. */
+.dest-grid {
+  list-style: none;
+  margin: var(--gap-title) 0 0;
+  padding: 0;
   display: grid;
-  grid-template-columns: 3.5ch minmax(0, 1fr) auto 1.1em;
-  grid-template-areas:
-    "code name days go"
-    "code price price go";
-  gap: 2px 14px;
-  align-items: baseline;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.dest-grid li {
+  display: flex;
+  min-width: 0;
+}
+/* The reveal wrapper is the grid item's only child; let the tile fill it so a row's tiles share a height. */
+.dest-grid li > * {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* One tile: flag · name · from price · days. A button on the home page, a link on /services. Two per row on a
+   phone with the flag above the words (so a price never wraps); flag beside the words in wider tiles from 560. */
+.dest {
+  appearance: none;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   width: 100%;
-  min-height: 56px;
-  padding: 14px 10px;
+  max-width: 440px;
+  min-height: 72px;
+  padding: 12px;
   margin: 0;
-  border: 0;
-  border-top: 1px solid var(--navy-line);
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
+  background: var(--surface);
+  border: 1.5px solid var(--edge);
+  border-radius: var(--r3);
+  color: var(--ink);
   font: inherit;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
 }
-.route-row:hover,
-.route-row:focus-visible {
-  background: var(--navy-2);
+.dest:hover,
+.dest:focus-visible {
+  border-color: var(--ink);
 }
-.route-row:hover .route-code,
-.route-row:focus-visible .route-code,
-.route-row:hover .route-go,
-.route-row:focus-visible .route-go {
-  color: var(--navy-accent);
+.dest .flag {
+  width: 40px;
+  height: 30px;
 }
-.route-code {
-  grid-area: code;
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 0.8rem;
-  letter-spacing: var(--ls-mono);
-  color: var(--paper-70);
+.dest-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
 }
-.route-name {
-  grid-area: name;
+.dest-name {
   font-weight: 600;
-  font-size: 1.05rem;
-  line-height: 1.25;
-}
-.route-days {
-  grid-area: days;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  letter-spacing: var(--ls-mono);
-  color: var(--paper-70);
-  white-space: nowrap;
-}
-.route-price {
-  grid-area: price;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  letter-spacing: var(--ls-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--paper-ink);
-  white-space: nowrap;
-}
-.route-go {
-  grid-area: go;
-  align-self: center;
-  justify-self: end;
-  font-family: var(--font-mono);
   font-size: 1rem;
-  line-height: 1;
-  color: var(--paper-45);
+  line-height: 1.2;
+}
+.dest-price {
+  font-size: var(--fs-label);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.dest-days {
+  font-size: var(--fs-small);
+  line-height: 1.2;
+  color: var(--muted);
 }
 @media (min-width: 560px) {
-  .route-row {
-    grid-template-columns: 3.5ch minmax(0, 1fr) auto auto 1.1em;
-    grid-template-areas: "code name days price go";
-    column-gap: 18px;
+  .dest-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   }
-  .route-price {
-    justify-self: end;
+  .dest {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
   }
 }
-/* 03 — how it works (home/Steps.tsx): three numbered entries; the numeral sits beside the text on phones,
-   above it from 900. */
-.steps-section {
-  padding-top: var(--section);
+.deliver-more {
+  margin: 16px 0 0;
+  font-size: var(--fs-body);
+  color: var(--muted);
+  max-width: 60ch;
 }
-.steps-head h2 {
-  max-width: 16ch;
+.deliver-more + .deliver-more {
+  margin-top: 6px;
+}
+
+/* Two ways to send (home/Teaser.tsx): two cards (INNER's ServiceCard) and one button to the rest. */
+.services-home h2 {
+  max-width: 24ch;
   text-wrap: balance;
+  margin-bottom: var(--gap-title);
 }
-.steps {
-  list-style: none;
-  margin: var(--s6) 0 0;
-  padding: 0;
+.services-home .cards {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0;
+  gap: 16px;
 }
-.steps li {
-  border-top: 1px solid var(--line);
+.services-home .cards > * {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
-.step-body {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas:
-    "num title"
-    "num text";
-  column-gap: 20px;
-  padding: 20px 0 24px;
+.services-home .card {
+  flex: 1 1 auto;
 }
-.steps .numeral {
-  grid-area: num;
-  display: block;
-  min-width: 2.2ch;
-  margin-top: -0.06em;
+.services-home .card .ico {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 14px;
 }
-.steps h3 {
-  grid-area: title;
-  max-width: 22ch;
-  padding-top: 4px;
+.services-home .card h3 {
+  margin: 0 0 8px;
 }
-.steps p {
-  grid-area: text;
-  color: var(--muted);
-  margin-top: 8px;
-  max-width: 40ch;
+.services-home .card p {
+  font-size: var(--fs-body);
+  max-width: 60ch;
 }
-@media (min-width: 900px) {
-  .steps {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 32px;
-  }
-  .step-body {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "num"
-      "title"
-      "text";
-    padding: 24px 0 0;
-  }
-  .steps .numeral {
-    margin: 0 0 14px;
-  }
-  .steps h3 {
-    padding-top: 0;
-  }
-}
-/* 04 — services teaser (home/Teaser.tsx): the first three service cards and the link to the rest. */
-.teaser {
-  padding-top: var(--section);
-}
-.teaser-head h2 {
-  max-width: 16ch;
-  text-wrap: balance;
-}
-.teaser .cards {
-  margin-top: var(--s6);
-}
-.teaser-more {
-  margin: var(--s5) 0 0;
-  font-weight: 600;
-  line-height: 1.3;
+.services-all {
+  width: 100%;
+  margin-top: 20px;
 }
 @media (min-width: 640px) {
-  .teaser-more {
-    text-align: right;
+  .services-home .cards {
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .services-all {
+    width: auto;
   }
 }
-/* 05 — the stamp band closes the page; pull the footer to 48px below it instead of a full section gap. */
+/* The WhatsApp / Call band closes the page: a full section gap after the "All services" button (the same 72px
+   the other sections keep between them; its own 64px of navy padding then leads to the heading) and 40px
+   before the footer's hairline, whose 40px padding follows (80px of page under the navy, not 96). */
 .home > .cta-band {
-  margin-bottom: calc(var(--s7) - var(--section));
+  margin-top: var(--section);
+  margin-bottom: calc(40px - var(--section));
 }
-@media (prefers-reduced-motion: no-preference) {
-  .hero-eyebrow {
-    animation: fadein 600ms var(--ease-out) both;
-  }
-  .hero-title .w {
-    animation: rise var(--t-hero) var(--ease-out) both;
-    animation-delay: calc(var(--i, 0) * var(--stagger-word));
-  }
-  .hero .lede {
-    animation: rise var(--t-hero) var(--ease-out) 420ms both;
-  }
-  .manifest,
-  .jump {
-    animation: rise var(--t-hero) var(--ease-out) 560ms both;
-  }
-  .jump-arrow {
-    transition: transform var(--t-fast) var(--ease-out);
-  }
-  .jump:hover .jump-arrow {
-    transform: translateY(3px);
-  }
-  .route-row {
-    transition:
-      background-color var(--t-fast),
-      color var(--t-fast);
-  }
-  .route-code,
-  .route-go {
-    transition:
-      color var(--t-fast),
-      transform var(--t-fast) var(--ease-out);
-  }
-  .route-row:hover .route-go,
-  .route-row:focus-visible .route-go {
-    transform: translateX(3px);
-  }
+
+/* Hold panel (HoldPanel.tsx): the admin's message as an orange-barred note, three fields in the instrument
+   skin (calculator.css, via .instrument), one full-width green button. No price ever reaches it. */
+.hold-panel .step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+  color: var(--ink);
 }
-/* Hold panel (HoldPanel.tsx): the admin's message as an orange-barred note, the three fields in the
-   instrument skin (calculator.css, via .instrument), one full-width green button. No price ever reaches it. */
+.hold-panel .step-head svg {
+  width: 22px;
+  height: 22px;
+  color: var(--orange-ink);
+  flex: none;
+}
 .hold-panel .hold-msg {
   margin: 0 0 18px;
   padding: 14px 16px;
   background: var(--paper-2);
-  color: var(--orange-ink);
+  color: var(--ink);
   border-left: 3px solid var(--hot-a);
   border-radius: 0 var(--r3) var(--r3) 0;
-  font-weight: 500;
+  font-size: var(--fs-body);
   line-height: 1.45;
 }
-.hold-panel h2.step svg {
-  color: var(--orange-ink);
+.hold-panel .step-done {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ok);
+  font-weight: 600;
 }
-.hold-panel .btn.wa.big {
+.hold-panel .step-done svg {
+  width: 20px;
+  height: 20px;
+  color: var(--ok);
+}
+.hold-panel .btn.wa.giant {
   width: 100%;
-  min-height: 56px;
   margin-top: 4px;
 }
 .hold-panel .btn.wa.soft {
   opacity: 0.75;
 }
 .hold-panel > .hint {
-  margin: 10px 0 4px;
+  margin: 12px 0 4px;
   text-align: center;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: var(--fs-label);
   line-height: 1.45;
-  letter-spacing: var(--ls-mono);
+}
+
+/* ---- motion: one entrance for the hero, one for the calculator, a press on the tiles ---- */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-copy {
+    animation: rise 500ms var(--ease-out) both;
+  }
+  .instrument {
+    animation: rise 500ms var(--ease-out) 120ms both;
+  }
+  .dest {
+    transition:
+      border-color var(--t-fast),
+      transform 180ms var(--ease-out);
+  }
+  .dest:active {
+    transform: scale(0.97);
+    transition-duration: 90ms;
+  }
+  .hold-panel .step-done {
+    animation: fadein 200ms var(--ease-out) both;
+  }
 }
 
 /* ===== PAGES ===== */
-/* owner: INNER — /services, /about, /contact, /faq, 404 and error, the stamp band.
-   Rhythm: PageHead → 48px (--s7) → the first content block; sections --section apart;
-   32px (--s6) between a section's title block and its content. Pages return the stamp
-   band as a SIBLING of .page (a fragment) so the footer sits 48px under the navy instead
-   of a full section gap. No background effect on inner pages. */
+/* owner: INNER — /services, /about, /contact, /faq, the 404 and error pages, the WhatsApp / Call band.
+   Built for someone who reads little: big headings, short paragraphs, cards with a 40px icon, giant buttons,
+   nothing to decode (no eyebrows, rules, numerals or ghosts). Rhythm: PageHead → 32px (SHELL) → the first
+   block; sections --section apart; --gap-title between a section's h2 and its content. Pages return the band
+   as a SIBLING of .page (a fragment) so the footer sits 48px under the navy instead of a full section gap. */
 
 /* ---- the page column ---- */
 .page {
-  padding: var(--s7) 0 var(--section);
+  padding: 32px 0 var(--section);
 }
 .page + .cta-band {
   margin-top: 0;
-  margin-bottom: calc(var(--s7) - var(--section));
+  margin-bottom: calc(48px - var(--section));
 }
-/* A section's title block: eyebrow → rule → h2 (→ optional lede). */
+/* A section's title block (SectionHead.tsx): the h2 (→ optional lede), --gap-title above what follows. */
 .page-sec {
-  margin: var(--section) 0 var(--s6);
+  margin: var(--section) 0 var(--gap-title);
 }
 .page-sec h2 {
-  max-width: 18ch;
+  max-width: 24ch;
   text-wrap: balance;
 }
 .page-sec .lede {
-  margin: 12px 0 0;
+  margin: 10px 0 0;
 }
-/* Side label + body: the label sticks beside its content from 900 (story, visit, write). */
+/* A heading beside its content (the story on /about, the form on /contact): stacked below 900, 4/8 above. */
 .page-split {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: var(--s6) 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px 40px;
 }
 .page-split-side,
 .page-split-body {
-  grid-column: 1 / -1;
   min-width: 0;
 }
 .page-split-side h2 {
-  font-size: var(--fs-h3);
-  font-weight: 600;
-  line-height: var(--lh-h3);
-  letter-spacing: 0;
+  max-width: 16ch;
+  text-wrap: balance;
 }
-.page-split-side .meta {
-  display: block;
-  margin-top: 14px;
-  max-width: 28ch;
-  line-height: 1.5;
+.page-split-side .from {
+  margin-top: 10px;
+  font-size: var(--fs-label);
+  line-height: 1.45;
+  color: var(--muted);
+  max-width: 32ch;
 }
 .page > * + .page-split {
   margin-top: var(--section);
 }
-.page > :first-child + .page-split {
+.page > .page-head + .page-split {
   margin-top: 0;
 }
 @media (min-width: 900px) {
   .page-split {
-    gap: var(--s6) 24px;
-  }
-  .page-split-side {
-    grid-column: 1 / 5;
-    position: sticky;
-    top: calc(var(--head-h) + 24px);
-    align-self: start;
-  }
-  .page-split-body {
-    grid-column: 5 / -1;
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    gap: 24px 40px;
   }
 }
-/* ---- cards: services (home teaser + /services), office/hours, the form's success card ---- */
+
+/* ---- cards: services (home teaser + /services), contact, office and hours, the form's success card ---- */
 .cards {
   display: grid;
   grid-template-columns: 1fr;
   gap: 16px;
 }
-/* The grid item is the reveal wrapper; let the card fill it so a row's cards share a height. */
+/* The grid item is the reveal wrapper (or the card itself); let the card fill it so a row's cards share a height. */
 .cards > * {
   display: flex;
   flex-direction: column;
@@ -971,24 +977,66 @@ footer.site-foot a:hover {
 }
 @media (min-width: 640px) {
   .cards {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 24px;
   }
 }
-@media (min-width: 960px) {
-  .cards.three {
-    grid-template-columns: 1fr 1fr 1fr;
+/* Never three-up: a third of even the 1360 container is a 437px card whose 18px paragraph runs 35-40
+   characters a line (measured), under the 45-75 band. Two-up from 640 at every width — a card's paragraph runs
+   ~55 characters at 1366 and ~60 (the 60ch cap) at 1920. An odd last card (WhatsApp / Call / Email on
+   /contact) takes the whole row as a wide row — icon, words, the button at the right — instead of leaving an
+   empty cell beside it. */
+@media (min-width: 640px) {
+  .cards.three > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .cards.three > :last-child:nth-child(odd) .card,
+  .cards.three > :last-child:nth-child(odd).card {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    grid-auto-rows: max-content;
+    column-gap: 20px;
+    align-items: start;
+  }
+  .cards.three > :last-child:nth-child(odd) .card > :not(.ico):not(.card-ico):not(.btn),
+  .cards.three > :last-child:nth-child(odd).card > :not(.ico):not(.card-ico):not(.btn) {
+    grid-column: 2;
+  }
+  .cards.three > :last-child:nth-child(odd) .card > .btn,
+  .cards.three > :last-child:nth-child(odd).card > .btn {
+    grid-column: 3;
+    grid-row: 1 / -1;
+    align-self: center;
+    width: auto;
+    margin-top: 0;
+  }
+  .cards.three > :last-child:nth-child(odd) .card .contact-text,
+  .cards.three > :last-child:nth-child(odd).card .contact-text {
+    margin-bottom: 0;
   }
 }
 .card {
-  position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r3);
+  border-radius: var(--r4);
   padding: var(--card-pad);
 }
 .card:hover {
   border-color: var(--ink);
+}
+/* The icon: 40px, orange, on its own line above the title (bare CardIcons carry .ico; UI glyphs sit in .card-ico). */
+.card > .ico,
+.card-ico {
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 0 14px;
+  color: var(--orange-ink);
+}
+.card-ico svg {
+  display: block;
+  width: 40px;
+  height: 40px;
 }
 .card h3 {
   margin: 0 0 8px;
@@ -996,90 +1044,36 @@ footer.site-foot a:hover {
 }
 .card p {
   color: var(--muted);
-  font-size: 0.95rem;
-  margin: 0;
+  font-size: var(--fs-body);
+  max-width: 60ch;
 }
-.card .ico {
-  display: block;
-  width: 28px;
-  height: 28px;
-  color: var(--orange-ink);
-}
-.card:hover .rule.hot {
-  width: 48px;
-}
-/* The service index in the corner: mono, quiet, tabular. */
-.card-no {
-  position: absolute;
-  top: var(--card-pad);
-  right: var(--card-pad);
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 0.72rem;
-  line-height: 1;
-  letter-spacing: var(--ls-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-}
-.two {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-}
-@media (min-width: 700px) {
-  .two {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-.two .card h3 {
-  margin-bottom: 10px;
-}
-.two .card p + p {
+.card p + p {
   margin-top: 8px;
 }
-.two .card .link {
+.card > .btn {
+  margin-top: 16px;
+}
+.card .link {
   font-weight: 600;
   color: var(--ink);
 }
-/* /services: the route board follows the cards a section apart and runs straight into the stamp band —
-   one navy close for the page, a hairline between the two — instead of a paper stripe. */
-.page .cards + .routes {
+/* /services: the flag grid follows the cards a section apart and runs straight into the navy band. */
+.page > * + .deliver {
   margin-top: var(--section);
 }
-.page > .routes:last-child {
+.page > .deliver:last-child {
   margin-bottom: calc(var(--section) * -1);
-  padding-bottom: var(--s7);
-}
-.page:has(> .routes:last-child) + .cta-band {
-  border-top: 1px solid var(--navy-line);
 }
 
 /* ---- /about ---- */
-.story-body p,
-.story-body .story-first {
-  font-size: 1.15rem;
+.story-body p {
+  font-size: var(--fs-lede);
   line-height: 1.6;
   max-width: 62ch;
   margin: 0 0 1em;
 }
-.story-body .story-first p {
-  margin: 0;
-  max-width: none;
-}
 .story-body > :last-child {
   margin-bottom: 0;
-}
-/* Drop cap: ::first-letter on the plain paragraph; .drop is the explicit letter the animated branch sets. */
-.story-first::first-letter,
-.drop {
-  font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-weight: 800;
-  font-size: 4.5rem;
-  line-height: 0.8;
-  color: var(--orange-ink);
-  float: left;
-  margin: 6px 10px 0 0;
 }
 .mv {
   display: grid;
@@ -1089,7 +1083,7 @@ footer.site-foot a:hover {
 }
 @media (min-width: 700px) {
   .mv {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 24px;
   }
 }
@@ -1100,22 +1094,24 @@ footer.site-foot a:hover {
 }
 .mv .card {
   flex: 1 1 auto;
-  border-radius: var(--r4);
-  padding: 24px;
 }
-.mv .rule {
-  margin-bottom: 20px;
+.mv .card h3 {
+  margin-bottom: 10px;
 }
 .mv .card .mv-text {
-  font-size: var(--fs-h3);
+  font-size: var(--fs-lede);
   font-weight: 500;
-  line-height: 1.3;
+  line-height: 1.45;
   color: var(--ink);
   text-wrap: pretty;
-  max-width: 30ch;
-  margin: 0;
+  max-width: 40ch;
 }
-/* Values: an editorial index — light numeral, the value, its one line. */
+/* Cards nobody picks (mission, vision, the sent-message card): no hover ink. */
+.mv .card:hover,
+.contact-done:hover {
+  border-color: var(--line);
+}
+/* Values: numbered rows — the ink circle, the value, its one line. */
 .values {
   list-style: none;
   margin: 0;
@@ -1127,134 +1123,119 @@ footer.site-foot a:hover {
 }
 .values-row {
   display: grid;
-  grid-template-columns: 4.5rem minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   gap: 4px 16px;
-  padding: 22px 0;
-  align-items: baseline;
+  padding: 20px 0;
+  align-items: start;
 }
-.values .numeral {
+.values-row .n {
   grid-row: 1 / 3;
-  font-size: 3.5rem;
-  line-height: 0.9;
-  align-self: start;
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
 }
 .values strong {
   display: block;
-  font-size: 1.2rem;
+  padding-top: 7px;
+  font-size: var(--fs-lede);
   font-weight: 600;
   line-height: 1.3;
 }
-.values span:not(.numeral) {
+.values span:not(.n) {
   color: var(--muted);
+  font-size: var(--fs-body);
   max-width: 60ch;
 }
 @media (min-width: 720px) {
   .values-row {
-    grid-template-columns: 4.5rem minmax(0, 5fr) minmax(0, 7fr);
+    grid-template-columns: 40px minmax(0, 5fr) minmax(0, 7fr);
     gap: 0 24px;
   }
-  .values .numeral {
+  .values-row .n {
     grid-row: auto;
+  }
+  .values span:not(.n) {
+    padding-top: 6px;
+  }
+}
+/* Wide screens: the description track itself stops at 60ch (7/12 of the row would pass 75 characters a line);
+   the value's name takes the rest, so the row still spans the page column. */
+@media (min-width: 1200px) {
+  .values-row {
+    grid-template-columns: 40px minmax(0, 1fr) minmax(0, 60ch);
   }
 }
 
 /* ---- /contact ---- */
-/* The contact sheet: one card, three hairline rows — channel, the number in display digits, the note, the action. */
-.contact-sheet {
-  padding: 0 var(--card-pad);
+/* The three contact cards: icon, a small heading, the number in display digits, one note, a giant button at the foot. */
+.contact-card {
+  display: flex;
+  flex-direction: column;
 }
-.contact-row {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-  padding: var(--card-pad) 0;
-  align-items: center;
+.contact-card h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1.3;
+  letter-spacing: 0;
+  color: var(--muted);
+  margin: 0 0 4px;
 }
-.contact-row + .contact-row {
-  border-top: 1px solid var(--line);
+.contact-text {
+  margin-bottom: 18px;
 }
-/* The sheet, the mission/vision cards and the success card are not units to pick: no hover ink. */
-.contact-sheet:hover,
-.contact-done:hover,
-.mv .card:hover {
-  border-color: var(--line);
-}
-.contact-sheet .lab {
-  gap: 8px;
-}
-.contact-sheet .lab .ico {
-  width: 16px;
-  height: 16px;
-}
-.contact-sheet .contact-big {
+.contact-card .contact-big {
   font-family: var(--font-display);
   font-optical-sizing: auto;
-  font-weight: 600;
-  font-size: clamp(1.75rem, 1.3rem + 1.8vw, 2.75rem);
-  line-height: 1.05;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  font-size: var(--fs-h3);
+  line-height: 1.1;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   overflow-wrap: anywhere;
-  margin: 10px 0 6px;
+  max-width: none;
 }
-.contact-sheet .contact-note {
-  color: var(--muted);
-  font-size: 0.95rem;
-  margin: 0;
-  max-width: 44ch;
+.contact-card .contact-note {
+  margin-top: 6px;
+  font-size: var(--fs-label);
+  line-height: 1.4;
+  max-width: 30ch;
 }
-.contact-row .btn {
-  justify-self: start;
+.contact-card .btn {
+  margin-top: auto;
+  width: 100%;
 }
-@media (min-width: 640px) {
-  .contact-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 24px;
-  }
-  .contact-row .btn {
-    justify-self: end;
-  }
-}
-/* The form: the instrument skin on paper — the one card on the page that carries a shadow. */
+/* The form: the panel skin; 52px fields and 16px labels come from tokens' .site rules. */
 .page .contact-form {
   padding: var(--card-pad);
-  box-shadow: var(--shadow-instrument);
   margin: 0;
-}
-.page .contact-form h3 {
-  margin: 0 0 18px;
-}
-.page .contact-form input,
-.page .contact-form select,
-.page .contact-form textarea {
-  min-height: 52px;
-  font-size: 1.05rem;
 }
 .page .contact-form textarea {
   min-height: 132px;
 }
-/* "(optional)" inside an eyebrow label: back to a quiet sentence-case hint. */
 .page .contact-form .field > span .hint {
-  font-family: var(--font-sans);
   font-weight: 400;
-  font-size: 0.8rem;
-  letter-spacing: 0;
-  text-transform: none;
+  font-size: var(--fs-small);
+  color: var(--muted);
   margin-left: 4px;
 }
 .contact-form-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-top: 4px;
 }
-.contact-form-err {
+.contact-form-actions .btn {
+  flex: 1 1 200px;
+}
+/* Inline errors sit inside the label, so they outrank the .site label rule: orange, 16px, not bold. */
+.page .contact-form .field > .contact-form-err {
   display: block;
   color: var(--orange-ink);
-  font-size: 0.85rem;
+  font-size: var(--fs-label);
   font-weight: 500;
+  line-height: 1.4;
 }
 .contact-done {
   box-shadow: inset 3px 0 0 var(--ok);
@@ -1267,59 +1248,76 @@ footer.site-foot a:hover {
   margin-top: 18px;
 }
 
-/* ---- /faq: an editorial index of native <details>, enhanced in FaqItem.tsx ---- */
+/* ---- /faq: a simple accordion of native <details> with 56px rows (FaqItem.tsx) beside the "ask us" card ---- */
+.faq-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .faq-grid {
+    grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
+    gap: 24px 40px;
+  }
+}
+.faq-ask {
+  display: flex;
+  flex-direction: column;
+}
+.faq-ask p {
+  color: var(--ink);
+  font-size: var(--fs-lede);
+  font-weight: 500;
+  line-height: 1.45;
+  max-width: 26ch;
+}
+.faq-ask .btn {
+  margin-top: 20px;
+  width: 100%;
+}
 .faq {
   border-bottom: 1px solid var(--line);
 }
 .faq-item {
   border-top: 1px solid var(--line);
-  padding: 0;
 }
 .faq-item summary {
+  min-height: 56px;
   display: grid;
-  grid-template-columns: 3ch minmax(0, 1fr) 16px;
+  grid-template-columns: minmax(0, 1fr) 24px;
   gap: 16px;
-  align-items: baseline;
-  padding: 18px 0;
+  align-items: center;
+  padding: 14px 0;
   cursor: pointer;
   list-style: none;
 }
 .faq-item summary::-webkit-details-marker {
   display: none;
 }
-.faq-n {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 0.8rem;
-  line-height: 1.4;
-  letter-spacing: var(--ls-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--orange-ink);
-}
 .faq-q {
   font-weight: 600;
-  font-size: 1.1rem;
-  line-height: 1.35;
+  font-size: var(--fs-button);
+  line-height: 1.3;
   color: var(--ink);
   text-wrap: pretty;
 }
-/* The +/– glyph drawn from two bars, so the vertical one can fold away on open. */
+/* The plus, drawn from two bars so the vertical one can fold away on open. */
 .faq-x {
   position: relative;
-  width: 16px;
-  height: 16px;
-  align-self: center;
-  color: var(--muted);
+  width: 24px;
+  height: 24px;
+  color: var(--ink);
 }
 .faq-x::before,
 .faq-x::after {
   content: "";
   position: absolute;
-  left: 0;
-  top: 7px;
-  width: 16px;
-  height: 2px;
-  border-radius: 1px;
+  left: 3px;
+  top: 11px;
+  width: 18px;
+  height: 2.5px;
+  border-radius: 2px;
   background: currentColor;
 }
 .faq-x::after {
@@ -1328,53 +1326,49 @@ footer.site-foot a:hover {
 .faq-item[open] .faq-x::after {
   transform: rotate(90deg) scaleX(0);
 }
-.faq-item summary:hover .faq-x,
+.faq-item[open] .faq-q,
 .faq-item[open] .faq-x {
-  color: var(--ink);
-}
-.faq-item[open] {
-  box-shadow: inset 3px 0 0 var(--hot-a);
-  padding-left: 16px;
+  color: var(--orange-ink);
 }
 .faq-a {
   overflow: hidden;
 }
 .faq-a p {
   color: var(--muted);
-  max-width: 70ch;
+  font-size: var(--fs-body);
+  max-width: 60ch;
   margin: 0;
-  padding: 0 0 20px calc(3ch + 16px);
+  padding: 0 40px 18px 0;
 }
 
-/* ---- 05 — stamp band (CtaBand.tsx): navy, full bleed; pages pass content.ctaTitle / ctaSub ---- */
+/* ---- the WhatsApp / Call band (CtaBand.tsx): navy, full bleed, giant buttons; pages pass content.ctaTitle / ctaSub.
+   The negative margin reaches the viewport edges and the matching padding brings the content back to the page
+   column's edges, scrollbar or not (the same device the SHELL bands use). ---- */
 .cta-band {
   margin-top: var(--section);
-  padding: var(--s8) 0;
+  margin-inline: calc(50% - 50vw);
+  padding: 48px calc(50vw - 50%);
 }
-.cta-copy .eyebrow {
-  margin-bottom: 0;
+.cta-band > .wrap {
+  max-width: none;
+  padding-inline: 0;
 }
 .cta-grid {
-  position: relative;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   align-items: center;
 }
-@media (min-width: 720px) {
-  .cta-grid {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-}
 .cta-copy h2 {
   color: inherit;
-  max-width: 16ch;
+  max-width: 20ch;
+  text-wrap: balance;
 }
 .cta-copy p {
   color: var(--paper-70);
   font-size: var(--fs-lede);
   line-height: var(--lh-lede);
-  margin-top: 12px;
+  margin-top: 10px;
   max-width: 44ch;
 }
 .cta-actions {
@@ -1390,73 +1384,64 @@ footer.site-foot a:hover {
   width: 100%;
 }
 @media (min-width: 720px) {
+  .cta-band {
+    padding-block: 64px;
+  }
   .cta-actions {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
   }
   .cta-actions .btn {
     width: auto;
   }
 }
-.stamp-mark {
-  display: none;
-}
-@media (min-width: 900px) {
+@media (min-width: 1100px) {
   .cta-grid {
-    grid-template-columns: minmax(0, 1fr) auto 96px;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 40px;
   }
-  .stamp-mark {
-    display: block;
-    width: 96px;
-    height: 96px;
-    border-radius: var(--r3);
-    --gap: var(--navy);
-    border-color: var(--navy-line);
-    transform: rotate(-6deg);
-    opacity: 0.9;
+  .cta-actions {
+    justify-content: flex-end;
   }
 }
-/* ---- 404 / error: the page head over a ghost numeral, one primary action ---- */
+
+/* ---- 404 / error (NotFoundBody.tsx): a big orange code, the page head, two big buttons ---- */
 .nf {
-  position: relative;
-  overflow: clip;
   min-height: 52vh;
 }
-.nf-ghost {
-  left: auto;
-  right: calc(var(--gutter) * -1);
-  top: -0.08em;
-  bottom: auto;
-  line-height: 0.8;
-  z-index: 0;
-}
-.nf > :not(.nf-ghost) {
-  position: relative;
-  z-index: 1;
+.nf-code {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 800;
+  font-size: var(--fs-h1);
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--orange-ink);
+  margin: 0 0 8px;
 }
 .nf .page-head {
-  margin-bottom: var(--s6);
+  margin-bottom: 24px;
 }
 .nf-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items: center;
 }
-.nf-actions .btn.wa {
-  justify-content: center;
+.nf-actions .btn {
+  width: 100%;
+}
+@media (min-width: 560px) {
+  .nf-actions .btn {
+    width: auto;
+  }
 }
 
 /* ---- motion (hover colour changes elsewhere are not motion) ---- */
 @media (prefers-reduced-motion: no-preference) {
   .card {
     transition: border-color var(--t-fast);
-  }
-  .faq-item {
-    transition:
-      padding-left var(--t-fast) var(--ease-out),
-      box-shadow var(--t-fast);
   }
   .faq-x::after {
     transition: transform 220ms var(--ease-out);

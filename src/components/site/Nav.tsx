@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const LINKS = [
-  { href: "/", label: "Quote" },
+/** Short plain words; "Get a price" is the whole product, so it comes first. All five stay on every phone. */
+const LINKS: readonly { href: string; label: string }[] = [
+  { href: "/", label: "Get a price" },
   { href: "/services", label: "Services" },
   { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },
   { href: "/faq", label: "FAQ" },
-] as const;
+];
 
 export function Nav() {
   const path = usePathname();

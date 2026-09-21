@@ -5,8 +5,9 @@ import { lines, parts } from "@/lib/pricing/engine";
 /**
  * Every `content.services` line (`icon | Title | Text`; a line without a known
  * icon name reads as `Title | Text` and takes the next icon in order) as a
- * card with its index in the corner. Server component; /services renders all
- * of them, the home teaser (HOME) renders the first three the same way.
+ * card: a big icon, a short title, one paragraph. Server component;
+ * /services renders all of them, the home teaser (HOME) renders the first
+ * two the same way.
  */
 export function ServiceGrid({ services }: { services: string }) {
   const items = lines(services);
@@ -23,11 +24,7 @@ export function ServiceGrid({ services }: { services: string }) {
         const Icon = CardIcons[iconName];
         return (
           <ServiceCard key={i} index={i}>
-            <span className="card-no" aria-hidden="true">
-              {String(i + 1).padStart(2, "0")}
-            </span>
             <Icon />
-            <span className="rule hot" aria-hidden="true" />
             <h3>{title}</h3>
             {desc ? <p>{desc}</p> : null}
           </ServiceCard>

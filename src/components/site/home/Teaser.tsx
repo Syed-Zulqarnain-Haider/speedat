@@ -5,20 +5,16 @@ import { ServiceCard } from "@/components/site/ServiceCard";
 import { lines, parts } from "@/lib/pricing/engine";
 import type { Content } from "@/lib/site/types";
 
-/** 04 — services teaser: the first three `content.services` lines, parsed exactly as /services does. Server component. */
+/** Two ways to send: the first two `content.services` lines, parsed exactly as /services does, and one button to the rest. Server component. */
 export function Teaser({ content }: { content: Pick<Content, "servicesTitle" | "services"> }) {
-  const items = lines(content.services).slice(0, 3);
+  const items = lines(content.services).slice(0, 2);
   if (!items.length) return null;
   return (
-    <section className="teaser" aria-labelledby="teaser-title">
-      <div className="teaser-head">
-        <p className="eyebrow">04 — Services</p>
-        <span className="rule" aria-hidden="true" />
-        <h2 id="teaser-title">
-          <Accent text={content.servicesTitle} />
-        </h2>
-      </div>
-      <div className="cards three">
+    <section className="services-home" aria-labelledby="services-title">
+      <h2 id="services-title">
+        <Accent text={content.servicesTitle} />
+      </h2>
+      <div className="cards services-two">
         {items.map((ln, i) => {
           const p = parts(ln, 3);
           const key = p[0].toLowerCase();
@@ -30,18 +26,15 @@ export function Teaser({ content }: { content: Pick<Content, "servicesTitle" | "
           return (
             <ServiceCard key={i} index={i}>
               <Icon />
-              <span className="rule hot" aria-hidden="true" />
               <h3>{title}</h3>
               <p>{desc}</p>
             </ServiceCard>
           );
         })}
       </div>
-      <p className="teaser-more">
-        <Link className="link" href="/services">
-          All services →
-        </Link>
-      </p>
+      <Link className="btn outline big services-all" href="/services">
+        All services
+      </Link>
     </section>
   );
 }

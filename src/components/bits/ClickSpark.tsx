@@ -1,5 +1,6 @@
 "use client";
 import React, { useRef, useEffect, useCallback } from 'react';
+import { useReducedMotion } from '@/lib/client/motion';
 
 interface ClickSparkProps {
   sparkColor?: string;
@@ -33,6 +34,8 @@ const ClickSpark: React.FC<ClickSparkProps> = ({
   const sparksRef = useRef<Spark[]>([]);
   const kickRef = useRef<() => void>(() => {});
   const startTimeRef = useRef<number | null>(null);
+  // Reduced motion: the click still goes through to the children; only the spark burst is skipped.
+  const reduced = useReducedMotion();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -139,6 +142,7 @@ const ClickSpark: React.FC<ClickSparkProps> = ({
   }, [sparkColor, sparkSize, sparkRadius, sparkCount, duration, easeFunc, extraScale]);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>): void => {
+    if (reduced) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();

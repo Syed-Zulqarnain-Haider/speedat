@@ -1,29 +1,22 @@
 "use client";
 
 import { useEffect } from "react";
-import { PageHead } from "@/components/site/PageHead";
+import { NotFoundBody } from "@/components/site/pages/NotFoundBody";
 
-/** Something in the page crashed after it loaded. The customer still gets a way to reach us. */
+/**
+ * Something in the page crashed after it loaded. The site header (with its
+ * WhatsApp button) stays; the body is the 404's composition with "Try
+ * again" in place of the home link.
+ */
 export default function SiteError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error(error);
   }, [error]);
   return (
-    <section className="page nf">
-      <span className="ghost nf-ghost" aria-hidden="true">
-        Error
-      </span>
-      <PageHead
-        no="Error"
-        name="Something went wrong"
-        title="This page could not *load*"
-        lede="Please try again, or use the WhatsApp button at the top of the page and we will price your shipment directly."
-      />
-      <div className="nf-actions">
-        <button className="btn primary big" type="button" onClick={reset}>
-          Try again
-        </button>
-      </div>
-    </section>
+    <NotFoundBody title="This page could not *load*" lede="Please try again. Or tap WhatsApp at the top of the page and we price your parcel there.">
+      <button className="btn primary big" type="button" onClick={reset}>
+        Try again
+      </button>
+    </NotFoundBody>
   );
 }

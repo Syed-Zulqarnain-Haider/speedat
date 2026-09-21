@@ -11,12 +11,25 @@ interface Props {
   epoch: number;
 }
 
+/** The headline fits two lines on a laptop up to this many printed characters; longer wraps to three. */
+const HEADLINE_MAX = 45;
+
+/** Printed length of a headline: the accent asterisks never show. */
+function headlineLength(raw: string): number {
+  return raw.replace(/\*/g, "").trim().length;
+}
+
 export function ContentForm({ draft, readOnly, update, epoch }: Props) {
   const ct = draft.content;
   const set = (k: keyof typeof ct) => (raw: string) =>
     update((d) => {
       d.content[k] = raw;
     });
+  const titleLen = headlineLength(ct.heroTitle);
+  const titleHint =
+    titleLen > HEADLINE_MAX
+      ? `Too long: ${titleLen} characters. Over ${HEADLINE_MAX} the headline wraps to three lines on a laptop — shorten it.`
+      : `${titleLen} of ${HEADLINE_MAX} characters. Keep it under ${HEADLINE_MAX} — two short sentences read best.`;
   return (
     <section className="block" id="sec-content" key={epoch}>
       <p className="eyebrow">{sectionNo("content")} — Pages</p>
@@ -29,17 +42,16 @@ export function ContentForm({ draft, readOnly, update, epoch }: Props) {
           value={ct.heroTitle}
           onChange={set("heroTitle")}
           disabled={readOnly}
-          hint="Wrap one word in *asterisks* to set it in italic, e.g. Send anything *abroad*. An unbalanced asterisk prints as typed. Every heading below accepts the same."
+          hint={`${titleHint} Wrap one word in *asterisks* to set it in italic, e.g. Send anything *abroad*. An unbalanced asterisk prints as typed. Every heading below accepts the same.`}
         />
         <Fld label="Line under the headline" value={ct.heroSub} onChange={set("heroSub")} disabled={readOnly} />
-        <Fld label="Route line above the headline (blank = automatic)" value={ct.heroEyebrow} onChange={set("heroEyebrow")} disabled={readOnly} placeholder="Lahore → United Kingdom · United States · …" />
         <Fld label="Promise line under the calculator (blank = none)" value={ct.promise} onChange={set("promise")} disabled={readOnly} />
       </div>
-      <Area label="Numbers strip (optional, one per line: Label | Value; blank = automatic)" value={ct.stats} placeholder="Years in business | 12" onChange={set("stats")} disabled={readOnly} />
-      <h3 className="fh">Routes</h3>
+      <Area label="Proof points under the headline (optional, one per line: Label | Value; blank = automatic)" value={ct.stats} placeholder="Years in business | 12" onChange={set("stats")} disabled={readOnly} />
+      <h3 className="fh">Where we deliver</h3>
       <div className="grid2">
-        <Fld label="Routes heading" value={ct.routesTitle} onChange={set("routesTitle")} disabled={readOnly} />
-        <Fld label="Routes note" value={ct.routesNote} onChange={set("routesNote")} disabled={readOnly} />
+        <Fld label="Heading" value={ct.routesTitle} onChange={set("routesTitle")} disabled={readOnly} />
+        <Fld label="Note under the heading" value={ct.routesNote} onChange={set("routesNote")} disabled={readOnly} />
       </div>
       <h3 className="fh">How it works</h3>
       <Fld label="Heading" value={ct.stepsTitle} onChange={set("stepsTitle")} disabled={readOnly} />

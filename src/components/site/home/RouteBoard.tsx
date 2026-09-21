@@ -1,5 +1,7 @@
 import { Accent } from "@/components/site/Accent";
+import { Flag } from "@/components/site/Flag";
 import { Reveal } from "@/components/site/Reveal";
+import { flagCode } from "@/lib/site/countries";
 import type { PublishedVersion } from "@/lib/site/types";
 import { RouteRow } from "./RouteRow";
 import { routeRows } from "./routes";
@@ -7,59 +9,47 @@ import { routeRows } from "./routes";
 interface Props {
   site: PublishedVersion;
   holdOn: boolean;
-  /** Overrides the "02 — Routes" eyebrow (e.g. "Where we deliver" on /services). */
+  /** Kept for callers from the first round; no eyebrow line renders any more. */
   eyebrow?: string;
-  /** When given, rows link here instead of selecting in place (e.g. "/#quote-instrument"). */
+  /** When given, tiles link here instead of selecting in place (e.g. "/#quote-instrument" on /services). */
   href?: string;
 }
 
 /**
- * 02 — the route board: every active destination, its fastest days and the
- * cheapest 1 kg price, on navy. Server component; under hold the rows carry
- * no price at all, so nothing rate-shaped reaches the browser.
+ * Where we deliver: every active destination as a flag tile with its name,
+ * the cheapest 1 kg price and the fastest days, on a warm band. Server
+ * component; under hold the tiles carry no price at all, so nothing
+ * rate-shaped reaches the browser. Also rendered by /services.
  */
-export function RouteBoard({ site, holdOn, eyebrow = "02 — Routes", href }: Props) {
+export function RouteBoard({ site, holdOn, href }: Props) {
   const rows = routeRows(site, holdOn);
   if (!rows.length) return null;
   const { docMaxKg, maxKg } = site.settings;
-  const chips = docMaxKg > 0 || maxKg > 0;
   return (
-    <section className="routes bleed on-navy" aria-labelledby="routes-title">
+    <section className="deliver bleed" aria-labelledby="deliver-title">
       <div className="wrap">
-        <div className="routes-head">
-          <div className="routes-title">
-            <p className="eyebrow">{eyebrow}</p>
-            <span className="rule" aria-hidden="true" />
-            <h2 id="routes-title">
-              <Accent text={site.content.routesTitle} />
-            </h2>
-          </div>
-          {site.content.routesNote || chips ? (
-            <div className="routes-meta">
-              {site.content.routesNote ? <p className="route-note">{site.content.routesNote}</p> : null}
-              {chips ? (
-                <p className="route-chips">
-                  {docMaxKg > 0 ? <span className="tag">Documents up to {docMaxKg} kg</span> : null}
-                  {maxKg > 0 ? <span className="tag">Cargo over {maxKg} kg on request</span> : null}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-        <ul className="route-list">
+        <h2 id="deliver-title">
+          <Accent text={site.content.routesTitle} />
+        </h2>
+        {site.content.routesNote ? <p className="deliver-note">{site.content.routesNote}</p> : null}
+        <ul className="dest-grid">
           {rows.map((r, i) => (
             <li key={r.id}>
-              <Reveal index={i} stagger={0.04} distance={24}>
+              <Reveal index={i} stagger={0.04} distance={16}>
                 <RouteRow destId={r.id} href={href}>
-                  <span className="route-code">{r.code}</span>
-                  <span className="route-name">{r.name}</span>
-                  {r.days ? <span className="route-days">{r.days}</span> : null}
-                  {r.price ? <span className="route-price">1 kg from {r.price}</span> : null}
+                  <Flag code={flagCode(r.name, r.id)} name={r.name} size={40} lazy />
+                  <span className="dest-text">
+                    <span className="dest-name">{r.name}</span>
+                    {r.price ? <span className="dest-price">from {r.price}</span> : null}
+                    {r.days ? <span className="dest-days">{r.days}</span> : null}
+                  </span>
                 </RouteRow>
               </Reveal>
             </li>
           ))}
         </ul>
+        {docMaxKg > 0 ? <p className="deliver-more">Documents up to {docMaxKg} kg have their own rate.</p> : null}
+        {maxKg > 0 ? <p className="deliver-more">Over {maxKg} kg? Ask for a cargo rate on WhatsApp.</p> : null}
       </div>
     </section>
   );

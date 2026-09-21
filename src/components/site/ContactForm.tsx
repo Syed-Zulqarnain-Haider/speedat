@@ -13,20 +13,19 @@ interface Props {
 }
 
 /**
- * The message form on /contact, in the instrument skin. Field names, the
- * signed token, the honeypot, validation echo and the success card are the
- * server action's contract and stay exactly as they are.
+ * The message form on /contact: 52px fields with short plain labels, one
+ * big "Send message" and a green WhatsApp way out beside it. Field names,
+ * the signed token, the honeypot, validation echo and the success card are
+ * the server action's contract and stay exactly as they are.
  */
 export function ContactForm({ destinations, whatsapp, token }: Props) {
   const [state, action, pending] = useActionState(contactAction, INITIAL_CONTACT);
   if (state.ok) {
     return (
       <div className="card contact-done" role="status">
-        <p className="eyebrow">Sent</p>
-        <span className="rule" aria-hidden="true" />
         <h3>Thank you — we have your message</h3>
         <p>We reply during working hours. For anything urgent, WhatsApp is fastest.</p>
-        <a className="btn wa" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
+        <a className="btn wa big" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
           <UI.wa />
           WhatsApp us
         </a>
@@ -64,7 +63,7 @@ export function ContactForm({ destinations, whatsapp, token }: Props) {
       <div className="row">
         <label className="field">
           <span>
-            Destination <span className="hint">(optional)</span>
+            Country <span className="hint">(optional)</span>
           </span>
           <select name="destId" defaultValue={v.destId ?? ""}>
             <option value="">Not sure yet</option>
@@ -77,7 +76,7 @@ export function ContactForm({ destinations, whatsapp, token }: Props) {
         </label>
         <label className="field">
           <span>
-            Approximate weight (kg) <span className="hint">(optional)</span>
+            Weight in kg <span className="hint">(optional)</span>
           </span>
           <input type="number" name="weight" defaultValue={v.weight} inputMode="decimal" min="0.1" step="any" />
         </label>
@@ -91,7 +90,7 @@ export function ContactForm({ destinations, whatsapp, token }: Props) {
         <button className="btn primary big" type="submit" disabled={pending}>
           {pending ? "Sending…" : "Send message"}
         </button>
-        <a className="btn wa" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
+        <a className="btn wa big" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
           <UI.wa />
           Or WhatsApp us
         </a>

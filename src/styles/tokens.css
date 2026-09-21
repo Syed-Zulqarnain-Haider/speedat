@@ -1,33 +1,36 @@
 /* =====================================================================
-   tokens.css — owner: FOUNDATION
-   Design tokens (:root, both dark blocks, responsive overrides), base
-   element styles, layout utilities, the shared component skins
-   (.btn, .tag, .notice, .field, inputs, .panel, h2.step, .toast, .pull,
-   .link, .count) and every shared keyframe. Other files override these
-   skins only under their own scope (.instrument, .admin-app, .login,
-   .page, .hold-panel) — never edit them here from another block.
-   Layout utilities: .sr, .wrap, .bleed, .on-navy (a 12-column grid lives
-   in site.css as .page-split, the one place that needs it).
+   tokens.css — owner: SHELL+HOME (was FOUNDATION)
+   Design tokens (:root is the LIGHT set and is authoritative regardless of
+   the OS preference; the one dark block is :root[data-theme="dark"], which
+   the root layout sets from the "theme" cookie), responsive overrides, the
+   v2 customer scale scoped to .site, base element styles, layout
+   utilities, the shared component skins (.btn, .tag, .notice, .field,
+   inputs, .panel, h2.step, .toast, .pull, .link, .count) and every shared
+   keyframe. Other files override these skins only under their own scope
+   (.instrument, .admin-app, .login, .page, .hold-panel) — never edit them
+   here from another block. The admin keeps every :root value pixel for
+   pixel except the page colour, which the owner asked to be white.
    1rem = 17px (html font-size). Nothing here loops; motion lives inside
    @media (prefers-reduced-motion: no-preference).
    ===================================================================== */
 
 :root {
-  /* ---- paper & ink (light) ---- */
-  --bg: #f5f0e7; /* paper: page background */
-  --paper-2: #ede6d9; /* tinted panels, zebra rows, idle readout, admin sidebar */
-  --surface: #fffdf9; /* cards, inputs, instrument panels */
-  --ink: #0a1a33; /* text; ink fills (buttons) */
+  /* ---- white page & ink (light, the default for everyone) ---- */
+  --bg: #ffffff; /* page background */
+  --paper-2: #f5f1ea; /* warm tinted bands, idle readout, zebra rows, admin sidebar */
+  --surface: #ffffff; /* cards, inputs, instrument panels */
+  --ink: #0a1a33; /* text; ink fills (buttons), 18.4:1 on white */
   --ink-2: #1e2d47; /* secondary headings */
-  --muted: #5a6373; /* body-secondary, 5.3:1 on paper */
-  --line: #ded5c6; /* hairlines */
-  --rule: rgba(10, 26, 51, 0.14); /* editorial rules on paper */
-  --dash: rgba(10, 26, 51, 0.3); /* dashed borders: idle readout, stamp box */
+  --muted: #4f5866; /* body-secondary, 7.2:1 on white */
+  --line: #e6e1d8; /* decorative hairlines only */
+  --edge: #8a9099; /* the border of every interactive control (tiles, weight buttons, inputs, outline buttons), 3.2:1 */
+  --rule: rgba(10, 26, 51, 0.14); /* editorial rules (admin) */
+  --dash: rgba(10, 26, 51, 0.3); /* dashed borders: idle readout */
 
   /* ---- the one orange ---- */
-  --hot-a: #ea580c; /* surfaces and display numerals >= 24px/700 only (3.1:1 on paper) */
+  --hot-a: #ea580c; /* fills, bars and display numerals >= 24px/700 only (3.6:1 on white) */
   --hot-b: #b4400c; /* gradient/hover partner of --hot-a */
-  --orange-ink: #9a3412; /* orange for small text and icons on paper, 6.4:1 */
+  --orange-ink: #9a3412; /* orange for small text and icons, 7.3:1 */
   --blue: #c2410c; /* legacy name: text-level accent (links, icons); >= 0.9rem/600 only */
   --red: #ea580c; /* legacy name: hot accent, same as --hot-a */
   --blue-soft: #fbeee4;
@@ -40,16 +43,16 @@
   --warn-soft: #fbefcf;
 
   /* ---- conversion ---- */
-  --wa: #0e7a3f; /* WhatsApp green: fill of every "WhatsApp us / Live chat / Open WhatsApp" button */
+  --wa: #0e7a3f; /* WhatsApp green: fill of every WhatsApp button, incl. the customer Book button */
   --wa-hover: #0b6634;
-  --wa-ink: #ffffff; /* text on --wa, 5.3:1 */
-  --book: #ea580c; /* the customs stamp: fill of "Book now / Book on WhatsApp" only */
+  --wa-ink: #ffffff; /* text on --wa, 5.4:1 */
+  --book: #ea580c; /* orange stamp: the admin's publish button (the customer Book button is greened under .instrument) */
   --book-hover: #d14e0a;
   --book-ink: #0a1a33; /* text on --book, 4.9:1 (constant; never --ink here, it flips in dark mode) */
   --focus: #ea580c;
-  --gap: #f5f0e7; /* gap colour inside the stripe mark = the surface it sits on */
+  --gap: #ffffff; /* gap colour inside the stripe mark = the surface it sits on */
 
-  /* ---- navy sections: constant in BOTH schemes (route board, stamp band, footer ghost, readout, login side) ---- */
+  /* ---- navy: constant in BOTH themes (price readout, WhatsApp band, login side) ---- */
   --navy: #0a1a33;
   --navy-2: #122544; /* hover rows on navy */
   --paper-ink: #f5f0e7; /* text on navy, 14.8:1 */
@@ -65,18 +68,19 @@
   --glow-live: 0 0 0 4px rgba(234, 88, 12, 0.14), 0 0 32px rgba(255, 138, 61, 0.35);
   --glass: color-mix(in srgb, var(--bg) 92%, transparent);
 
-  /* ---- type scale (html = 17px) ---- */
-  --fs-hero: clamp(3.4rem, 1.4rem + 6vw, 7.75rem); /* 54px @375, 68px @768, 104px @1366 */
+  /* ---- type scale (html = 17px): the ADMIN scale; the customer site redefines it on .site below ---- */
+  --fs-hero: clamp(3.4rem, 1.4rem + 6vw, 7.75rem);
   --fs-h1: clamp(2.75rem, 1.5rem + 4vw, 5.25rem);
   --fs-h2: clamp(2rem, 1.35rem + 2.2vw, 3.25rem);
   --fs-h3: clamp(1.35rem, 1.2rem + 0.6vw, 1.7rem);
   --fs-stat: clamp(2.25rem, 1.5rem + 2.5vw, 3.5rem);
-  --fs-total: clamp(3rem, 1.75rem + 7vw, 5.25rem); /* 50px @375, 84px from ~800px */
+  --fs-total: clamp(3rem, 1.75rem + 7vw, 5.25rem);
   --fs-ghost: clamp(4rem, 14vw, 13rem);
-  --fs-numeral: 4.5rem; /* the 01/02/03 step numerals */
+  --fs-numeral: 4.5rem;
   --fs-lede: clamp(1.1rem, 1rem + 0.45vw, 1.3rem);
   --fs-body: 1.0625rem;
   --fs-small: 0.9rem;
+  --fs-label: 0.95rem;
   --fs-eyebrow: 0.72rem;
   --lh-display: 0.92;
   --lh-h1: 0.95;
@@ -103,8 +107,12 @@
   --s9: 96px;
   --s10: 128px;
   --section: var(--s9); /* between home sections (desktop); phone overrides to --s8 */
+  --gap-title: 20px; /* title block → its content */
   --card-pad: 24px; /* phone overrides to 20px */
   --panel-pad: 24px; /* instrument panels; phone overrides to 16px */
+  --tap: 44px; /* the admin's controls; the customer site raises these on .site */
+  --tap-big: 52px;
+  --tap-giant: 60px;
 
   /* ---- radii (nothing above 16px anywhere) ---- */
   --r1: 4px;
@@ -120,9 +128,9 @@
   --sidebar-w: 232px;
 
   /* ---- z layers ---- */
-  --z-bg: 0; /* living background inside a positioned hero */
-  --z-fg: 1; /* hero text over the background */
-  --z-sticky: 5; /* sticky table column, sticky hero column */
+  --z-bg: 0;
+  --z-fg: 1;
+  --z-sticky: 5; /* sticky table column */
   --z-subnav: 15; /* admin section tabs */
   --z-head: 20; /* site + admin header */
   --z-pubbar: 30; /* admin publish pill */
@@ -132,56 +140,19 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-stamp: cubic-bezier(0.2, 0.9, 0.3, 1.2);
   --t-fast: 150ms; /* hover, focus, colour */
-  --t-print: 350ms; /* readout paper -> ink */
-  --t-odo: 600ms; /* one odometer digit */
+  --t-print: 350ms; /* readout paper -> navy */
+  --t-odo: 600ms;
   --t-reveal: 700ms; /* scroll reveals */
-  --t-hero: 900ms; /* hero word entrance */
-  --t-num: 1.4s; /* CountUp */
+  --t-hero: 900ms;
+  --t-num: 1.4s;
   --stagger-word: 60ms;
   --stagger-row: 40ms;
   --stagger-card: 80ms;
 
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0b1424;
-    --paper-2: #101b2f;
-    --surface: #121d31;
-    --ink: #f1ece2;
-    --ink-2: #d9d3c7;
-    --muted: #a9b1c0;
-    --line: #26334c;
-    --rule: rgba(241, 236, 226, 0.14);
-    --dash: rgba(241, 236, 226, 0.3);
-    --hot-a: #f97316;
-    --hot-b: #c2410c;
-    --orange-ink: #fdba74;
-    --blue: #fdba74;
-    --red: #fb923c;
-    --blue-soft: #3a2416;
-    --red-soft: #4a2413;
-    --ok: #5eead4;
-    --ok-soft: #10322f;
-    --warn: #fcd34d;
-    --warn-soft: #3b2f0b;
-    --wa: #0e7a3f;
-    --wa-hover: #0b6634;
-    --wa-ink: #ffffff;
-    --book: #f97316;
-    --book-hover: #ea580c;
-    --book-ink: #0b1424;
-    --focus: #fb923c;
-    --gap: #121d31;
-    --shadow-instrument: 0 1px 0 rgba(0, 0, 0, 0.35), 0 24px 48px -28px rgba(0, 0, 0, 0.7);
-    --shadow-bar: 0 -1px 0 rgba(0, 0, 0, 0.35), 0 -16px 40px -24px rgba(0, 0, 0, 0.7);
-  }
-  /* Navy sections stay navy on the dark page and read as a panel through a hairline. */
-  :root:not([data-theme="light"]) .on-navy {
-    border-block: 1px solid var(--line);
-  }
-}
+/* The dark set: chosen with the header toggle and remembered in the "theme" cookie; never by the OS alone. */
 :root[data-theme="dark"] {
   --bg: #0b1424;
   --paper-2: #101b2f;
@@ -190,6 +161,7 @@
   --ink-2: #d9d3c7;
   --muted: #a9b1c0;
   --line: #26334c;
+  --edge: #66708a; /* 3.4:1 on --surface */
   --rule: rgba(241, 236, 226, 0.14);
   --dash: rgba(241, 236, 226, 0.3);
   --hot-a: #f97316;
@@ -210,10 +182,12 @@
   --book-hover: #ea580c;
   --book-ink: #0b1424;
   --focus: #fb923c;
-  --gap: #121d31;
+  --gap: #0b1424;
   --shadow-instrument: 0 1px 0 rgba(0, 0, 0, 0.35), 0 24px 48px -28px rgba(0, 0, 0, 0.7);
   --shadow-bar: 0 -1px 0 rgba(0, 0, 0, 0.35), 0 -16px 40px -24px rgba(0, 0, 0, 0.7);
+  color-scheme: dark;
 }
+/* Navy sections stay navy on the dark page and read as a panel through a hairline. */
 :root[data-theme="dark"] .on-navy {
   border-block: 1px solid var(--line);
 }
@@ -239,6 +213,55 @@
     --section: var(--s8);
     --card-pad: 20px;
     --panel-pad: 16px;
+  }
+}
+
+/* v2 customer scale — scoped to the public site (ShellWrap's `.site.wrap`); the admin keeps the :root values.
+   h1 two lines at 1366 and three at 375 with the seed copy; body 18px; labels 16px; nothing customer-facing
+   below --fs-small (14.9px); no uppercase, letter-spacing or mono on any customer page. */
+.site {
+  --fs-h1: clamp(2rem, 1rem + 2.9vw, 3.6rem); /* 34 @375 · 39 @768 · 47 @1024 · 57 @1366 · 61 @1920 */
+  --fs-h2: clamp(1.65rem, 1.2rem + 1.4vw, 2.5rem); /* 28 → 42 */
+  --fs-h3: clamp(1.25rem, 1.15rem + 0.4vw, 1.5rem); /* 21 → 25 */
+  --fs-lede: clamp(1.1rem, 1.02rem + 0.35vw, 1.25rem); /* 19 → 21 */
+  --fs-body: 1.0625rem; /* 18px */
+  --fs-label: 0.95rem; /* 16px — every control label */
+  --fs-small: 0.875rem; /* 14.9px — the floor */
+  --fs-button: 1.1rem; /* 18.7px — .btn.big and .btn.giant */
+  --fs-price: clamp(2.6rem, 1.4rem + 4vw, 4.25rem); /* 44 @375 · 56 @768 · 66 @1024 · 72 from 1200 */
+  --fs-total: var(--fs-price); /* alias for calculator.css */
+  --fs-stat: clamp(1.5rem, 1.2rem + 0.9vw, 2rem); /* proof-point numbers 25 → 34 */
+  --fs-kg: 1.35rem; /* 23px — the number on a weight button */
+  --lh-h1: 1.02;
+  --lh-h2: 1.08;
+  --lh-h3: 1.15;
+  --lh-body: 1.55;
+  --lh-lede: 1.5;
+  --ls-h1: -0.01em;
+  --ls-h2: -0.005em;
+  --section: 72px; /* between home sections; 48px below 720 */
+  --gap-title: 20px;
+  --tap: 48px;
+  --tap-big: 56px;
+  --tap-giant: 64px;
+  --wrap: 1360px;
+  --card-pad: 24px;
+  --panel-pad: 24px;
+}
+@media (max-width: 719px) {
+  .site {
+    --section: 48px;
+    --card-pad: 20px;
+    --panel-pad: 16px;
+  }
+}
+/* The 1366×768 density tier: the price is 64px (down from 72) so the readout and the green button fit the fold,
+   and the h1 is capped at 51px (its italic accent ≈ 53) so the price stays the biggest thing on the most common
+   laptop screen once a weight is chosen. calculator.css reads the price size through --i-price. */
+@media (min-width: 1024px) and (max-height: 820px) {
+  .site {
+    --fs-price: 3.75rem;
+    --fs-h1: 3rem;
   }
 }
 
@@ -353,6 +376,7 @@ input[type="checkbox"] {
 }
 
 /* ---------- type utilities ---------- */
+/* Mono eyebrows, editorial rules and light numerals are ADMIN devices now; .site turns any leftover into plain text. */
 .eyebrow {
   font-family: var(--font-mono);
   font-weight: 500;
@@ -376,7 +400,6 @@ input[type="checkbox"] {
 .on-navy .rule {
   background: var(--paper-ink);
 }
-/* The orange rule under a card icon; the card's block grows it to 48px on hover (transition in the motion block). */
 .rule.hot {
   background: var(--hot-a);
   width: 24px;
@@ -416,7 +439,42 @@ input[type="checkbox"] {
 .on-navy .lede {
   color: var(--paper-70);
 }
-/* Growing underline for in-copy, footer and "All services →" links. */
+/* Safety net for the customer site: a stray .eyebrow reads as a plain 16px label; a stray .rule is gone. */
+.site .eyebrow {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1.3;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.site .rule {
+  display: none;
+}
+/* The step number: an ink circle with a white numeral (calculator step heads, "How it works", About values). */
+.site .n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.site h2.step .n::before {
+  content: none;
+}
+/* Growing underline for in-copy, footer and "All services" links. */
 .link {
   color: inherit;
   text-decoration: none;
@@ -429,7 +487,7 @@ input[type="checkbox"] {
 .link:focus-visible {
   background-size: 100% 1px;
 }
-/* Count pill on a nav item. */
+/* Count pill on an admin nav item. */
 .count {
   display: inline-block;
   font-family: var(--font-mono);
@@ -464,6 +522,12 @@ input[type="checkbox"] {
   text-decoration: none;
   text-align: center;
 }
+/* Customer buttons: 48px targets, 17px words, --edge borders; the variants below keep their own colours. */
+.site .btn {
+  min-height: var(--tap);
+  font-size: 1rem;
+  border-color: var(--edge);
+}
 .btn:hover {
   border-color: var(--ink);
 }
@@ -477,12 +541,36 @@ input[type="checkbox"] {
   padding: 0 22px;
   font-size: 1.05rem;
 }
+.site .btn.big {
+  min-height: var(--tap-big);
+  padding: 0 24px;
+  font-size: var(--fs-button);
+}
+.site .btn.big svg {
+  width: 22px;
+  height: 22px;
+}
+/* The one giant button: Book on WhatsApp, the hold panel's ask, the band's WhatsApp/Call. */
+.site .btn.giant {
+  min-height: var(--tap-giant);
+  padding: 0 28px;
+  font-size: var(--fs-button);
+  border-radius: var(--r3);
+}
+.site .btn.giant svg {
+  width: 24px;
+  height: 24px;
+}
 .btn.outline {
   background: transparent;
   border-color: var(--ink);
 }
+.site .btn.outline {
+  border-color: var(--edge);
+}
 .btn.outline:hover {
   background: var(--paper-2);
+  border-color: var(--ink);
 }
 .btn.primary {
   background: var(--ink);
@@ -519,6 +607,7 @@ input[type="checkbox"] {
   filter: brightness(0.94);
 }
 .btn.book[aria-disabled="true"],
+.btn[aria-disabled="true"],
 .btn:disabled {
   opacity: 0.45;
   pointer-events: none;
@@ -548,6 +637,16 @@ input[type="checkbox"] {
   margin-left: 6px;
   vertical-align: middle;
 }
+/* Customer pills ("Fastest", "Cheapest", "Document rate"): Barlow 600 at the 14.9px floor, sentence case. */
+.site .tag {
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-small);
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-transform: none;
+}
 .notice {
   padding: 12px 16px 12px 18px;
   border-radius: var(--r2);
@@ -555,6 +654,9 @@ input[type="checkbox"] {
   margin: 14px 0;
   font-size: 0.95rem;
   background: var(--paper-2);
+}
+.site .notice {
+  font-size: 1rem;
 }
 .notice.info {
   background: var(--blue-soft);
@@ -584,6 +686,9 @@ input[type="checkbox"] {
   color: var(--muted);
   font-size: 0.85rem;
 }
+.site .hint {
+  font-size: var(--fs-small);
+}
 .meta {
   color: var(--muted);
   font-family: var(--font-mono);
@@ -593,6 +698,11 @@ input[type="checkbox"] {
 .meta.warn {
   color: var(--warn);
   font-weight: 500;
+}
+.site .meta {
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  letter-spacing: 0;
 }
 .field {
   display: flex;
@@ -617,6 +727,21 @@ input[type="checkbox"] {
   letter-spacing: 0;
   color: var(--muted);
 }
+/* Customer field labels: short plain words in Barlow 600 at 16px; no mono, no uppercase. */
+.site .field > span {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1.3;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+.site .field > span.hint {
+  font-weight: 400;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
 .lab {
   display: flex;
   align-items: center;
@@ -627,6 +752,13 @@ input[type="checkbox"] {
   height: 14px;
   color: var(--orange-ink);
   flex: none;
+}
+.site .lab {
+  gap: 8px;
+}
+.site .lab svg {
+  width: 22px;
+  height: 22px;
 }
 input[type="number"],
 input[type="text"],
@@ -657,6 +789,22 @@ input[type="number"] {
   font-variant-numeric: tabular-nums;
   letter-spacing: var(--ls-mono);
 }
+/* Customer inputs: 52px, 17px, a visible --edge border; numbers in Barlow (tabular), not mono. */
+.site input[type="number"],
+.site input[type="text"],
+.site input[type="tel"],
+.site input[type="email"],
+.site input[type="date"],
+.site select,
+.site textarea {
+  min-height: 52px;
+  border-color: var(--edge);
+  font-size: 1rem;
+}
+.site input[type="number"] {
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+}
 input:hover,
 select:hover,
 textarea:hover {
@@ -665,6 +813,14 @@ textarea:hover {
 input:focus,
 select:focus,
 textarea:focus {
+  border-color: var(--ink);
+}
+.site input:hover,
+.site select:hover,
+.site textarea:hover,
+.site input:focus,
+.site select:focus,
+.site textarea:focus {
   border-color: var(--ink);
 }
 input::placeholder,
@@ -688,6 +844,14 @@ select {
   background-size: 6px 6px;
   background-repeat: no-repeat;
   padding-right: 36px;
+}
+.site select {
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%), linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position:
+    calc(100% - 22px) 50%,
+    calc(100% - 15px) 50%;
+  background-size: 7px 7px;
+  padding-right: 40px;
 }
 .row {
   display: grid;
@@ -750,6 +914,17 @@ h2.step svg {
   color: var(--orange-ink);
   flex: none;
 }
+.site h2.step {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: 1.2;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+.site h2.step svg {
+  width: 22px;
+  height: 22px;
+}
 .toast {
   position: fixed;
   left: 50%;
@@ -771,6 +946,25 @@ h2.step svg {
 }
 .pull-in {
   display: block;
+}
+/* A country flag (site/Flag.tsx): a framed 4:3 image, or a two-letter badge when the country is unknown. */
+.flag {
+  display: block;
+  flex: none;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  object-fit: cover;
+}
+.flag-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.875rem;
+  line-height: 1;
+  color: var(--ink);
 }
 
 /* ---------- motion (only here do things move) ---------- */
@@ -796,24 +990,16 @@ h2.step svg {
       opacity: 1;
     }
   }
-  @keyframes stamp {
-    from {
-      transform: rotate(-5deg) scale(1.18);
-      opacity: 0;
+  /* The Book button's lift once a price lands (calculator.css plays it on .ctas[data-live="true"] .btn.book). */
+  @keyframes lift {
+    0% {
+      transform: scale(1);
     }
-    to {
-      transform: rotate(-5deg) scale(1);
-      opacity: 1;
+    50% {
+      transform: scale(1.03);
     }
-  }
-  @keyframes sweep {
-    from {
-      transform: translateX(-100%);
-      opacity: 1;
-    }
-    to {
-      transform: translateX(100%);
-      opacity: 0;
+    100% {
+      transform: scale(1);
     }
   }
   .btn {
@@ -821,7 +1007,13 @@ h2.step svg {
       background-color var(--t-fast),
       border-color var(--t-fast),
       color var(--t-fast),
-      filter var(--t-fast);
+      filter var(--t-fast),
+      transform 180ms var(--ease-out);
+  }
+  /* Button feedback: a physical press on every customer button. */
+  .site .btn:active {
+    transform: scale(0.97);
+    transition-duration: 90ms;
   }
   .link {
     transition: background-size var(--t-fast) var(--ease-out);
