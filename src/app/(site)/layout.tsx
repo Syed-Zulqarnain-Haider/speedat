@@ -49,7 +49,7 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
     <ShellWrap>
       <header className="site-head">
         <div className="wrap head-row">
-          <Link className={`brand-link${split ? " has-short" : ""}`} href="/">
+          <Link className={`brand-link${split ? " has-short" : ""}`} href="/" aria-label={`${c.name} — home`}>
             <span className="mark" aria-hidden="true" />
             <span className="brand-full">
               <span className="brand-name">{c.name}</span>
