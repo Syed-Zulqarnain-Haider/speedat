@@ -1,23 +1,47 @@
 import Link from "next/link";
-import { CtaStar } from "./CtaStar";
+import { UI } from "@/components/Icons";
+import { SEED } from "@/lib/site/seed";
+import { Accent } from "./Accent";
+import { Pull } from "./fx/Pull";
 
-export function CtaBand({ whatsapp }: { whatsapp: string }) {
+interface Props {
+  whatsapp: string;
+  /** `content.ctaTitle`; accepts one `*word*` for the italic accent. Falls back to the seed default. */
+  title?: string;
+  /** `content.ctaSub`. Falls back to the seed default. */
+  sub?: string;
+  /** The mono eyebrow over the heading: "05 — Book" on the home page (its fifth section), "Book" on inner pages. */
+  eyebrow?: string;
+}
+
+/** 05 — the stamp band: navy, full bleed, the two ways to start. Pages pass `content.ctaTitle` / `content.ctaSub`. */
+export function CtaBand({ whatsapp, title, sub, eyebrow = "05 — Book" }: Props) {
+  const h = title?.trim() || SEED.content.ctaTitle;
+  const s = sub?.trim() || SEED.content.ctaSub;
   return (
-    <div className="cta-band">
-      <div>
-        <h2>Ready to send something?</h2>
-        <p>Get an instant price and book on WhatsApp in two minutes.</p>
-      </div>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <CtaStar>
-          <Link className="btn primary cta-star-btn" href="/">
+    <section className="cta-band bleed on-navy" aria-labelledby="cta-title">
+      <div className="wrap cta-grid">
+        <div className="cta-copy">
+          <p className="eyebrow">{eyebrow}</p>
+          <span className="rule" aria-hidden="true" />
+          <h2 id="cta-title">
+            <Accent text={h} />
+          </h2>
+          {s ? <p>{s}</p> : null}
+        </div>
+        <div className="cta-actions">
+          <Link className="btn big paper" href="/#quote-instrument">
             Get a quote
           </Link>
-        </CtaStar>
-        <a className="btn wa" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
-          WhatsApp us
-        </a>
+          <Pull>
+            <a className="btn wa big" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
+              <UI.wa />
+              WhatsApp us
+            </a>
+          </Pull>
+        </div>
+        <span className="mark stamp-mark" aria-hidden="true" />
       </div>
-    </div>
+    </section>
   );
 }

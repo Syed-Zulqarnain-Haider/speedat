@@ -1,0 +1,39 @@
+/* =====================================================================
+   print.css — owner: FOUNDATION
+   A quote printed from the browser: paper, ink, no chrome, no effects.
+   ===================================================================== */
+
+@media print {
+  .pubbar,
+  .head-row .btn,
+  .head-actions,
+  .nav,
+  footer a,
+  .quote .actions,
+  .ghost {
+    display: none !important; /* print: chrome must never win over a screen display rule */
+  }
+  .admin-app {
+    display: block;
+  }
+  .admin-side,
+  .admin-top,
+  .pubbar,
+  .subnav {
+    display: none;
+  }
+  .hero-bg,
+  .silk,
+  .hero-canvas {
+    display: none;
+  }
+  .site-head {
+    position: static;
+    background: none;
+    backdrop-filter: none;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+}

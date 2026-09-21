@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { contactAction } from "@/app/(site)/contact/actions";
 import { INITIAL_CONTACT } from "@/app/(site)/contact/state";
+import { UI } from "@/components/Icons";
 
 interface Props {
   destinations: { id: string; name: string }[];
@@ -11,24 +12,31 @@ interface Props {
   token: string;
 }
 
+/**
+ * The message form on /contact, in the instrument skin. Field names, the
+ * signed token, the honeypot, validation echo and the success card are the
+ * server action's contract and stay exactly as they are.
+ */
 export function ContactForm({ destinations, whatsapp, token }: Props) {
   const [state, action, pending] = useActionState(contactAction, INITIAL_CONTACT);
   if (state.ok) {
     return (
-      <div className="card" style={{ marginTop: 12 }}>
+      <div className="card contact-done" role="status">
+        <p className="eyebrow">Sent</p>
+        <span className="rule" aria-hidden="true" />
         <h3>Thank you — we have your message</h3>
         <p>We reply during working hours. For anything urgent, WhatsApp is fastest.</p>
-        <a className="btn wa" style={{ marginTop: 12 }} href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
+        <a className="btn wa" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
+          <UI.wa />
           WhatsApp us
         </a>
       </div>
     );
   }
   const v = state.values;
-  const err = (k: string) => (state.errors[k] ? <span className="hint" style={{ color: "var(--red)" }}>{state.errors[k]}</span> : null);
+  const err = (k: string) => (state.errors[k] ? <span className="contact-form-err">{state.errors[k]}</span> : null);
   return (
-    <form action={action} className="panel" style={{ marginTop: 12, paddingBottom: 16 }} noValidate>
-      <h3 style={{ marginBottom: 12 }}>Send us a message</h3>
+    <form action={action} className="panel contact-form" noValidate>
       {state.errors._ ? (
         <div className="notice err" role="alert">
           {state.errors._}
@@ -79,11 +87,12 @@ export function ContactForm({ destinations, whatsapp, token }: Props) {
         <textarea className="long" name="message" defaultValue={v.message} required maxLength={2000} placeholder="What are you sending, and when?" />
         {err("message")}
       </label>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <button className="btn primary" type="submit" disabled={pending}>
+      <div className="contact-form-actions">
+        <button className="btn primary big" type="submit" disabled={pending}>
           {pending ? "Sending…" : "Send message"}
         </button>
         <a className="btn wa" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
+          <UI.wa />
           Or WhatsApp us
         </a>
       </div>

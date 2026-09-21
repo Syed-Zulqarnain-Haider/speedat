@@ -8,6 +8,7 @@ import { weightSentence } from "@/lib/pricing/quote";
 import type { ShipmentType } from "@/lib/pricing/types";
 import { useMounted } from "@/lib/client/session";
 import type { SiteData } from "@/lib/site/types";
+import { sectionNo } from "./sections";
 
 const num = (s: string): number | null => {
   const n = Number(s);
@@ -30,6 +31,7 @@ export function TestPrice({ draft }: { draft: SiteData }) {
 
   return (
     <section className="block" id="sec-test">
+      <p className="eyebrow">{sectionNo("test")} — Test</p>
       <h2>Test a price</h2>
       <p className="desc">Uses the rates in the editor, including unpublished changes, so you can check a price before publishing.</p>
       <div className="inline">
@@ -72,7 +74,7 @@ export function TestPrice({ draft }: { draft: SiteData }) {
           </div>
         </label>
       </div>
-      <div style={{ marginTop: 10 }}>
+      <div className="test-result">
         {!res.ok ? (
           <div className="meta">
             {res.reason === "overmax"
@@ -87,8 +89,8 @@ export function TestPrice({ draft }: { draft: SiteData }) {
                 const p = res.prices[sv.id];
                 const est = mounted && p && draft.settings.showEta && p.days ? estimateDelivery(p.days, draft.settings, null, new Date()) : null;
                 return (
-                  <div key={sv.id}>
-                    <div className="meta">
+                  <div key={sv.id} className={`test-card${p ? "" : " dim"}`}>
+                    <div className="eyebrow">
                       {sv.name}
                       {p?.days ? ` · ${p.days} days` : ""}
                     </div>

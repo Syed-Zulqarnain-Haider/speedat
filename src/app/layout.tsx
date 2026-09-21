@@ -1,10 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow, Barlow_Condensed } from "next/font/google";
+import { Barlow, Big_Shoulders, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import { getLiveSite } from "@/lib/site/live";
 import "./globals.css";
 
-const barlow = Barlow({ variable: "--font-barlow", subsets: ["latin"], weight: ["400", "500", "600"] });
-const barlowCondensed = Barlow_Condensed({ variable: "--font-barlow-condensed", subsets: ["latin"], weight: ["600", "700"] });
+// Four self-hosted families (CSP font-src 'self'): Barlow for body, Big Shoulders for display,
+// Instrument Serif italic for the one accent word, JetBrains Mono for eyebrows and readouts.
+// Only the first two preload — they are on the LCP path; the serif and mono load on first use.
+const barlow = Barlow({ variable: "--font-barlow", subsets: ["latin"], weight: ["400", "500", "600"], display: "swap" });
+// next/font has no metric overrides for Big Shoulders (the build warns and skips the fallback), so say so explicitly.
+const display = Big_Shoulders({ variable: "--font-bigshoulders", subsets: ["latin"], weight: "variable", axes: ["opsz"], display: "swap", adjustFontFallback: false });
+const serif = Instrument_Serif({ variable: "--font-instrument", subsets: ["latin"], weight: "400", style: "italic", display: "swap", preload: false });
+const mono = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"], weight: ["400", "500"], display: "swap", preload: false });
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getLiveSite();
@@ -21,15 +27,15 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F6F3EC" },
-    { media: "(prefers-color-scheme: dark)", color: "#0C1524" },
+    { media: "(prefers-color-scheme: light)", color: "#F5F0E7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0B1424" },
   ],
   viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${barlow.variable} ${barlowCondensed.variable}`}>
+    <html lang="en" className={`${barlow.variable} ${display.variable} ${serif.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

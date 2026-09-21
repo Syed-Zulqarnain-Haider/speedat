@@ -21,19 +21,36 @@ export default async function AdminPage() {
   ]);
   if (!live) {
     return (
-      <div className="wrap">
-        <section className="page">
-          <h1>Rates admin</h1>
-          <div className="notice err">
-            The database has no published version yet. Run <code>pnpm db:seed</code> once.
-          </div>
-        </section>
+      <div className="admin-app">
+        <main className="admin-main">
+          <section className="admin">
+            <div className="topbar">
+              <div>
+                <p className="eyebrow">Admin</p>
+                <h1>Rates admin</h1>
+              </div>
+            </div>
+            <div className="notice err">
+              The database has no published version yet. Run <code>pnpm db:seed</code> once.
+            </div>
+          </section>
+        </main>
       </div>
     );
   }
   return (
     <AdminShell companyName={live.company.name} user={user} badges={{ inbox: counts.new }}>
-      <AdminEditor live={live} draft={draft} versions={versions} user={user} imports={imports} intake={intake} hold={hold} />
+      <AdminEditor
+        live={live}
+        draft={draft}
+        versions={versions}
+        user={user}
+        imports={imports}
+        intake={intake}
+        hold={hold}
+        newLeads={counts.new}
+        sheetsWaiting={imports.filter((i) => i.status === "needs_mapping").length}
+      />
     </AdminShell>
   );
 }

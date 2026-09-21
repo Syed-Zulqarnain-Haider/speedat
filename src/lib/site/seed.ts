@@ -83,10 +83,27 @@ export const SEED: SiteData = {
     d("my", "Malaysia", 4100, 1000, "3–5", 3000, 780, "6–9", 3600, 2600),
   ],
   content: {
-    heroTitle: "Send anything abroad from Lahore. Priced in seconds.",
-    heroSub:
-      "Documents, parcels and cargo to the UK, USA, Gulf, Europe and beyond. Get an instant price, then book on WhatsApp.",
+    heroTitle: "Send anything *abroad* from Lahore. Priced in seconds.",
+    // Names no region: the route line above the headline lists the live destinations, so the lede never
+    // promises a route the calculator cannot price.
+    heroSub: "Documents, parcels and cargo, collected from your door and delivered to the receiver’s. Get an instant price, then book on WhatsApp.",
+    heroEyebrow: "",
     stats: "",
+    promise: "The price you see here is the price at pickup, unless the parcel weighs or measures differently.",
+    routesTitle: "Where we fly from Lahore",
+    routesNote: "Fastest service in working days. 1 kg parcel, shipping only; pickup charges are added in the quote.",
+    stepsTitle: "Three steps, no surprises",
+    steps: [
+      "Price it | Choose the destination and weight. The price on this page is the price at pickup unless the parcel weighs or measures differently.",
+      "Book on WhatsApp | Tap Book, send the ready-made message, and we confirm the pickup time and receiver details in the chat.",
+      "Track to the door | We share the tracking number and updates on WhatsApp until it is delivered.",
+    ].join("\n"),
+    servicesTitle: "What we carry",
+    servicesLede: "Every service is door to door: we collect from you and deliver to the receiver. Prices are on the quote page.",
+    ctaTitle: "Ready to send something?",
+    ctaSub: "Get an instant price and book on WhatsApp in two minutes.",
+    contactLede: "WhatsApp is the fastest way to reach us. We reply during working hours and confirm every pickup in the chat.",
+    faqLede: "If yours is not here, ask us on WhatsApp.",
     services: [
       "plane | Express international | Priority air service to most destinations in 3–6 working days, picked up from your door and delivered to the receiver’s.",
       "globe | Economy international | A lower-cost air service for parcels that are not urgent. Same door-to-door handling, a few days longer.",

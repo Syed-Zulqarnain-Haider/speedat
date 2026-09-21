@@ -2,6 +2,7 @@
 
 import type { SiteData } from "@/lib/site/types";
 import { Area, Fld, numOrNull } from "./fields";
+import { sectionNo } from "./sections";
 
 interface Props {
   draft: SiteData;
@@ -26,8 +27,10 @@ export function SettingsForm({ draft, readOnly, update, epoch }: Props) {
   };
   return (
     <section className="block" id="sec-settings" key={epoch}>
+      <p className="eyebrow">{sectionNo("settings")} — Settings</p>
       <h2>Settings</h2>
       <p className="desc">Changes here apply to every destination.</p>
+      <h3 className="fh">Company</h3>
       <div className="grid2">
         <Fld label="Company name" value={c.name} onChange={setCompany("name")} disabled={readOnly} />
         <Fld label="Tagline" value={c.tagline} onChange={setCompany("tagline")} disabled={readOnly} />
@@ -37,6 +40,9 @@ export function SettingsForm({ draft, readOnly, update, epoch }: Props) {
         <Fld label="Shipping from" value={c.origin} onChange={setCompany("origin")} disabled={readOnly} />
         <Fld label="What is included (shown under prices)" value={c.includes} onChange={setCompany("includes")} placeholder="Door-to-door · Pickup · Tracking" disabled={readOnly} />
         <Fld label="Pickup cities, comma-separated (shown as “From”)" value={c.originCities} onChange={setCompany("originCities")} placeholder="Lahore, Faisalabad" disabled={readOnly} />
+      </div>
+      <h3 className="fh">Pricing</h3>
+      <div className="grid2">
         <label className="field">
           <span>Pricing model</span>
           <select
@@ -70,6 +76,9 @@ export function SettingsForm({ draft, readOnly, update, epoch }: Props) {
         <Fld label="Round final price to nearest" type="number" step="1" value={st.roundTo} onChange={setNum("roundTo")} disabled={readOnly} />
         <Fld label="Cargo threshold (kg) — above this, customers are asked to message you (0 = no limit)" type="number" step="1" value={st.maxKg} onChange={setNum("maxKg")} disabled={readOnly} />
         <Fld label="Document rate applies up to (kg)" type="number" step="0.1" value={st.docMaxKg} onChange={setNum("docMaxKg")} disabled={readOnly} />
+      </div>
+      <h3 className="fh">Delivery estimates</h3>
+      <div className="grid2">
         <Fld
           label="Same-day pickup cutoff hour, 0–23 (blank = none)"
           type="number"
@@ -108,18 +117,7 @@ export function SettingsForm({ draft, readOnly, update, epoch }: Props) {
         }
         disabled={readOnly}
       />
-      <Area
-        label="Optional charges customers can tick (one per line: Label | Amount | on or off = ticked by default)"
-        value={st.addons}
-        placeholder="Pickup and service charges | 500 | on"
-        onChange={(raw) =>
-          update((d) => {
-            d.settings.addons = raw;
-          })
-        }
-        disabled={readOnly}
-      />
-      <label className="chk" style={{ margin: "4px 0 12px" }}>
+      <label className="chk">
         <input
           type="checkbox"
           defaultChecked={st.showEta}
@@ -132,6 +130,18 @@ export function SettingsForm({ draft, readOnly, update, epoch }: Props) {
         />{" "}
         Show estimated delivery dates on quotes (transit days counted on the working days above, from the pickup date)
       </label>
+      <h3 className="fh">Under the prices</h3>
+      <Area
+        label="Optional charges customers can tick (one per line: Label | Amount | on or off = ticked by default)"
+        value={st.addons}
+        placeholder="Pickup and service charges | 500 | on"
+        onChange={(raw) =>
+          update((d) => {
+            d.settings.addons = raw;
+          })
+        }
+        disabled={readOnly}
+      />
       <Area
         label="Small print under the prices"
         value={st.disclaimer}

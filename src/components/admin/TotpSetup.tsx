@@ -43,10 +43,13 @@ export function TotpSetup({ enabled: initialEnabled }: { enabled: boolean }) {
   };
 
   return (
-    <div className="panel" style={{ paddingBottom: 16 }}>
+    <div className="panel totp">
       <h2 className="step">Two-factor sign-in</h2>
-      <p className="meta" style={{ marginBottom: 12 }}>
-        {enabled ? "On: after your Google or password sign-in, a 6-digit code from your authenticator app is required." : "Off: your account signs in with Google or a password only."}
+      <p className="totp-state">
+        <span className={`pill ${enabled ? "live" : ""}`}>{enabled ? "on" : "off"}</span>
+        <span className="meta">
+          {enabled ? "After your Google or password sign-in, a 6-digit code from your authenticator app is required." : "Your account signs in with Google or a password only."}
+        </span>
       </p>
       {error ? (
         <div className="notice err" role="alert">
@@ -60,22 +63,24 @@ export function TotpSetup({ enabled: initialEnabled }: { enabled: boolean }) {
       ) : null}
       {!enabled && enrol ? (
         <>
-          <p>Scan this with Google Authenticator, Authy or 1Password, then enter the code it shows.</p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={enrol.qrDataUrl} alt="QR code for the authenticator app" width={220} height={220} style={{ display: "block", margin: "12px 0", borderRadius: 8, background: "#fff" }} />
-          <details style={{ marginBottom: 12 }}>
-            <summary className="hint">Cannot scan? Enter the key by hand</summary>
-            <code style={{ wordBreak: "break-all" }}>{enrol.secret}</code>
-          </details>
+          <div className="card qr">
+            <p className="hint">Scan this with Google Authenticator, Authy or 1Password, then enter the code it shows.</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={enrol.qrDataUrl} alt="QR code for the authenticator app" width={200} height={200} />
+            <details className="fold">
+              <summary>Cannot scan? Enter the key by hand</summary>
+              <code className="secret">{enrol.secret}</code>
+            </details>
+          </div>
           <div className="inline">
-            <label className="field" style={{ maxWidth: 200 }}>
+            <label className="field code-field">
               <span>6-digit code</span>
-              <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} />
+              <input type="text" className="code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} />
             </label>
             <button className="btn primary" type="button" disabled={busy || code.replace(/\s/g, "").length < 6} onClick={confirm}>
               Turn on
             </button>
-            <button className="btn" type="button" disabled={busy} onClick={() => setEnrol(null)}>
+            <button className="btn outline" type="button" disabled={busy} onClick={() => setEnrol(null)}>
               Cancel
             </button>
           </div>
@@ -83,11 +88,11 @@ export function TotpSetup({ enabled: initialEnabled }: { enabled: boolean }) {
       ) : null}
       {enabled ? (
         <div className="inline">
-          <label className="field" style={{ maxWidth: 200 }}>
+          <label className="field code-field">
             <span>Current code to turn off</span>
-            <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} />
+            <input type="text" className="code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} />
           </label>
-          <button className="btn danger" type="button" disabled={busy || code.replace(/\s/g, "").length < 6} onClick={disable}>
+          <button className="btn danger outline" type="button" disabled={busy || code.replace(/\s/g, "").length < 6} onClick={disable}>
             Turn off two-factor
           </button>
         </div>

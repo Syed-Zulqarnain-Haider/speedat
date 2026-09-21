@@ -19,14 +19,20 @@ export default async function ShipmentPage(props: PageProps<"/admin/shipments/[i
   const svc = live.services.find((s) => s.id === found.shipment.serviceId);
   return (
     <AdminShell companyName={live.company.name} user={user} badges={{ inbox: counts.new }}>
-      <section className="admin" style={{ paddingBottom: 60 }}>
-        <div className="admin-head">
-          <h1>
-            <span className="qid">{found.shipment.id}</span>
-          </h1>
-          <span className="meta">
-            <Link href="/admin/shipments">← All shipments</Link>
-          </span>
+      <section className="admin">
+        <div className="topbar">
+          <div>
+            <p className="eyebrow">03 — Shipment</p>
+            <h1 className="mono-h1">{found.shipment.id}</h1>
+          </div>
+          <div className="topbar-right">
+            <span className="meta">
+              {svc?.name ?? found.shipment.serviceId} to {dest?.name ?? found.shipment.destId}
+            </span>
+            <Link className="btn outline small" href="/admin/shipments">
+              ← All shipments
+            </Link>
+          </div>
         </div>
         <ShipmentDesk
           shipment={{

@@ -6,6 +6,7 @@ import { fmtNum, nameKey, slug } from "@/lib/pricing/format";
 import type { Destination } from "@/lib/pricing/types";
 import type { SiteData } from "@/lib/site/types";
 import { numOrNull } from "./fields";
+import { sectionNo } from "./sections";
 
 interface Props {
   draft: SiteData;
@@ -134,10 +135,17 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
   };
 
   return (
-    <section className="block" id="sec-rates" style={{ borderTop: 0, marginTop: 10, paddingTop: 0 }}>
+    <section className="block" id="sec-rates">
+      <p className="eyebrow">{sectionNo("rates")} — Rates</p>
+      <h2>Prices by destination</h2>
+      <p className="desc">
+        {grid
+          ? `One row per country: the document rate, working days and a price for every kilogram up to ${kgs[kgs.length - 1]} kg. Changed rows carry an orange bar.`
+          : "One row per country: the document rate, the first slab, each additional step and working days. Changed rows carry an orange bar."}
+      </p>
       <div className="toolbar">
         <input type="text" placeholder="Find a destination" aria-label="Find a destination" value={filter} onChange={(e) => setFilter(e.target.value)} />
-        <button className="btn small" type="button" disabled={readOnly} onClick={() => update((d) => d.destinations.sort((a, b) => a.name.localeCompare(b.name)))}>
+        <button className="btn small outline" type="button" disabled={readOnly} onClick={() => update((d) => d.destinations.sort((a, b) => a.name.localeCompare(b.name)))}>
           Sort A–Z
         </button>
         <button
@@ -272,20 +280,18 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
                       );
                     })}
                     {grid ? (
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        <button className="btn small" type="button" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : x.id)}>
+                      <td className="grid-cell">
+                        <button className="btn small outline" type="button" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : x.id)}>
                           {isOpen ? "Hide prices ▴" : "Prices ▾"}
                         </button>
-                        <div className="hint" style={{ marginTop: 4 }}>
-                          {s.services.map((sv) => `${sv.name}: ${gridSummary(x, sv.id)}`).join(" · ")}
-                        </div>
+                        <div className="hint grid-summary">{s.services.map((sv) => `${sv.name}: ${gridSummary(x, sv.id)}`).join(" · ")}</div>
                       </td>
                     ) : null}
-                    <td className="ctr" style={{ whiteSpace: "nowrap" }}>
+                    <td className="ctr row-actions">
                       {isChanged && !readOnly ? (
                         <>
                           <button
-                            className="btn small"
+                            className="btn small outline"
                             type="button"
                             aria-label={`Undo changes to ${x.name}`}
                             onClick={() =>
@@ -335,7 +341,7 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
           </tbody>
         </table>
       </div>
-      <p className="hint" style={{ marginTop: 8 }}>
+      <p className="hint table-note">
         {grid
           ? `Prices are what the customer pays, before any tax you set in Settings. Open “Prices” on a country to enter its price for every kilogram from 1 kg to ${kgs[kgs.length - 1]} kg (the cargo threshold in Settings); a parcel is charged at the next whole kilogram up, and a blank kilogram uses the next heavier priced one. Docs is a flat price for documents up to the weight in Settings. Changed rows are marked on the left; Undo restores the live version of that row.`
           : "Prices are what the customer pays, before any tax you set in Settings. Docs is a flat price for documents up to the weight in Settings; leave it blank to charge documents like packages. Leave First and Each blank to not offer a service for that destination. Changed rows are marked on the left; Undo restores the live version of that row."}
@@ -384,15 +390,15 @@ function GridEditor({ dest, services, kgs, readOnly, onChange, update }: GridEdi
         return (
           <div key={sv.id} className="grid-service">
             <div className="grid-head">
-              <strong className={`grp ${sv.id}`}>{sv.name}</strong>
+              <strong className={`tag grp ${sv.id}`}>{sv.name}</strong>
               <span className="hint">Quick fill:</span>
               <input type="number" className="num" placeholder="1 kg price" value={f.start} onChange={(e) => setFill((m) => ({ ...m, [sv.id]: { ...f, start: e.target.value } }))} disabled={readOnly} aria-label={`${sv.name} quick fill start`} />
               <span className="hint">+ per kg</span>
               <input type="number" className="num" placeholder="per kg" value={f.step} onChange={(e) => setFill((m) => ({ ...m, [sv.id]: { ...f, step: e.target.value } }))} disabled={readOnly} aria-label={`${sv.name} quick fill step`} />
-              <button className="btn small" type="button" disabled={readOnly} onClick={() => apply(sv.id, false)}>
+              <button className="btn small outline" type="button" disabled={readOnly} onClick={() => apply(sv.id, false)}>
                 Fill blanks
               </button>
-              <button className="btn small" type="button" disabled={readOnly} onClick={() => apply(sv.id, true)}>
+              <button className="btn small outline" type="button" disabled={readOnly} onClick={() => apply(sv.id, true)}>
                 Fill all
               </button>
             </div>

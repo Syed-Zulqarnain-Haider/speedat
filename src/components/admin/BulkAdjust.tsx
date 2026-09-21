@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { isNum, roundTo } from "@/lib/pricing/engine";
 import type { SiteData } from "@/lib/site/types";
+import { sectionNo } from "./sections";
 
 interface Props {
   draft: SiteData;
@@ -49,6 +50,7 @@ export function BulkAdjust({ draft, readOnly, update, toast }: Props) {
 
   return (
     <section className="block" id="sec-bulk">
+      <p className="eyebrow">{sectionNo("bulk")} — Bulk adjust</p>
       <h2>Bulk adjust</h2>
       <p className="desc">Change many prices at once, for example when a carrier raises everything by 5%. Applies to the editor; nothing is published until you review.</p>
       <div className="inline">
@@ -83,7 +85,7 @@ export function BulkAdjust({ draft, readOnly, update, toast }: Props) {
           <span>Round result to nearest</span>
           <input type="number" min="1" step="1" value={rnd} onChange={(e) => setRnd(e.target.value)} />
         </label>
-        <button className="btn" type="button" disabled={readOnly} onClick={apply}>
+        <button className="btn primary" type="button" disabled={readOnly} onClick={apply}>
           Apply to editor
         </button>
       </div>

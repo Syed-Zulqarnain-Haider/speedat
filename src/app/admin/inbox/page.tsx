@@ -40,10 +40,16 @@ export default async function InboxPage(props: PageProps<"/admin/inbox">) {
   ];
   return (
     <AdminShell companyName={live?.company.name ?? "Speedat"} user={user} badges={{ inbox: counts.new }}>
-      <section className="admin" style={{ paddingBottom: 60 }}>
-        <div className="admin-head">
-          <h1>Inbox</h1>
-          <span className="meta">Booked quotes and contact messages. Work them left to right: new → contacted → booked.</span>
+      <section className="admin">
+        <div className="topbar">
+          <div>
+            <p className="eyebrow">02 — Inbox</p>
+            <h1>Inbox</h1>
+          </div>
+          <div className="topbar-right">
+            {counts.new ? <span className="pill draft">{counts.new} new</span> : <span className="pill live">nothing new</span>}
+            <span className="meta">Booked quotes and contact messages. Work them left to right: new → contacted → booked.</span>
+          </div>
         </div>
         {!notifyConfigured() ? (
           <div className="notice warn">
@@ -54,7 +60,7 @@ export default async function InboxPage(props: PageProps<"/admin/inbox">) {
         <nav className="subnav" aria-label="Lead status">
           {tabs.map((t) => (
             <Link key={t.key} href={`/admin/inbox?status=${t.key}`} aria-current={t.key === status ? "page" : undefined}>
-              {t.label} ({t.n})
+              {t.label} <span className="n">{t.n}</span>
             </Link>
           ))}
         </nav>

@@ -16,8 +16,10 @@ import { IN, LB, cargoText, piecesText, quoteText, waLink, weightSentence, type 
 import type { Addon, PieceInput, PriceResult, ServicePrice, ShipmentType } from "@/lib/pricing/types";
 import type { PublishedVersion } from "@/lib/site/types";
 import { originCities } from "@/lib/site/text";
+import { PriceReadout } from "./PriceReadout";
 import { Toast, useToast } from "./Toast";
 import ClickSpark from "@/components/bits/ClickSpark";
+import { Pull } from "@/components/site/fx/Pull";
 
 type Mode = "quick" | "detail";
 
@@ -295,11 +297,9 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, addon
 
   return (
     <div className="panel quick">
-      <h2 className="step">
-        <UI.calc />
-        Check your rate
-      </h2>
-      <label className="field">
+      {/* The tab already says "Quick rate"; the heading stays for the outline and screen readers but takes no space. */}
+      <h2 className="sr">Check your rate</h2>
+      <label className="field dest">
         <span className="lab">
           <UI.pin />
           Destination country
@@ -308,7 +308,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, addon
           <DestOptions site={site} />
         </select>
       </label>
-      <label className="field">
+      <label className="field weight">
         <span className="lab">
           <UI.scale />
           Parcel weight (kg)
@@ -360,10 +360,16 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, addon
         </div>
       </fieldset>
       {addonsBox}
-      {/* Keyed on the amount so the pop animation replays whenever the total changes. */}
-      <div key={idle ? "idle" : String(sum)} className={`total${idle ? " idle" : " pop"}`} aria-live="polite">
+      {/* The readout keeps its element across values so the digits roll; the keyed sweep replays once per new sum. */}
+      <div
+        className={`total${idle ? " idle" : ""}`}
+        data-state={!destId || !kgv || kgv === "exact" ? "empty" : idle ? "cargo" : "live"}
+        data-sum={idle ? "" : String(sum)}
+        aria-live="polite"
+      >
         <span className="tlabel">Total charges</span>
-        <span className="tval">{idle ? `${cur} 0` : fmtMoney(sum, cur)}</span>
+        <PriceReadout value={idle ? 0 : sum} currency={cur} idle={idle} />
+        {!idle ? <i className="sweep" key={sum} aria-hidden="true" /> : null}
         {!idle && addonsTotal && p ? (
           <div className="tlines">
             <div>
@@ -390,18 +396,20 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, addon
           <UI.chat />
           Live chat
         </a>
-        <a
-          className="btn book"
-          href={bookHref ?? undefined}
-          aria-disabled={bookHref ? undefined : "true"}
-          target="_blank"
-          rel="noopener"
-          onClick={() => {
-            if (quote) logQuote(quote, { booked: true, mode: "quick", addons: selectedAddons.map((a) => a.label) });
-          }}
-        >
-          {bookLabel}
-        </a>
+        <Pull>
+          <a
+            className="btn book"
+            href={bookHref ?? undefined}
+            aria-disabled={bookHref ? undefined : "true"}
+            target="_blank"
+            rel="noopener"
+            onClick={() => {
+              if (quote) logQuote(quote, { booked: true, mode: "quick", addons: selectedAddons.map((a) => a.label) });
+            }}
+          >
+            {bookLabel}
+          </a>
+        </Pull>
       </div>
       </ClickSpark>
     </div>
@@ -681,11 +689,11 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
                 <div className="field dims-field">
                   <span>Size per piece in {imp ? "inches" : "cm"} (optional)</span>
                   <div className="dims">
-                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="Length" aria-label="Length" value={pc.L} onChange={(e) => updatePiece(pc.key, "L", e.target.value)} />
+                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="L" aria-label="Length" value={pc.L} onChange={(e) => updatePiece(pc.key, "L", e.target.value)} />
                     <span className="x">×</span>
-                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="Width" aria-label="Width" value={pc.W} onChange={(e) => updatePiece(pc.key, "W", e.target.value)} />
+                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="W" aria-label="Width" value={pc.W} onChange={(e) => updatePiece(pc.key, "W", e.target.value)} />
                     <span className="x">×</span>
-                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="Height" aria-label="Height" value={pc.H} onChange={(e) => updatePiece(pc.key, "H", e.target.value)} />
+                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="H" aria-label="Height" value={pc.H} onChange={(e) => updatePiece(pc.key, "H", e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -778,6 +786,9 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
             {quote.service} to {quote.dest}
             {quote.docRate ? <span className="tag">Document rate</span> : null}
           </h2>
+          <span className="stamp" aria-hidden="true">
+            Quote {quote.id} · valid today
+          </span>
           <dl>
             {selectedAddons.length ? (
               <>
@@ -849,25 +860,30 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
             </span>
             <input type="text" maxLength={120} placeholder="e.g. clothes and a gift" value={contents} onChange={(e) => setContents(e.target.value)} />
           </label>
-          <div className="actions">
-            <a
-              className="btn wa"
-              target="_blank"
-              rel="noopener"
-              href={waLink(site.company.whatsapp, text)}
-              onClick={() => logQuote(quote, { booked: true, mode: "detail", addons: selectedAddons.map((a) => a.label), contents })}
-            >
-              Book on WhatsApp
-            </a>
-            {canShare ? (
-              <button className="btn" type="button" onClick={() => navigator.share({ title: `${site.company.name} quote ${quote.id}`, text }).catch(() => {})}>
-                Share quote
+          <ClickSpark sparkColor="#ea580c" sparkSize={10} sparkRadius={22} sparkCount={10} duration={450}>
+            <div className="actions">
+              <Pull>
+                <a
+                  className="btn book big"
+                  target="_blank"
+                  rel="noopener"
+                  href={waLink(site.company.whatsapp, text)}
+                  onClick={() => logQuote(quote, { booked: true, mode: "detail", addons: selectedAddons.map((a) => a.label), contents })}
+                >
+                  <UI.wa />
+                  Book on WhatsApp
+                </a>
+              </Pull>
+              {canShare ? (
+                <button className="btn outline" type="button" onClick={() => navigator.share({ title: `${site.company.name} quote ${quote.id}`, text }).catch(() => {})}>
+                  Share quote
+                </button>
+              ) : null}
+              <button className="btn outline" type="button" onClick={copyQuote}>
+                Copy quote
               </button>
-            ) : null}
-            <button className="btn" type="button" onClick={copyQuote}>
-              Copy quote
-            </button>
-          </div>
+            </div>
+          </ClickSpark>
         </div>
       ) : null}
     </>

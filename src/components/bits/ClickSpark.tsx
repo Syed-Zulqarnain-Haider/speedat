@@ -31,6 +31,7 @@ const ClickSpark: React.FC<ClickSparkProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sparksRef = useRef<Spark[]>([]);
+  const kickRef = useRef<() => void>(() => {});
   const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -123,10 +124,14 @@ const ClickSpark: React.FC<ClickSparkProps> = ({
         return true;
       });
 
-      animationId = requestAnimationFrame(draw);
+      // Idle fix: stop the loop when no spark is alive; handleClick kicks it again.
+      animationId = sparksRef.current.length ? requestAnimationFrame(draw) : 0;
     };
 
-    animationId = requestAnimationFrame(draw);
+    animationId = 0;
+    kickRef.current = () => {
+      if (!animationId) animationId = requestAnimationFrame(draw);
+    };
 
     return () => {
       cancelAnimationFrame(animationId);
@@ -149,6 +154,7 @@ const ClickSpark: React.FC<ClickSparkProps> = ({
     }));
 
     sparksRef.current.push(...newSparks);
+    kickRef.current();
   };
 
   return (

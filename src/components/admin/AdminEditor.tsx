@@ -5,6 +5,7 @@
  * (debounced), shows the diff against the live version, and publishes
  * through a server action that re-validates everything.
  */
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { discardDraftAction, publishAction, restoreVersionAction, saveDraftAction } from "@/app/admin/actions";
@@ -21,6 +22,7 @@ import { ContentForm } from "./ContentForm";
 import { HoldBar } from "./HoldBar";
 import { ImportPanel } from "./ImportPanel";
 import { RatesTable } from "./RatesTable";
+import { SECTIONS, sectionNo } from "./sections";
 import { SettingsForm } from "./SettingsForm";
 import { TestPrice } from "./TestPrice";
 
@@ -32,25 +34,19 @@ interface Props {
   imports: ImportSummary[];
   intake: IntakeSettings;
   hold: Hold;
+  /** Leads with status "new" — the Inbox tile. */
+  newLeads?: number;
+  /** Emailed or uploaded sheets still waiting for a column map — the Import tile. */
+  sheetsWaiting?: number;
 }
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
-
-const SECTIONS = [
-  ["rates", "Rates"],
-  ["import", "Import from Excel"],
-  ["bulk", "Bulk adjust"],
-  ["test", "Test a price"],
-  ["settings", "Settings"],
-  ["content", "Website pages"],
-  ["history", "History"],
-] as const;
 
 function daysAgo(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }
 
-export function AdminEditor({ live, draft: initial, versions, user, imports, intake, hold: initialHold }: Props) {
+export function AdminEditor({ live, draft: initial, versions, user, imports, intake, hold: initialHold, newLeads = 0, sheetsWaiting = 0 }: Props) {
   const router = useRouter();
   const liveData: SiteData = useMemo(() => {
     const { version: _v, publishedAt: _p, ...rest } = live;
@@ -74,6 +70,8 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
 
   const changes = useMemo(() => diffSite(liveData, draft), [liveData, draft]);
   const age = daysAgo(live.publishedAt);
+  const ageText = age === 0 ? "today" : age === 1 ? "yesterday" : `${age} days ago`;
+  const liveBy = versions.find((v) => v.version === live.version)?.publishedBy;
 
   const update = (fn: (d: SiteData) => void) => {
     setDraft((d) => {
@@ -164,17 +162,50 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
     document.getElementById("sec-rates")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const pricesState = hold.on ? "On hold" : live.live ? "Live" : "Sample";
+
   return (
     <section className="admin">
-      <div className="admin-head">
-        <h1>Rates</h1>
-        <span className={`meta${age >= 7 ? " warn" : ""}`}>
-          Live version {live.version}, published {fmtDateTime(live.publishedAt)} ({age === 0 ? "today" : age === 1 ? "yesterday" : `${age} days ago`})
-          {hold.on ? <span className="tag hold-tag">prices on hold</span> : null}
-        </span>
+      <div className="topbar">
+        <div>
+          <p className="eyebrow">01 — Rates</p>
+          <h1>Rates</h1>
+        </div>
+        <div className="topbar-right">
+          {hold.on ? <span className="pill hold">on hold</span> : live.live ? <span className="pill live">live</span> : <span className="pill sample">sample rates</span>}
+          {changes.count ? <span className="pill draft">draft edited</span> : null}
+          <span className={`meta${age >= 7 ? " warn" : ""}`}>
+            Version {live.version} · published {fmtDateTime(live.publishedAt)}
+            {liveBy ? ` · by ${liveBy}` : ""}
+          </span>
+        </div>
+        <HoldBar hold={hold} isOwner={canPublish} onChange={setHold} toast={showToast} />
       </div>
-      <HoldBar hold={hold} isOwner={canPublish} onChange={setHold} toast={showToast} />
-      <nav className="subnav" aria-label="Sections">
+
+      <div className="dash">
+        <div className={`tile ${age >= 7 ? "tone-warn" : "tone-ok"}`}>
+          <span className="eyebrow">Live version</span>
+          <span className="val">{live.version}</span>
+          <span className="note">published {ageText}</span>
+        </div>
+        <div className={`tile ${hold.on || !live.live ? "tone-warn" : "tone-ok"}`}>
+          <span className="eyebrow">Prices</span>
+          <span className="val">{pricesState}</span>
+          <span className="note">{hold.on ? "customers see no prices" : `customers see version ${live.version}`}</span>
+        </div>
+        <Link className={`tile${newLeads > 0 ? " tone-hot" : ""}`} href="/admin/inbox">
+          <span className="eyebrow">New leads</span>
+          <span className="val">{newLeads}</span>
+          <span className="note">in the inbox</span>
+        </Link>
+        <a className={`tile${sheetsWaiting > 0 ? " tone-hot" : ""}`} href="#sec-import">
+          <span className="eyebrow">Sheets waiting</span>
+          <span className="val">{sheetsWaiting}</span>
+          <span className="note">need a column map</span>
+        </a>
+      </div>
+
+      <nav className="subnav sections" aria-label="Sections">
         {SECTIONS.map(([id, label]) => (
           <a
             key={id}
@@ -218,19 +249,20 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
       <ContentForm draft={draft} readOnly={readOnly} update={update} epoch={epoch} />
 
       <section className="block" id="sec-history">
+        <p className="eyebrow">{sectionNo("history")} — History</p>
         <h2>Version history</h2>
         <p className="desc">Every publish is kept. Restore an older version into the editor, review the differences, and publish it again.</p>
         {versions.length ? (
-          <ul className="hist">
+          <ul className="hist versions">
             {versions.map((v) => (
-              <li key={v.version}>
-                <strong>Version {v.version}</strong>
+              <li key={v.version} className={v.version === live.version ? "is-live" : ""}>
+                <strong className="ver">v{v.version}</strong>
                 <span className="meta">{fmtDateTime(v.publishedAt)}</span>
                 <span className="meta">
                   {v.summary} · {v.publishedBy}
                 </span>
                 {v.version !== live.version ? (
-                  <button className="btn small" type="button" disabled={busy} onClick={() => restore(v.version)}>
+                  <button className="btn small outline" type="button" disabled={busy} onClick={() => restore(v.version)}>
                     Restore into editor
                   </button>
                 ) : (
@@ -255,9 +287,13 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
             </ul>
           </div>
         ) : review ? (
-          <div className="notice info">
-            <strong>Publishing version {live.version + 1}</strong> — {review.diff.count} change{review.diff.count === 1 ? "" : "s"}.{" "}
-            {hold.on ? "Prices are on hold; choose below whether this publish shows them again." : "Customers see the new prices as soon as it is published."}
+          <div className="card review">
+            <p className="eyebrow">Review</p>
+            <h2>Publishing version {live.version + 1}</h2>
+            <p className="desc">
+              {review.diff.count} change{review.diff.count === 1 ? "" : "s"}.{" "}
+              {hold.on ? "Prices are on hold; choose below whether this publish shows them again." : "Customers see the new prices as soon as it is published."}
+            </p>
             <ul className="diff">
               {review.diff.lines.map((l, i) => (
                 <li key={i}>
@@ -270,7 +306,7 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
               ))}
             </ul>
             {review.warnings.length ? (
-              <div className="notice warn" style={{ margin: "12px 0 0" }}>
+              <div className="notice warn">
                 <strong>Worth a second look (publishing is still allowed)</strong>
                 <ul>
                   {review.warnings.slice(0, 15).map((w, i) => (
@@ -281,25 +317,25 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
               </div>
             ) : null}
             {!live.live ? (
-              <label className="chk" style={{ marginTop: 12 }}>
+              <label className="chk">
                 <input type="checkbox" checked={goLive} onChange={(e) => setGoLive(e.target.checked)} /> Rates are live — remove the sample notice from the website
               </label>
             ) : null}
             {hold.on ? (
-              <label className="chk" style={{ marginTop: 12 }}>
+              <label className="chk">
                 <input type="checkbox" checked={resume} onChange={(e) => setResume(e.target.checked)} /> Show prices again after publishing (lifts the hold)
               </label>
             ) : null}
-            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button className="btn primary" type="button" disabled={busy || !canPublish || save === "saving"} onClick={publish}>
+            <div className="review-actions">
+              <button className="btn book" type="button" disabled={busy || !canPublish || save === "saving"} onClick={publish}>
                 Publish version {live.version + 1}
               </button>
-              <button className="btn" type="button" onClick={() => setReview(null)}>
+              <button className="btn outline" type="button" onClick={() => setReview(null)}>
                 Cancel
               </button>
             </div>
             {pubMsg ? (
-              <div className="meta" style={{ marginTop: 8 }} aria-live="polite">
+              <div className="meta review-msg" aria-live="polite">
                 {pubMsg}
               </div>
             ) : null}
@@ -311,18 +347,18 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
 
       <div className="pubbar">
         <div className="inner">
-          <div>
-            <strong>{changes.count ? `${changes.count} unpublished change${changes.count === 1 ? "" : "s"}` : "No unpublished changes"}</strong>{" "}
+          <div className="pub-state">
+            <strong>{changes.count ? `${changes.count} unpublished change${changes.count === 1 ? "" : "s"}` : "No unpublished changes"}</strong>
             <span className="meta">
               {changes.count ? (hold.on ? "Customers see no prices (on hold). " : `Customers still see version ${live.version}. `) : ""}
               {save === "saving" ? "Saving…" : save === "dirty" ? "Unsaved edits…" : save === "error" ? "Save failed — retrying on next edit" : `Draft saved ${fmtDateTime(savedAt)}`}
             </span>
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button className="btn" type="button" disabled={!changes.count || busy} onClick={discard}>
+          <div className="pub-actions">
+            <button className="btn outline" type="button" disabled={!changes.count || busy} onClick={discard}>
               Discard
             </button>
-            <button className="btn primary" type="button" disabled={!changes.count || busy} onClick={showReview}>
+            <button className="btn book" type="button" disabled={!changes.count || busy} onClick={showReview}>
               Review and publish
             </button>
           </div>

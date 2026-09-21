@@ -100,4 +100,11 @@ export const UI = {
       <path d="M3 8l9 4 9-4M12 12v9" />
     </svg>
   ),
+  /** A rounded speech bubble with a small handset inside ("message us by phone"): original paths, not a trademarked logo. */
+  wa: (p: P) => (
+    <svg {...base} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <path d="M20 13.5a2.5 2.5 0 0 1-2.5 2.5H10l-5 4V5.5A2.5 2.5 0 0 1 7.5 3h10A2.5 2.5 0 0 1 20 5.5z" />
+      <path d="M9 6.5h1.8l.9 2.2-1.1.7a4.9 4.9 0 0 0 2.2 2.2l.7-1.1 2.2.9v1.8a.9.9 0 0 1-.9.9A7.2 7.2 0 0 1 8.1 7.4a.9.9 0 0 1 .9-.9z" />
+    </svg>
+  ),
 } as const;

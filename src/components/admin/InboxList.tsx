@@ -47,25 +47,39 @@ export function InboxList({ leads }: { leads: LeadView[] }) {
     showToast("Saved");
   };
 
-  if (!rows.length) return <p className="hint" style={{ marginTop: 16 }}>Nothing here.</p>;
+  if (!rows.length) return <p className="hint empty">Nothing here.</p>;
   return (
     <>
-      <ul className="hist" style={{ marginTop: 10 }}>
+      <ul className="hist leads">
         {rows.map((l) => {
           const wa = waHref(l.phone);
           return (
-            <li key={l.id} id={`lead-${l.id}`} style={{ display: "block" }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", alignItems: "baseline" }}>
-                <strong>{l.kind === "quote" ? `Quote ${l.quoteId}` : l.name || "Message"}</strong>
-                <span className="meta">{fmtDateTime(l.createdAt)}</span>
-                {l.destination ? <span className="meta">→ {l.destination}</span> : null}
-                {l.weightKg ? <span className="meta">{l.weightKg} kg</span> : null}
-                {l.phone ? <span className="meta">{l.phone}</span> : null}
-                {l.email ? <span className="meta">{l.email}</span> : null}
+            <li key={l.id} id={`lead-${l.id}`} className={`lead${l.status === "new" ? " new" : ""}`}>
+              <div className="lead-body">
+                <div className="lead-head">
+                  <span className={`tag kind-${l.kind}`}>{l.kind === "quote" ? "Quote" : "Message"}</span>
+                  {l.kind === "quote" ? (
+                    <>
+                      <span className="qid">{l.quoteId}</span>
+                      {l.name ? <span className="lead-name">{l.name}</span> : null}
+                    </>
+                  ) : (
+                    <span className="lead-name">{l.name || "Message"}</span>
+                  )}
+                  {l.destination ? <span className="meta">→ {l.destination}</span> : null}
+                  {l.weightKg ? <span className="meta">{l.weightKg} kg</span> : null}
+                  <span className="meta">{fmtDateTime(l.createdAt)}</span>
+                </div>
+                {l.phone || l.email ? (
+                  <div className="lead-contact">
+                    {l.phone ? <span className="meta">{l.phone}</span> : null}
+                    {l.email ? <span className="meta">{l.email}</span> : null}
+                  </div>
+                ) : null}
+                {l.message ? <p className="lead-msg">{l.message}</p> : null}
               </div>
-              {l.message ? <p style={{ margin: "6px 0 8px", whiteSpace: "pre-wrap", maxWidth: "80ch" }}>{l.message}</p> : null}
-              <div className="inline" style={{ alignItems: "center" }}>
-                <label className="field" style={{ maxWidth: 180 }}>
+              <div className="lead-actions">
+                <label className="field">
                   <span>Status</span>
                   <select value={l.status} disabled={busy === l.id} onChange={(e) => save(l.id, { status: e.target.value as (typeof STATUSES)[number] })}>
                     {STATUSES.map((s) => (
@@ -75,7 +89,7 @@ export function InboxList({ leads }: { leads: LeadView[] }) {
                     ))}
                   </select>
                 </label>
-                <label className="field" style={{ flex: 3, minWidth: 220 }}>
+                <label className="field notes">
                   <span>Notes</span>
                   <input
                     type="text"
@@ -86,17 +100,19 @@ export function InboxList({ leads }: { leads: LeadView[] }) {
                     }}
                   />
                 </label>
-                {wa ? (
-                  <a className="btn wa small" href={wa} target="_blank" rel="noopener">
-                    Open in WhatsApp
-                  </a>
-                ) : null}
-                <Link className="btn small" href={`/admin/shipments/new?lead=${l.id}`}>
-                  Create shipment
-                </Link>
+                <div className="lead-btns">
+                  {wa ? (
+                    <a className="btn wa small" href={wa} target="_blank" rel="noopener">
+                      Open in WhatsApp
+                    </a>
+                  ) : null}
+                  <Link className="btn outline small" href={`/admin/shipments/new?lead=${l.id}`}>
+                    Create shipment
+                  </Link>
+                </div>
               </div>
               {l.updatedBy ? (
-                <span className="hint">
+                <span className="lead-foot">
                   Last touched by {l.updatedBy}, {fmtDateTime(l.updatedAt)}
                 </span>
               ) : null}

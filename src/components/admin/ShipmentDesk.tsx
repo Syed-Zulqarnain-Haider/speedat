@@ -91,11 +91,12 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName }: {
     .join("\n");
   const wa = waDigits(s.customerPhone);
 
-  const field = (label: string, key: keyof typeof s, type = "text") => (
+  const field = (label: string, key: keyof typeof s, type = "text", cls?: string) => (
     <label className="field">
       <span>{label}</span>
       <input
         type={type}
+        className={cls}
         defaultValue={String(s[key] ?? "")}
         onBlur={(e) => {
           if (e.target.value !== s[key]) saveField({ [key]: e.target.value } as Partial<ShipmentView>);
@@ -103,12 +104,13 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName }: {
       />
     </label>
   );
+  const current: Status = (s.status as Status) in LABEL ? (s.status as Status) : "booked";
 
   return (
-    <div className="grid2" style={{ alignItems: "start" }}>
-      <div className="panel" style={{ paddingBottom: 16 }}>
+    <div className="ship">
+      <div className="panel ship-details">
         <h2 className="step">Details</h2>
-        <p className="meta" style={{ marginBottom: 12 }}>
+        <p className="meta ship-meta">
           {s.service} to {s.destination} · created {fmtDateTime(s.createdAt)}
           {s.quoteId ? ` · quote ${s.quoteId}` : ""}
         </p>
@@ -116,7 +118,7 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName }: {
         {field("Customer phone / WhatsApp", "customerPhone", "tel")}
         {field("Receiver name", "receiverName")}
         {field("Carrier / airline", "carrier")}
-        {field("Tracking number", "trackingNo")}
+        {field("Tracking number", "trackingNo", "text", "track")}
         <label className="field">
           <span>Internal notes</span>
           <textarea
@@ -129,9 +131,13 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName }: {
         </label>
         <p className="hint">Fields save when you leave them.</p>
       </div>
-      <div>
-        <div className="panel" style={{ paddingBottom: 16 }}>
+      <div className="ship-side">
+        <div className="panel">
           <h2 className="step">Update status</h2>
+          <p className="ship-now">
+            <span className="eyebrow">Now</span>
+            <span className={`pill s-${current}`}>{LABEL[current]}</span>
+          </p>
           <div className="inline">
             <label className="field">
               <span>Status</span>
@@ -151,7 +157,7 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName }: {
               Add update
             </button>
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <div className="ship-actions">
             {wa ? (
               <a className="btn wa small" href={`https://wa.me/${wa}?text=${encodeURIComponent(customerMsg)}`} target="_blank" rel="noopener">
                 Send WhatsApp update
@@ -160,7 +166,7 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName }: {
               <span className="hint">Add the customer&apos;s phone to send WhatsApp updates.</span>
             )}
             <button
-              className="btn small"
+              className="btn small outline"
               type="button"
               onClick={() => navigator.clipboard?.writeText(customerMsg).then(() => showToast("Message copied"), () => showToast("Copy failed"))}
             >
@@ -168,17 +174,17 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName }: {
             </button>
           </div>
         </div>
-        <div className="panel" style={{ paddingBottom: 12 }}>
+        <div className="panel">
           <h2 className="step">Timeline</h2>
-          <ul className="hist">
+          <ul className="hist timeline">
             {events
               .slice()
               .reverse()
               .map((e) => (
-                <li key={e.id}>
+                <li key={e.id} className={`s-${e.status}`}>
                   <strong>{LABEL[e.status as Status] ?? e.status}</strong>
                   <span className="meta">{fmtDateTime(e.at)}</span>
-                  {e.note ? <span>{e.note}</span> : null}
+                  {e.note ? <span className="tl-note">{e.note}</span> : null}
                   <span className="hint">{e.by}</span>
                 </li>
               ))}

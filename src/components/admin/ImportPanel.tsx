@@ -13,6 +13,7 @@ import { applyImport, buildImport, buildPasteImport, findProfile, headerNames, h
 import type { ImportOptions, ImportResult } from "@/lib/import/types";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/pricing/format";
 import type { SiteData } from "@/lib/site/types";
+import { sectionNo } from "./sections";
 
 interface Props {
   draft: SiteData;
@@ -127,6 +128,7 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
 
   return (
     <section className="block" id="sec-import">
+      <p className="eyebrow">{sectionNo("import")} — Import</p>
       <h2>Import from Excel</h2>
       <p className="desc">
         Upload the rate sheet your carrier sent (.xlsx, .xls or .csv), tell it once which columns hold what, and it remembers that layout next time. Sheets emailed to
@@ -141,7 +143,7 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
             {pending.map((i) => (
               <li key={i.id}>
                 {i.fileName} from {i.fromEmail ?? "unknown"} ({fmtDateTime(i.receivedAt)}){" "}
-                <button className="btn small" type="button" disabled={busy} onClick={() => openExisting(i.id)}>
+                <button className="btn small outline" type="button" disabled={busy} onClick={() => openExisting(i.id)}>
                   Map columns
                 </button>
               </li>
@@ -150,9 +152,10 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
         </div>
       ) : null}
       <div className="inline">
-        <label className="field" style={{ flex: 2 }}>
+        <label className="field file-field" style={{ flex: 2 }}>
           <span>Rate sheet file</span>
           <input type="file" accept=".xlsx,.xlsm,.xls,.csv,.tsv,.txt" disabled={busy} onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
+          <span className="hint">.xlsx, .xls or .csv — nothing changes in the editor until you apply the preview below.</span>
         </label>
       </div>
       {msg}
@@ -247,8 +250,8 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
             </div>
           ) : null}
           {preview ? <Preview im={preview} draft={draft} onApply={apply} busy={busy} /> : null}
-          <p style={{ marginTop: 10 }}>
-            <button className="btn small" type="button" onClick={() => setSheet(null)}>
+          <p className="btn-row">
+            <button className="btn small outline" type="button" onClick={() => setSheet(null)}>
               Close without applying
             </button>{" "}
             <button className="btn small danger" type="button" onClick={() => reject(sheet.importId)}>
@@ -258,26 +261,26 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
         </>
       ) : null}
 
-      <details style={{ marginTop: 14 }}>
+      <details className="fold">
         <summary>Paste rows instead</summary>
-        <p className="hint" style={{ margin: "8px 0" }}>
+        <p className="hint fold-hint">
           Column order: Destination, {draft.services.map((sv) => `${sv.name} first, ${sv.name} additional, ${sv.name} days, ${sv.name} documents`).join(", ")}. Documents columns may
           be left empty. A header row is ignored.
         </p>
         <textarea className="paste" value={pasteText} placeholder={"United Kingdom\t4500\t1100\t3-5\t3900\t3200\t850\t6-9\t2800"} onChange={(e) => setPasteText(e.target.value)} />
-        <div style={{ marginTop: 10 }}>
-          <button className="btn" type="button" onClick={() => setPasted(buildPasteImport(pasteText, draft))}>
+        <div className="btn-row">
+          <button className="btn outline" type="button" onClick={() => setPasted(buildPasteImport(pasteText, draft))}>
             Preview pasted rows
           </button>
         </div>
         {pasted ? <Preview im={pasted} draft={draft} onApply={applyPasted} busy={busy} /> : null}
       </details>
 
-      <h3 style={{ margin: "22px 0 6px" }}>Recent sheets</h3>
+      <h3 className="fh">Recent sheets</h3>
       {imports.length ? (
-        <ul className="hist">
+        <ul className="hist sheets">
           {imports.map((i) => (
-            <li key={i.id}>
+            <li key={i.id} className={i.status === "needs_mapping" ? "waiting" : ""}>
               <strong>{i.fileName}</strong>
               <span className="meta">
                 {fmtDateTime(i.receivedAt)} · {i.source === "email" ? `from ${i.fromEmail ?? "unknown"}` : "uploaded"}
@@ -290,8 +293,8 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
                 {i.error ? ` · ${i.error}` : ""}
               </span>
               {i.status === "needs_mapping" ? (
-                <button className="btn small" type="button" disabled={busy} onClick={() => openExisting(i.id)}>
-                  Open
+                <button className="btn small outline" type="button" disabled={busy} onClick={() => openExisting(i.id)}>
+                  Map columns
                 </button>
               ) : null}
             </li>
@@ -364,7 +367,7 @@ function Preview({ im, draft, onApply, busy }: { im: ImportResult; draft: SiteDa
               </li>
             ))}
           </ul>
-          <div style={{ marginTop: 10 }}>
+          <div className="btn-row">
             <button className="btn primary" type="button" disabled={busy} onClick={onApply}>
               Apply to editor
             </button>
@@ -393,9 +396,9 @@ function IntakeSettingsForm({ intake, isOwner, toast }: { intake: IntakeSettings
     toast(res.ok ? "Intake settings saved" : res.message);
   };
   return (
-    <details style={{ marginTop: 18 }}>
+    <details className="fold">
       <summary>Email intake settings</summary>
-      <p className="hint" style={{ margin: "8px 0" }}>
+      <p className="hint fold-hint">
         Sheets emailed to the intake address are read automatically. A known layout is applied to the editor; it is published without you only when auto-publish is on
         and no price moves by more than the tolerance. Otherwise it waits here for your review.
       </p>
@@ -412,7 +415,7 @@ function IntakeSettingsForm({ intake, isOwner, toast }: { intake: IntakeSettings
           <span>Expect a sheet by hour (0–23)</span>
           <input type="number" min={0} max={23} step={1} value={hour} placeholder="blank = no check" disabled={!isOwner} onChange={(e) => setHour(e.target.value)} />
         </label>
-        <button className="btn" type="button" disabled={!isOwner || busy} onClick={save}>
+        <button className="btn outline" type="button" disabled={!isOwner || busy} onClick={save}>
           Save intake settings
         </button>
       </div>

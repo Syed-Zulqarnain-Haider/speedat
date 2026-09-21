@@ -1,55 +1,82 @@
-"use client";
-
 /**
- * Animated hero for the quote page: a reactive dot field behind the headline,
- * the headline entering word by word, the sub-line blurring in, and the stats
- * counting up. Everything renders as plain text first (SEO, no layout shift)
- * and falls back to static when the visitor prefers reduced motion.
+ * 01 — the home hero: the route line, the headline whose words rise in from
+ * first paint (CSS only, see home/HeroTitle), the lede, the manifest strip
+ * whose numbers count up once in view, and the phone-only jump to the
+ * instrument. Hairline threads drift behind it (fx/LivingBackground) on
+ * machines that may run them; everyone else keeps the inline SVG.
+ *
+ * Everything renders as real text on the server. The only client islands are
+ * the background and the manifest numbers (home/StatCounter), and those keep
+ * the real figure in the DOM until their count starts.
  */
-import { useReducedMotion } from "@/lib/client/motion";
-import { useMounted } from "@/lib/client/session";
-import BlurText from "@/components/bits/BlurText";
-import CountUp from "@/components/bits/CountUp";
-import DotGrid from "@/components/bits/DotGrid";
-import SplitText from "@/components/bits/SplitText";
+import { LivingBackground } from "@/components/site/fx/LivingBackground";
+import { HeroTitle } from "@/components/site/home/HeroTitle";
+import { StatCounter } from "@/components/site/home/StatCounter";
 
 export interface HeroStat {
   /** Numeric part animates; `null` renders `text` as-is. */
   value: number | null;
+  /** The whole value as text, used only when `value` is null. */
   text: string;
+  /** Printed after the number (e.g. "+ days"); never part of `text`'s replacement. */
   suffix?: string;
   label: string;
 }
 
-export function Hero({ title, sub, stats }: { title: string; sub: string; stats: HeroStat[] }) {
-  const reduced = useReducedMotion();
-  const mounted = useMounted();
-  const animate = mounted && !reduced;
+interface Props {
+  /** The mono route line above the headline (home/eyebrow.ts). */
+  eyebrow: string;
+  /** `content.heroTitle`; one `*word*` becomes the italic accent. */
+  title: string;
+  /** `content.heroSub`. */
+  sub: string;
+  stats: HeroStat[];
+}
+
+/** Splits "+ days" into the symbol that stays with the number ("+") and the word set smaller as a unit ("days"). */
+function splitSuffix(suffix: string): { sym: string; unit: string } {
+  const m = /^([^\p{L}\p{N}]*)(.*)$/u.exec(suffix);
+  return { sym: (m?.[1] ?? "").trim(), unit: (m?.[2] ?? "").trim() };
+}
+
+function StatValue({ stat }: { stat: HeroStat }) {
+  if (stat.value == null) return <>{stat.text}</>;
+  const { sym, unit } = splitSuffix(stat.suffix ?? "");
   return (
-    <div className="hero hero-animated">
-      {animate ? (
-        <div className="hero-bg" aria-hidden="true">
-          <DotGrid dotSize={3} gap={30} baseColor="#d9d2c5" activeColor="#ea580c" proximity={120} shockRadius={220} shockStrength={4} returnDuration={1.2} className="hero-dots" />
-        </div>
-      ) : null}
+    <>
+      <StatCounter key={stat.value} to={stat.value} />
+      {sym}
+      {unit ? <span className="unit"> {unit}</span> : null}
+    </>
+  );
+}
+
+export function Hero({ eyebrow, title, sub, stats }: Props) {
+  return (
+    <div className="hero">
+      <LivingBackground />
       <div className="hero-fg">
-        {animate ? (
-          <SplitText tag="h1" text={title} splitType="words" delay={70} duration={0.9} ease="power3.out" textAlign="left" threshold={0} rootMargin="0px" from={{ opacity: 0, y: 24 }} to={{ opacity: 1, y: 0 }} />
-        ) : (
-          <h1>{title}</h1>
-        )}
-        {animate ? <BlurText text={sub} className="lede" animateBy="words" delay={40} direction="bottom" threshold={0} rootMargin="0px" /> : <p className="lede">{sub}</p>}
-        <ul className="stats">
-          {stats.map((s) => (
-            <li key={s.label}>
-              <strong>
-                {animate && s.value != null ? <CountUp to={s.value} duration={1.4} delay={0.3} /> : s.text}
-                {s.value != null ? s.suffix : ""}
-              </strong>
-              <span>{s.label}</span>
-            </li>
-          ))}
-        </ul>
+        {eyebrow ? <p className="eyebrow hero-eyebrow">{eyebrow}</p> : null}
+        <HeroTitle text={title} />
+        {sub ? <p className="lede">{sub}</p> : null}
+        {stats.length ? (
+          <ul className="stats manifest">
+            {stats.map((s) => (
+              <li key={s.label}>
+                <strong>
+                  <StatValue stat={s} />
+                </strong>
+                <span>{s.label}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <a className="jump btn outline" href="#quote-instrument">
+          Check your rate
+          <span className="jump-arrow" aria-hidden="true">
+            ↓
+          </span>
+        </a>
       </div>
     </div>
   );

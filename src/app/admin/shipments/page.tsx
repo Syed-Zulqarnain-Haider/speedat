@@ -18,16 +18,23 @@ export default async function ShipmentsPage(props: PageProps<"/admin/shipments">
   const svcName = new Map((live?.services ?? []).map((s) => [s.id, s.name]));
   return (
     <AdminShell companyName={live?.company.name ?? "Speedat"} user={user} badges={{ inbox: leads.new, shipments: counts.exception }}>
-      <section className="admin" style={{ paddingBottom: 60 }}>
-        <div className="admin-head">
-          <h1>Shipments</h1>
-          <Link className="btn primary small" href="/admin/shipments/new">
-            New shipment
-          </Link>
+      <section className="admin">
+        <div className="topbar">
+          <div>
+            <p className="eyebrow">03 — Shipments</p>
+            <h1>Shipments</h1>
+          </div>
+          <div className="topbar-right">
+            {counts.exception ? <span className="pill hold">{counts.exception} need attention</span> : null}
+            <span className="meta">{counts.open} open</span>
+            <Link className="btn primary small" href="/admin/shipments/new">
+              New shipment
+            </Link>
+          </div>
         </div>
         <nav className="subnav" aria-label="Shipment status">
           <Link href="/admin/shipments?status=open" aria-current={status === "open" ? "page" : undefined}>
-            Open ({counts.open})
+            Open <span className="n">{counts.open}</span>
           </Link>
           {SHIPMENT_STATUSES.map((s) => (
             <Link key={s} href={`/admin/shipments?status=${s}`} aria-current={status === s ? "page" : undefined}>
@@ -39,8 +46,8 @@ export default async function ShipmentsPage(props: PageProps<"/admin/shipments">
           </Link>
         </nav>
         {rows.length ? (
-          <div className="tablewrap" style={{ marginTop: 10 }}>
-            <table>
+          <div className="tablewrap">
+            <table className="ships">
               <thead>
                 <tr>
                   <th>Shipment</th>
@@ -71,7 +78,9 @@ export default async function ShipmentsPage(props: PageProps<"/admin/shipments">
                       {s.carrier || "—"}
                       {s.trackingNo ? <div className="hint">{s.trackingNo}</div> : null}
                     </td>
-                    <td>{STATUS_LABEL[s.status as ShipmentStatus] ?? s.status}</td>
+                    <td>
+                      <span className={`pill s-${s.status}`}>{STATUS_LABEL[s.status as ShipmentStatus] ?? s.status}</span>
+                    </td>
                     <td className="meta">{fmtDateTime(s.updatedAt)}</td>
                   </tr>
                 ))}
@@ -79,9 +88,7 @@ export default async function ShipmentsPage(props: PageProps<"/admin/shipments">
             </table>
           </div>
         ) : (
-          <p className="hint" style={{ marginTop: 16 }}>
-            No shipments here. Create one from a lead in the Inbox, or with “New shipment”.
-          </p>
+          <p className="hint empty">No shipments here. Create one from a lead in the Inbox, or with “New shipment”.</p>
         )}
       </section>
     </AdminShell>

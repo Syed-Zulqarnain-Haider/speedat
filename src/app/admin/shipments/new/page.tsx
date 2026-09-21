@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { NewShipmentForm } from "@/components/admin/NewShipmentForm";
 import { requireAdminPage } from "@/lib/auth/session";
@@ -26,10 +27,18 @@ export default async function NewShipmentPage(props: PageProps<"/admin/shipments
   };
   return (
     <AdminShell companyName={live?.company.name ?? "Speedat"} user={user} badges={{ inbox: counts.new }}>
-      <section className="admin" style={{ paddingBottom: 60 }}>
-        <div className="admin-head">
-          <h1>New shipment</h1>
-          {lead ? <span className="meta">From lead #{lead.id}</span> : null}
+      <section className="admin">
+        <div className="topbar">
+          <div>
+            <p className="eyebrow">03 — Shipments</p>
+            <h1>New shipment</h1>
+          </div>
+          <div className="topbar-right">
+            {lead ? <span className="meta">From lead #{lead.id}</span> : null}
+            <Link className="btn outline small" href="/admin/shipments">
+              ← All shipments
+            </Link>
+          </div>
         </div>
         <NewShipmentForm
           initial={initial}

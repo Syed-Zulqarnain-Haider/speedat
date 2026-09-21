@@ -28,38 +28,55 @@ export default async function SecurityPage() {
     { label: "Cron secret", ok: !!process.env.CRON_SECRET, note: process.env.CRON_SECRET ? "set" : "CRON_SECRET missing — the daily check cannot run" },
     { label: "Form-token / TOTP key", ok: !!(process.env.APP_SECRET || process.env.TOTP_ENCRYPTION_KEY), note: process.env.APP_SECRET ? "APP_SECRET set" : "APP_SECRET missing — a derived key is in use; set one before enrolling 2FA" },
   ];
+  const okCount = checks.filter((c) => c.ok).length;
   return (
     <AdminShell companyName={live?.company.name ?? "Speedat"} user={user} badges={{ inbox: counts.new }}>
-      <section className="admin" style={{ paddingBottom: 60 }}>
-        <div className="admin-head">
-          <h1>Security</h1>
+      <section className="admin">
+        <div className="topbar">
+          <div>
+            <p className="eyebrow">04 — Security</p>
+            <h1>Security</h1>
+          </div>
+          <div className="topbar-right">
+            {okCount === checks.length ? (
+              <span className="pill live">all checks pass</span>
+            ) : (
+              <span className="pill hold">
+                {checks.length - okCount === 1 ? "1 check needs attention" : `${checks.length - okCount} checks need attention`}
+              </span>
+            )}
+            <span className="meta">
+              {admins.length} admin{admins.length === 1 ? "" : "s"} · signed in as {user.email}
+            </span>
+          </div>
         </div>
-        <div className="grid2" style={{ alignItems: "start" }}>
+        <div className="grid2 sec-grid">
           <div>
             <TotpSetup enabled={status.enabled} />
-            <div className="panel" style={{ paddingBottom: 12 }}>
+            <div className="panel">
               <h2 className="step">Admins</h2>
-              <ul className="hist">
+              <ul className="hist admins">
                 {admins.map((a) => (
                   <li key={a.email}>
-                    <strong>{a.email}</strong>
-                    <span className="meta">{a.role}</span>
-                    <span className={a.totp ? "tag" : "meta"}>{a.totp ? "2FA on" : "2FA off"}</span>
+                    <span className="mono admin-email">{a.email}</span>
+                    <span className="tag role">{a.role}</span>
+                    {a.totp ? <span className="tag">2FA on</span> : <span className="meta">2FA off</span>}
                     <span className="hint">added {fmtDateTime(a.addedAt)}</span>
                   </li>
                 ))}
               </ul>
-              <p className="hint" style={{ marginTop: 8 }}>
+              <p className="hint panel-note">
                 Add or remove admins with <code>ADMIN_EMAIL=… pnpm db:seed</code> or directly in the <code>admins</code> table; every sign-in is checked against it.
               </p>
             </div>
           </div>
           <div>
-            <div className="panel" style={{ paddingBottom: 12 }}>
+            <div className="panel">
               <h2 className="step">Deployment checks</h2>
-              <ul className="hist">
+              <ul className="hist checks">
                 {checks.map((c) => (
-                  <li key={c.label}>
+                  <li key={c.label} className={c.ok ? "check ok" : "check bad"}>
+                    <span className="check-dot" aria-hidden="true" />
                     <strong>{c.label}</strong>
                     <span className={c.ok ? "tag" : "meta warn"}>{c.ok ? "OK" : "attention"}</span>
                     <span className="hint">{c.note}</span>
@@ -67,9 +84,9 @@ export default async function SecurityPage() {
                 ))}
               </ul>
             </div>
-            <div className="panel" style={{ paddingBottom: 12 }}>
+            <div className="panel">
               <h2 className="step">Recent activity</h2>
-              <ul className="hist" style={{ fontSize: ".9rem" }}>
+              <ul className="hist activity">
                 {recent.map((r) => (
                   <li key={r.id}>
                     <span className="meta">{fmtDateTime(r.at)}</span>

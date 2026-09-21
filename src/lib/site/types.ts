@@ -22,13 +22,42 @@ export interface Company {
   notes: string;
 }
 
+/**
+ * Headline fields (`heroTitle`, `routesTitle`, `stepsTitle`, `servicesTitle`,
+ * `ctaTitle`) accept one `*word*` that the site sets in the italic serif accent;
+ * an unbalanced or empty pair prints literally (see `accent.ts`).
+ */
 export interface Content {
   heroTitle: string;
   heroSub: string;
+  /** Mono route line above the headline; blank = automatic (`origin → first five destinations · and N more`). */
+  heroEyebrow: string;
   /** Optional numbers strip, one per line: `Label | Value`; blank = automatic. */
   stats: string;
+  /** Mono promise line under the calculator; blank hides it. */
+  promise: string;
+  /** Route board heading (home + /services). */
+  routesTitle: string;
+  /** Note under the route board heading. */
+  routesNote: string;
+  /** "How it works" heading. */
+  stepsTitle: string;
+  /** One per line: `Title | text`. */
+  steps: string;
+  /** Home services teaser heading. */
+  servicesTitle: string;
+  /** /services intro line. */
+  servicesLede: string;
   /** One per line: `icon | Title | Description`. */
   services: string;
+  /** Stamp band heading. */
+  ctaTitle: string;
+  /** Stamp band line under the heading. */
+  ctaSub: string;
+  /** /contact intro line. */
+  contactLede: string;
+  /** /faq intro line. */
+  faqLede: string;
   /** One paragraph per line. */
   story: string;
   mission: string;

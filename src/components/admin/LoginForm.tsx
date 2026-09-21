@@ -46,20 +46,22 @@ export function LoginForm() {
   if (mfaToken) {
     return (
       <form
-        className="panel"
-        style={{ paddingBottom: 18 }}
+        className="panel login-panel"
         onSubmit={(e) => {
           e.preventDefault();
           setBusy(true);
           void finish(mfaToken, code);
         }}
       >
-        <p style={{ marginBottom: 12 }}>Enter the 6-digit code from your authenticator app.</p>
+        <p className="login-step">
+          <span className="eyebrow">Second step</span>
+          Enter the 6-digit code from your authenticator app.
+        </p>
         <label className="field">
           <span>Code</span>
-          <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
+          <input type="text" className="code" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
         </label>
-        <button className="btn primary" type="submit" disabled={busy || code.replace(/\s/g, "").length < 6} style={{ width: "100%" }}>
+        <button className="btn primary big" type="submit" disabled={busy || code.replace(/\s/g, "").length < 6}>
           Continue
         </button>
         {error ? (
@@ -97,13 +99,11 @@ export function LoginForm() {
   };
 
   return (
-    <div className="panel" style={{ paddingBottom: 18 }}>
-      <button className="btn primary" type="button" onClick={withGoogle} disabled={busy} style={{ width: "100%" }}>
+    <div className="panel login-panel">
+      <button className="btn outline big" type="button" onClick={withGoogle} disabled={busy}>
         Continue with Google
       </button>
-      <p className="hint" style={{ textAlign: "center", margin: "12px 0" }}>
-        or with email and password
-      </p>
+      <p className="login-or">or with email and password</p>
       <form onSubmit={withPassword}>
         <label className="field">
           <span>Email</span>
@@ -113,7 +113,7 @@ export function LoginForm() {
           <span>Password</span>
           <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </label>
-        <button className="btn" type="submit" disabled={busy} style={{ width: "100%" }}>
+        <button className="btn primary big" type="submit" disabled={busy}>
           Sign in
         </button>
       </form>

@@ -77,6 +77,7 @@ export function HoldPanel({ companyName, whatsapp, message, destinations, maxKg 
         <input type="text" maxLength={120} placeholder="Clothes, documents, gifts…" value={contents} onChange={(e) => setContents(e.target.value.slice(0, 120))} />
       </label>
       <a className={`btn wa big${ready ? "" : " soft"}`} href={href} target="_blank" rel="noopener">
+        <UI.wa />
         Ask for today&apos;s rate on WhatsApp
       </a>
       <p className="hint">We reply with a price by hand{ready ? "" : " — add the country and weight so we can quote straight away"}.</p>

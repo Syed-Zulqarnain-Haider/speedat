@@ -12,7 +12,8 @@ interface Props {
 export function NewShipmentForm({ initial, destinations, services }: Props) {
   const [state, action, pending] = useActionState<CreateState, FormData>(createShipmentAction, { error: null });
   return (
-    <form action={action} className="panel" style={{ paddingBottom: 16, maxWidth: 760 }}>
+    <form action={action} className="panel ship-new">
+      <h2 className="step">Shipment details</h2>
       {state.error ? (
         <div className="notice err" role="alert">
           {state.error}
@@ -20,7 +21,11 @@ export function NewShipmentForm({ initial, destinations, services }: Props) {
       ) : null}
       <input type="hidden" name="leadId" value={initial.leadId ?? ""} />
       <input type="hidden" name="quoteId" value={initial.quoteId ?? ""} />
-      {initial.quoteId ? <p className="meta" style={{ marginBottom: 10 }}>Quote {initial.quoteId}</p> : null}
+      {initial.quoteId ? (
+        <p className="meta ship-meta">
+          From quote <span className="qid">{initial.quoteId}</span>
+        </p>
+      ) : null}
       <div className="row">
         <label className="field">
           <span>Customer name</span>
@@ -74,7 +79,7 @@ export function NewShipmentForm({ initial, destinations, services }: Props) {
         <span>Notes (internal)</span>
         <textarea className="long" name="notes" defaultValue={initial.notes} maxLength={4000} />
       </label>
-      <button className="btn primary" type="submit" disabled={pending}>
+      <button className="btn primary big" type="submit" disabled={pending}>
         {pending ? "Creating…" : "Create shipment"}
       </button>
     </form>
