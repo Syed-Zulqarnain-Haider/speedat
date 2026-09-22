@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { updateLeadAction } from "@/app/admin/inbox/actions";
 import { Toast, useToast } from "@/components/calculator/Toast";
 import { fmtDateTime } from "@/lib/pricing/format";
+import { applyLeadSave } from "./leadRows";
 
 export interface LeadView {
   id: number;
@@ -34,6 +36,7 @@ function waHref(phone: string): string | null {
 }
 
 export function InboxList({ leads }: { leads: LeadView[] }) {
+  const router = useRouter();
   const [rows, setRows] = useState(leads);
   const [toast, showToast] = useToast();
   const [busy, setBusy] = useState<number | null>(null);
@@ -43,8 +46,12 @@ export function InboxList({ leads }: { leads: LeadView[] }) {
     const res = await updateLeadAction({ id, ...patch });
     setBusy(null);
     if (!res.ok) return showToast(res.message);
-    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: res.status, notes: res.notes, updatedAt: res.updatedAt } : r)));
+    setRows((rs) => applyLeadSave(rs, id, res));
     showToast("Saved");
+    // The tab counts, the "n new" pill and the sidebar badge are rendered on the server; re-read
+    // them now rather than on the next reload. The list itself is client state, so the row stays
+    // where it is (the admin usually adds a note right after moving the status).
+    router.refresh();
   };
 
   if (!rows.length) return <p className="hint empty">Nothing here.</p>;

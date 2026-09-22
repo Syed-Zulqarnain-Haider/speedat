@@ -15,8 +15,9 @@ interface Props {
  * name, the 1 kg price and days per service, the flat document rate — like
  * a departures board. A reference, not a control: nothing here is tappable.
  * Server component; rendered once on the home page (third child of
- * `section.calc`) and once on /services. Under hold the prices are null and
- * only the days print. Every number is `boardRows`' — the calculator's own
+ * `section.calc`) and once on /services. Under hold the prices are null,
+ * only the days print and the generated caption says so (`boardNote`), so
+ * no pickup charge or limit leaks. Every number is `boardRows`' — the calculator's own
  * 1 kg call with the default add-ons — so the board and the tiles agree to
  * the rupee. One header row at every width: on a phone the row header
  * (flag and name) takes a line of its own and the cells line up under the
@@ -28,7 +29,7 @@ export function RatesBoard({ site, holdOn }: Props) {
   const cur = site.settings.currency;
   const hasDoc = rows.some((r) => r.doc != null);
   const title = site.content.routesTitle.trim() || "Rates";
-  const note = site.content.routesNote.trim() || boardNote(site);
+  const note = site.content.routesNote.trim() || boardNote(site, holdOn);
   return (
     <table className="rates">
       <caption>

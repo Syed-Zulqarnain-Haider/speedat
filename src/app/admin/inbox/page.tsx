@@ -64,7 +64,9 @@ export default async function InboxPage(props: PageProps<"/admin/inbox">) {
             </Link>
           ))}
         </nav>
-        <InboxList leads={views} />
+        {/* Keyed by tab: switching tabs is a client-side navigation that keeps component state, so the list
+            must remount to show the new tab's rows. A same-tab refresh (after a save) keeps the row in place. */}
+        <InboxList key={status} leads={views} />
       </section>
     </AdminShell>
   );

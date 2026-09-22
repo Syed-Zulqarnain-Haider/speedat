@@ -74,14 +74,15 @@ const ApplyInput = z.object({
   opts: z.object({ addNew: z.boolean(), hideMissing: z.boolean(), cost: z.boolean(), margin: z.number().finite(), mround: z.number().finite().min(1) }),
 });
 
-export async function applyImportAction(input: unknown): Promise<ActionResult<{ draft: SiteData; result: ImportResult; status: ImportStatus }>> {
+export async function applyImportAction(input: unknown): Promise<ActionResult<{ draft: SiteData; result: ImportResult; status: ImportStatus; updatedAt: string }>> {
   try {
     const user = await requireAdmin();
     const parsed = ApplyInput.parse(input);
     const opts: ImportOptions = parsed.opts;
     const r = await applyToDraft({ ...parsed, opts, actor: user.email });
     if (!r.draft || !r.result) return { ok: false, code: r.status, message: r.error ?? "Nothing was applied." };
-    return { ok: true, draft: r.draft, result: r.result, status: r.status };
+    // A returned draft is one applyToDraft has just saved (and possibly auto-published).
+    return { ok: true, draft: r.draft, result: r.result, status: r.status, updatedAt: new Date().toISOString() };
   } catch (err) {
     if (err instanceof Error && err.name === "ZodError") return { ok: false, code: "invalid", message: "The mapping could not be read." };
     return onError(err);

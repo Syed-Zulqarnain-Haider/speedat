@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { ActionResult } from "@/app/admin/actions";
 import { audit } from "@/lib/audit";
 import { Forbidden, requireAdmin } from "@/lib/auth/session";
-import { beginEnrolment, disableTotp, enableTotp, verifyCode } from "@/lib/auth/totp";
+import { beginEnrolment, disableTotp, enableTotp, TotpAlreadyEnabled, verifyCode } from "@/lib/auth/totp";
 
 function onError(err: unknown): ActionResult<never> {
   if (err instanceof Forbidden) return { ok: false, code: "forbidden", message: err.message };
@@ -20,6 +20,9 @@ export async function beginTotpAction(): Promise<ActionResult<{ uri: string; qrD
     await audit(user.email, "totp_enrol_started", {});
     return { ok: true, ...r };
   } catch (err) {
+    if (err instanceof TotpAlreadyEnabled) {
+      return { ok: false, code: "already_enabled", message: "Two-factor is already on for this account. To set up a new authenticator, turn it off first with a current code." };
+    }
     return onError(err);
   }
 }

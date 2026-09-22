@@ -179,8 +179,9 @@ export async function applyToDraft(args: ApplyArgs): Promise<ApplyResult> {
       if (diff && diff.count > 0) {
         const v = await publishVersion({ data: next, by: args.actor, source: `email:${rec.fromEmail ?? "unknown"}`, summary: `${summarise(diff)} (auto from ${rec.fileName})`, changeCount: diff.count });
         revalidateTag(SITE_TAG, "max");
-        await db.update(schema.imports).set({ status: "published", appliedVersion: v.version }).where(eq(schema.imports.id, args.importId));
-        await audit(args.actor, "publish", { version: v.version, auto: true, importId: args.importId, largestMovePct: worst?.pct ?? 0 });
+        // The published document is the whole draft, so any sheet held in it earlier goes live now too.
+        const imports = await markImportsPublished(v.version);
+        await audit(args.actor, "publish", { version: v.version, auto: true, importId: args.importId, imports, largestMovePct: worst?.pct ?? 0 });
         return { status: "published", result, draft: next, publishedVersion: v.version, error: null };
       }
     } else {
@@ -197,6 +198,38 @@ Review and publish at ${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/admin.`,
   return { status: "applied", result, draft: next, publishedVersion: null, error: null };
 }
 
+/**
+ * A publish takes every sheet that was applied to the draft live: mark them
+ * `published` with the version they went out in, so the list stops saying
+ * "publish to go live". Returns the ids that changed. Every publish path
+ * (admin, email auto-publish) calls this after `publishVersion`.
+ */
+export async function markImportsPublished(version: number): Promise<number[]> {
+  const rows = await db.update(schema.imports).set({ status: "published", appliedVersion: version }).where(eq(schema.imports.status, "applied")).returning({ id: schema.imports.id });
+  return rows.map((r) => r.id);
+}
+
+/**
+ * The draft was thrown away or replaced wholesale (discard, restore), so the
+ * sheets applied to it are no longer in the editor. They go back to waiting,
+ * with their stored rows and remembered mapping, so the admin can apply them
+ * again rather than be told they are still in the editor - or, after the
+ * next publish, that they went live. Returns the ids that changed.
+ */
+export async function releaseAppliedImports(): Promise<number[]> {
+  const rows = await db
+    .update(schema.imports)
+    .set({ status: "needs_mapping", decidedBy: null, decidedAt: null })
+    .where(eq(schema.imports.status, "applied"))
+    .returning({ id: schema.imports.id });
+  return rows.map((r) => r.id);
+}
+
+/** Whether a version was published unattended by the email intake (its `source` is `email:<sender>`). */
+export function isAutoPublished(versionSource: string | null | undefined): boolean {
+  return typeof versionSource === "string" && versionSource.startsWith("email:");
+}
+
 export interface ImportSummary {
   id: number;
   receivedAt: string;
@@ -209,6 +242,8 @@ export interface ImportSummary {
   errors: number;
   warnings: number;
   appliedVersion: number | null;
+  /** For a published sheet: it went live unattended (email auto-publish) rather than by an admin's publish. */
+  publishedAuto: boolean;
 }
 
 export async function listImports(limit = 15): Promise<ImportSummary[]> {
@@ -223,8 +258,10 @@ export async function listImports(limit = 15): Promise<ImportSummary[]> {
       error: schema.imports.error,
       result: schema.imports.result,
       appliedVersion: schema.imports.appliedVersion,
+      versionSource: schema.versions.source,
     })
     .from(schema.imports)
+    .leftJoin(schema.versions, eq(schema.versions.version, schema.imports.appliedVersion))
     .orderBy(desc(schema.imports.receivedAt))
     .limit(limit);
   return rows.map((r) => ({
@@ -239,6 +276,7 @@ export async function listImports(limit = 15): Promise<ImportSummary[]> {
     errors: r.result?.errors.length ?? 0,
     warnings: r.result?.warnings.length ?? 0,
     appliedVersion: r.appliedVersion,
+    publishedAuto: r.status === "published" && isAutoPublished(r.versionSource),
   }));
 }
 

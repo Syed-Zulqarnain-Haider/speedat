@@ -1188,10 +1188,11 @@ details.how li {
 .notes li {
   margin: 2px 0;
 }
-/* "Sample prices for now." — one muted line, no box (page.tsx prints it). */
+/* "Sample prices for now." — one muted line, no box (SampleNotice.tsx: under the home calculator and under the
+   /services board). Sized on the root token, not --i-label: it also prints outside .instrument. */
 .sample {
   margin: 0 0 12px;
-  font-size: var(--i-label);
+  font-size: var(--fs-label);
   line-height: 1.45;
   color: var(--muted);
 }

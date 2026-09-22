@@ -5,7 +5,7 @@
  */
 import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import * as OTPAuth from "otpauth";
 import QRCode from "qrcode";
 import { db, schema } from "@/lib/db";
@@ -37,12 +37,31 @@ function totpFor(secret: string, email: string): OTPAuth.TOTP {
   return new OTPAuth.TOTP({ issuer: ISSUER, label: email, algorithm: "SHA1", digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(secret) });
 }
 
-/** Start enrolment: a new (not yet enabled) secret, its otpauth URI and a QR image. */
+/** Thrown when enrolment is started for an admin whose two-factor is already on. */
+export class TotpAlreadyEnabled extends Error {
+  constructor() {
+    super("Two-factor is already on for this account");
+    this.name = "TotpAlreadyEnabled";
+  }
+}
+
+/**
+ * Start enrolment: a new (not yet enabled) secret, its otpauth URI and a QR image.
+ * Refused while two-factor is on: an enabled secret may only be replaced after
+ * `disableTotp`, which demands a current code — otherwise a stale tab (or anyone
+ * holding the session) could switch the second factor off without one. The
+ * check is the UPDATE's own WHERE clause, so it cannot race a concurrent enable.
+ */
 export async function beginEnrolment(email: string): Promise<{ uri: string; qrDataUrl: string; secret: string }> {
   const secret = new OTPAuth.Secret({ size: 20 }).base32;
   const uri = totpFor(secret, email).toString();
+  const written = await db
+    .update(schema.admins)
+    .set({ totpSecret: encryptSecret(secret), totpEnabled: false, totpLastStep: null })
+    .where(and(eq(schema.admins.email, email), eq(schema.admins.totpEnabled, false)))
+    .returning({ email: schema.admins.email });
+  if (written.length === 0) throw new TotpAlreadyEnabled();
   const qrDataUrl = await QRCode.toDataURL(uri, { margin: 1, width: 220 });
-  await db.update(schema.admins).set({ totpSecret: encryptSecret(secret), totpEnabled: false, totpLastStep: null }).where(eq(schema.admins.email, email));
   return { uri, qrDataUrl, secret };
 }
 

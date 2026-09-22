@@ -4,10 +4,9 @@ import { useState } from "react";
 import { addEventAction, updateShipmentAction } from "@/app/admin/shipments/actions";
 import { Toast, useToast } from "@/components/calculator/Toast";
 import { fmtDateTime } from "@/lib/pricing/format";
+import { STATUSES, type Status, currentStatus, customerMessage } from "./shipmentMessage";
 
 // Mirrors src/lib/shipments.ts (server-only module) for the client.
-const STATUSES = ["booked", "picked_up", "in_transit", "customs", "out_for_delivery", "delivered", "exception"] as const;
-type Status = (typeof STATUSES)[number];
 const LABEL: Record<Status, string> = {
   booked: "Booked",
   picked_up: "Picked up",
@@ -16,15 +15,6 @@ const LABEL: Record<Status, string> = {
   out_for_delivery: "Out for delivery",
   delivered: "Delivered",
   exception: "Needs attention",
-};
-const CUSTOMER_TEXT: Record<Status, string> = {
-  booked: "Your shipment is booked. We will collect it and hand it to the airline.",
-  picked_up: "We have collected your shipment and it is being prepared for the flight.",
-  in_transit: "Your shipment is on its way to the destination country.",
-  customs: "Your shipment is with customs at the destination. This can take a day or two.",
-  out_for_delivery: "Your shipment is out for delivery today.",
-  delivered: "Your shipment has been delivered.",
-  exception: "There is a hold-up with your shipment. We are on it and will update you shortly.",
 };
 
 export interface ShipmentView {
@@ -59,7 +49,7 @@ function waDigits(phone: string): string | null {
 export function ShipmentDesk({ shipment, events: initialEvents, companyName }: { shipment: ShipmentView; events: EventView[]; companyName: string }) {
   const [s, setS] = useState(shipment);
   const [events, setEvents] = useState(initialEvents);
-  const [status, setStatus] = useState<Status>((STATUSES as readonly string[]).includes(s.status) ? (s.status as Status) : "booked");
+  const [status, setStatus] = useState<Status>(currentStatus(s.status));
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, showToast] = useToast();
@@ -82,13 +72,8 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName }: {
     showToast(`Status set to ${LABEL[status]}`);
   };
 
-  const customerMsg = [
-    `Hi${s.customerName ? ` ${s.customerName}` : ""}, an update from ${companyName} on your shipment ${s.id} to ${s.destination}:`,
-    CUSTOMER_TEXT[(s.status as Status) in LABEL ? (s.status as Status) : "booked"],
-    s.trackingNo ? `Tracking number: ${s.trackingNo}${s.carrier ? ` (${s.carrier})` : ""}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  // Includes the note of the latest timeline entry, as the note field promises.
+  const customerMsg = customerMessage(companyName, s, events);
   const wa = waDigits(s.customerPhone);
 
   const field = (label: string, key: keyof typeof s, type = "text", cls?: string) => (
@@ -104,7 +89,7 @@ export function ShipmentDesk({ shipment, events: initialEvents, companyName }: {
       />
     </label>
   );
-  const current: Status = (s.status as Status) in LABEL ? (s.status as Status) : "booked";
+  const current = currentStatus(s.status);
 
   return (
     <div className="ship">

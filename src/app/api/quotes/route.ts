@@ -2,16 +2,19 @@
  * POST /api/quotes — log a quote the customer acted on. Best-effort: the
  * browser fires it with keepalive when Book is tapped and never waits for
  * it. Input is validated and capped; the price is recomputed server-side
- * against the live document so a tampered total is stored as what the
- * engine says, not what the client sent.
+ * against the live document (shipping from the engine, add-ons by label
+ * from the settings) so a tampered total is stored as what the engine
+ * says, not what the client sent. The stored `total` is the one number the
+ * customer booked — shipping plus the add-ons that were on, the "Total" of
+ * their WhatsApp message — with the parts itemised in `detail`.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { upsertQuoteLead } from "@/lib/leads";
 import { clientIp, rateLimit } from "@/lib/limits";
-import { fmtMoney } from "@/lib/pricing/format";
-import { gToKg, priceService } from "@/lib/pricing/engine";
+import { priceService } from "@/lib/pricing/engine";
+import { bookedTotal, leadSummary, resolveAddons } from "@/lib/pricing/quote";
 import { getLiveHold, getLiveSite } from "@/lib/site/live";
 
 const Body = z.object({
@@ -20,6 +23,7 @@ const Body = z.object({
   serviceId: z.string().max(40),
   type: z.enum(["pkg", "doc"]),
   billableG: z.number().int().min(1).max(1_000_000),
+  /** The number the customer's screen showed: shipping plus the add-ons that were on. Kept only as a note when it disagrees with the engine. */
   total: z.number().min(0).max(100_000_000),
   version: z.number().int().min(0),
   piecesText: z.string().max(600).optional(),
@@ -28,6 +32,7 @@ const Body = z.object({
   from: z.string().max(80).optional(),
   booked: z.boolean().optional(),
   mode: z.enum(["quick", "detail"]).optional(),
+  /** Labels of the add-ons that were on; amounts are never taken from the client. */
   addons: z.array(z.string().max(80)).max(20).optional(),
   contents: z.string().max(120).optional(),
 });
@@ -49,16 +54,18 @@ export async function POST(req: Request) {
   const dest = site.destinations.find((d) => d.id === parsed.destId && d.active);
   const service = site.services.find((s) => s.id === parsed.serviceId);
   if (!dest || !service) return NextResponse.json({ error: { code: "not_found", message: "Unknown destination or service" } }, { status: 404 });
-  const { id, destId, serviceId, type, billableG, total: clientTotal, version, booked, ...rest } = parsed;
+  const { id, destId, serviceId, type, billableG, total: clientTotal, version, booked, addons: addonLabels, ...rest } = parsed;
   const price = priceService(site.settings, dest, serviceId, billableG, type);
   if (!price) return NextResponse.json({ error: { code: "not_found", message: "Service not offered" } }, { status: 404 });
-  const detail: Record<string, unknown> = { ...rest };
-  if (Math.round(clientTotal) !== price.total) detail.clientTotal = clientTotal;
+  const addons = resolveAddons(site.settings, addonLabels);
+  const total = bookedTotal(price.total, addons);
+  const detail: Record<string, unknown> = { ...rest, shipping: price.total, addons: addons.map((a) => ({ label: a.label, amount: a.amount })) };
+  if (Math.round(clientTotal) !== total) detail.clientTotal = clientTotal;
   try {
     await db
       .insert(schema.quotes)
-      .values({ id, destId, serviceId, type, billableG, total: price.total, version, booked: !!booked, detail })
-      .onConflictDoUpdate({ target: schema.quotes.id, set: { booked: !!booked, detail } });
+      .values({ id, destId, serviceId, type, billableG, total, version, booked: !!booked, detail })
+      .onConflictDoUpdate({ target: schema.quotes.id, set: { booked: !!booked, total, detail } });
   } catch (err) {
     console.error("quote log failed", err);
     return NextResponse.json({ error: { code: "unavailable", message: "Could not save the quote" } }, { status: 503 });
@@ -70,7 +77,7 @@ export async function POST(req: Request) {
         quoteId: id,
         destId,
         weightG: billableG,
-        summary: `${service.name} to ${dest.name} · ${gToKg(billableG)} kg · ${fmtMoney(price.total, site.settings.currency)}${rest.piecesText ? ` · ${rest.piecesText}` : ""}`,
+        summary: leadSummary({ service: service.name, dest: dest.name, billableG, shipping: price.total, addons, currency: site.settings.currency, piecesText: rest.piecesText }),
         contents: rest.contents,
       });
     } catch (err) {

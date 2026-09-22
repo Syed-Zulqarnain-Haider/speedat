@@ -12,14 +12,15 @@ const Input = z.object({
   notes: z.string().max(4000).optional(),
 });
 
-export async function updateLeadAction(input: unknown): Promise<ActionResult<{ status: string; notes: string; updatedAt: string }>> {
+export async function updateLeadAction(input: unknown): Promise<ActionResult<{ status: string; notes: string; updatedAt: string; updatedBy: string }>> {
   try {
     const user = await requireAdmin();
     const { id, status, notes } = Input.parse(input);
     const row = await updateLead(id, { status, notes }, user.email);
     if (!row) return { ok: false, code: "not_found", message: "That lead no longer exists." };
     await audit(user.email, "lead_updated", { leadId: id, status, notesChanged: notes != null });
-    return { ok: true, status: row.status, notes: row.notes, updatedAt: row.updatedAt.toISOString() };
+    // updatedBy travels back so the card's "Last touched by" footer appears on the save, not on the next reload.
+    return { ok: true, status: row.status, notes: row.notes, updatedAt: row.updatedAt.toISOString(), updatedBy: row.updatedBy };
   } catch (err) {
     if (err instanceof Forbidden) return { ok: false, code: "forbidden", message: err.message };
     if (err instanceof Error && err.name === "ZodError") return { ok: false, code: "invalid", message: "Check the values." };

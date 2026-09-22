@@ -198,4 +198,14 @@ describe("boardNote", () => {
     expect(note).toContain("PKR 500");
     expect(note).not.toMatch(/\d kg|PKR \d/);
   });
+
+  it("describes only the days on hold: no parcel, document limit or pickup charge reaches the browser", () => {
+    for (const site of [devLike(), SEED, gridSeed()]) {
+      const note = boardNote(site, true);
+      expect(note).toBe("Working days per service · prices are being updated");
+      expect(note).not.toMatch(/PKR|kg|\d|pickup|document/);
+    }
+    // Off hold the second argument changes nothing.
+    expect(boardNote(devLike(), false)).toBe(boardNote(devLike()));
+  });
 });

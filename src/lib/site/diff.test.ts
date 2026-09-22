@@ -44,6 +44,74 @@ describe("diffSite", () => {
     b.importProfiles.push({ signature: "a|b", name: "rates.xlsx", map: {}, savedAt: "2026-01-01", cost: false, margin: 0, mround: 1 });
     const d = diffSite(SEED, b);
     expect(d.lines.map((l) => l.label)).toEqual(["taxPct", "Website text · heroTitle", "Rates are live", "Import layout remembered"]);
+    expect(d.lines[1]).toMatchObject({ old: "", new: "New title" });
+  });
+});
+
+describe("diffSite text fields", () => {
+  const faqLines = () => SEED.content.faq.split("\n");
+
+  it("shows the changed line of a multi-line field, not its first 90 characters", () => {
+    const b = clone();
+    const ls = faqLines();
+    ls[2] = `${ls[2]} ZZTEST`;
+    b.content.faq = ls.join("\n");
+    const d = diffSite(SEED, b);
+    expect(d.count).toBe(1);
+    expect(d.lines[0]).toEqual({ kind: "field", label: "Website text · faq (line 3)", old: faqLines()[2], new: `${faqLines()[2]} ZZTEST` });
+  });
+
+  it("windows a long line around the change so old and new never read the same", () => {
+    const b = clone();
+    const ls = faqLines();
+    expect(ls[0]!.length).toBeGreaterThan(120);
+    ls[0] = ls[0]!.replace("shows the working.", "shows the ZZTEST working.");
+    b.content.faq = ls.join("\n");
+    const d = diffSite(SEED, b);
+    const l = d.lines[0]!;
+    expect(l.label).toBe("Website text · faq (line 1)");
+    expect(l.old).not.toBe(l.new);
+    expect(l.new).toContain("ZZTEST");
+    expect(l.old).toContain("shows the working.");
+    expect(l.old!.startsWith("…")).toBe(true);
+    expect(l.new!.length).toBeLessThanOrEqual(92);
+    // A short line that grows past the window is cut from the front only as far as needed.
+    const g = clone();
+    const gs = faqLines();
+    gs[2] = `${gs[2]} ZZTEST-LINE3`;
+    g.content.faq = gs.join("\n");
+    const t = diffSite(SEED, g).lines[0]!;
+    expect(t.label).toBe("Website text · faq (line 3)");
+    expect(t.old).toBe("…ays duties at the destination? | The receiver, when the country charges them.");
+    expect(t.new).toBe("…ays duties at the destination? | The receiver, when the country charges them. ZZTEST-LINE3");
+    expect(t.new!.length).toBe(91); // "…" + a full 90-character window
+    // The same edit on a single-line field (no line marker) is windowed the same way.
+    const c = clone();
+    c.settings.disclaimer = SEED.settings.disclaimer.replace("customs delays.", "ZZTEST customs delays.");
+    const s = diffSite(SEED, c).lines[0]!;
+    expect(s.label).toBe("disclaimer");
+    expect(s.new).toContain("ZZTEST");
+    expect(s.old).not.toBe(s.new);
+  });
+
+  it("names added, removed and multi-line changes", () => {
+    const b = clone();
+    b.settings.holidays = "2026-12-25 | Quaid-e-Azam Day\n2027-03-23";
+    expect(diffSite(SEED, b).lines[0]).toMatchObject({ label: "holidays (lines 1–2 added)", old: "", new: "2026-12-25 | Quaid-e-Azam Day ⏎ 2027-03-23" });
+    const c = clone();
+    c.content.faq = faqLines().filter((_, i) => i !== 2).join("\n");
+    expect(diffSite(SEED, c).lines[0]).toMatchObject({ label: "Website text · faq (line 3 removed)", old: faqLines()[2], new: "" });
+    const e = clone();
+    const ls = faqLines();
+    ls.splice(2, 0, "Extra question? | Extra answer.");
+    e.content.faq = ls.join("\n");
+    expect(diffSite(SEED, e).lines[0]).toMatchObject({ label: "Website text · faq (line 3 added)", old: "", new: "Extra question? | Extra answer." });
+    const f = clone();
+    const ms = faqLines();
+    ms[1] = "Q2? | A2.";
+    ms[3] = "Q4? | A4.";
+    f.content.faq = ms.join("\n");
+    expect(diffSite(SEED, f).lines[0]).toMatchObject({ label: "Website text · faq (lines 2–4)" });
   });
 });
 

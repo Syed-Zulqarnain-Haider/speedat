@@ -4,6 +4,7 @@ import { CtaBand } from "@/components/site/CtaBand";
 import { PageHead } from "@/components/site/PageHead";
 import { RatesBoard } from "@/components/site/home/RatesBoard";
 import { ServiceList } from "@/components/site/pages/ServiceList";
+import { SampleNotice } from "@/components/site/SampleNotice";
 import { fmtHour } from "@/lib/pricing/format";
 import { getLiveHold, getLiveSite } from "@/lib/site/live";
 import { originCities } from "@/lib/site/text";
@@ -16,7 +17,10 @@ export const metadata: Metadata = { title: "Services" };
  * from the settings (cities, cutoff, the document and parcel limits), then
  * the rates board in the same 720px column as the list (`.page-board`,
  * site.css PAGES: at the full wrap width a country sat ~900px from its
- * prices), then the contact line. No cards, no icons, nothing that moves.
+ * prices) with the sample-prices notice under it until the rates are live
+ * (the board prints the same numbers as the home calculator, so it carries
+ * the same caveat), then the contact line. No cards, no icons, nothing
+ * that moves.
  */
 export default async function ServicesPage() {
   const [site, hold] = await Promise.all([getLiveSite(), getLiveHold()]);
@@ -46,6 +50,7 @@ export default async function ServicesPage() {
       </section>
       <div className="page-board">
         <RatesBoard site={site} holdOn={hold.on} />
+        <SampleNotice live={site.live} holdOn={hold.on} />
       </div>
       <CtaBand whatsapp={co.whatsapp} phone={co.phone} hours={c.hours} title={c.ctaTitle} sub={c.ctaSub} />
     </>

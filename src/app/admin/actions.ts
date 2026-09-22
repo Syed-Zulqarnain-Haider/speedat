@@ -8,6 +8,7 @@
 import { updateTag } from "next/cache";
 import { audit } from "@/lib/audit";
 import { Forbidden, requireAdmin } from "@/lib/auth/session";
+import { markImportsPublished, releaseAppliedImports } from "@/lib/import/intake";
 import { diffSite, summarise, validateSite } from "@/lib/site/diff";
 import { getHold, HOLD_MESSAGE_MAX, setHold, type Hold } from "@/lib/site/hold";
 import { SITE_TAG } from "@/lib/site/live";
@@ -54,13 +55,15 @@ export async function saveDraftAction(data: unknown): Promise<ActionResult<{ upd
   }
 }
 
-export async function discardDraftAction(): Promise<ActionResult<{ data: SiteData; baseVersion: number }>> {
+export async function discardDraftAction(): Promise<ActionResult<{ data: SiteData; baseVersion: number; updatedAt: string }>> {
   try {
     const user = await requireAdmin();
     await discardDraft();
     const d = await getDraft();
-    await audit(user.email, "draft_discarded", {});
-    return { ok: true, data: d.data, baseVersion: d.baseVersion };
+    // Sheets applied to the discarded draft are no longer in the editor; they wait to be applied again.
+    const released = await releaseAppliedImports();
+    await audit(user.email, "draft_discarded", { releasedImports: released });
+    return { ok: true, data: d.data, baseVersion: d.baseVersion, updatedAt: d.updatedAt };
   } catch (err) {
     return onError(err);
   }
@@ -86,13 +89,15 @@ export async function publishAction(input: PublishInput): Promise<ActionResult<{
     if (diff && diff.count === 0) return fail("nochange", "There is nothing to publish.");
     const summary = diff ? summarise(diff) : "First publish";
     const v = await publishVersion({ data: doc, by: user.email, source: "admin", summary, changeCount: diff?.count ?? 0, expectedBase: input.expectedBase });
+    // Every sheet applied to the draft went out in this version; the Recent sheets list says so.
+    const imports = await markImportsPublished(v.version);
     let resumed = false;
     if (input.resume === true && (await getHold()).on) {
       await setHold(false, user.email);
       resumed = true;
     }
     updateTag(SITE_TAG); // immediate expiry: the next request anywhere reads the new state, no stale-while-revalidate
-    await audit(user.email, "publish", { version: v.version, summary, resumedPrices: resumed, changes: diff?.lines.slice(0, 200) ?? [] });
+    await audit(user.email, "publish", { version: v.version, summary, resumedPrices: resumed, imports, changes: diff?.lines.slice(0, 200) ?? [] });
     if (resumed) await audit(user.email, "hold_off", { version: v.version, viaPublish: true });
     return { ok: true, version: v.version, publishedAt: v.publishedAt, resumed };
   } catch (err) {
@@ -103,7 +108,7 @@ export async function publishAction(input: PublishInput): Promise<ActionResult<{
 }
 
 /** Copy an older version's rates, settings and text into the draft (not published until reviewed). */
-export async function restoreVersionAction(version: number): Promise<ActionResult<{ data: SiteData }>> {
+export async function restoreVersionAction(version: number): Promise<ActionResult<{ data: SiteData; updatedAt: string }>> {
   try {
     const user = await requireAdmin();
     const old = await getVersion(version);
@@ -118,8 +123,10 @@ export async function restoreVersionAction(version: number): Promise<ActionResul
       content: old.content,
     };
     await saveDraft(data, user.email);
-    await audit(user.email, "draft_restored", { fromVersion: version });
-    return { ok: true, data };
+    // The restored rates replace whatever a sheet put in the draft; it waits to be applied again.
+    const released = await releaseAppliedImports();
+    await audit(user.email, "draft_restored", { fromVersion: version, releasedImports: released });
+    return { ok: true, data, updatedAt: new Date().toISOString() };
   } catch (err) {
     return onError(err);
   }

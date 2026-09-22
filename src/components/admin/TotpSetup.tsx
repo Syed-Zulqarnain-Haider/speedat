@@ -1,10 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { beginTotpAction, confirmTotpAction, disableTotpAction } from "@/app/admin/security/actions";
 import { Toast, useToast } from "@/components/calculator/Toast";
 
 export function TotpSetup({ enabled: initialEnabled }: { enabled: boolean }) {
+  const router = useRouter();
   const [enabled, setEnabled] = useState(initialEnabled);
   const [enrol, setEnrol] = useState<{ uri: string; qrDataUrl: string; secret: string } | null>(null);
   const [code, setCode] = useState("");
@@ -17,8 +19,16 @@ export function TotpSetup({ enabled: initialEnabled }: { enabled: boolean }) {
     setError(null);
     const res = await beginTotpAction();
     setBusy(false);
-    if (!res.ok) return setError(res.message);
+    if (!res.ok) {
+      // A stale tab: two-factor was turned on elsewhere after this page loaded.
+      if (res.code === "already_enabled") {
+        setEnabled(true);
+        router.refresh();
+      }
+      return setError(res.message);
+    }
     setEnrol({ uri: res.uri, qrDataUrl: res.qrDataUrl, secret: res.secret });
+    router.refresh(); // Recent activity now has totp_enrol_started
   };
   const confirm = async () => {
     setBusy(true);
@@ -30,6 +40,10 @@ export function TotpSetup({ enabled: initialEnabled }: { enabled: boolean }) {
     setEnrol(null);
     setCode("");
     showToast("Two-factor sign-in is on");
+    // The Admins list ("2FA on") and Recent activity are rendered on the server; re-read them
+    // now so the page agrees with the pill, rather than on the next reload. This component's
+    // own state (pill, toast) is client state and survives the refresh.
+    router.refresh();
   };
   const disable = async () => {
     setBusy(true);
@@ -40,6 +54,7 @@ export function TotpSetup({ enabled: initialEnabled }: { enabled: boolean }) {
     setEnabled(false);
     setCode("");
     showToast("Two-factor sign-in is off");
+    router.refresh();
   };
 
   return (

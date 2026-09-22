@@ -819,6 +819,11 @@ p.facts {
   padding-top: 32px;
   border-top: 1px solid var(--line);
 }
+/* The sample-prices notice under the board (SampleNotice.tsx): a line's gap below the last hairline, no gap
+   after — the CTA band brings its own. */
+.page-board > .sample {
+  margin: 12px 0 0;
+}
 
 /* ---- the facts list (/about, /contact): label and value side by side, a hairline under every row ---- */
 dl.facts {

@@ -65,6 +65,7 @@
 
   /* ---- shadows (the admin's panels and publish bar only; no customer page casts one, v3 §6) ---- */
   --shadow-instrument: 0 1px 0 rgba(10, 26, 51, 0.06), 0 24px 48px -28px rgba(10, 26, 51, 0.28);
+  --scroll-shade: rgba(10, 26, 51, 0.28); /* cast by a pinned table column over the columns scrolling under it */
   --glass: color-mix(in srgb, var(--bg) 92%, transparent);
 
   /* ---- type scale (html = 17px): the ADMIN scale; the customer site redefines it on .site below ---- */
@@ -173,6 +174,7 @@
   --focus: #fb923c;
   --gap: #0b1424;
   --shadow-instrument: 0 1px 0 rgba(0, 0, 0, 0.35), 0 24px 48px -28px rgba(0, 0, 0, 0.7);
+  --scroll-shade: rgba(0, 0, 0, 0.7);
   color-scheme: dark;
 }
 /* Navy sections stay navy on the dark page and read as a panel through a hairline. */

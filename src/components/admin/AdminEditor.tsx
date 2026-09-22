@@ -22,6 +22,8 @@ import { ContentForm } from "./ContentForm";
 import { HoldBar } from "./HoldBar";
 import { ImportPanel } from "./ImportPanel";
 import { RatesTable } from "./RatesTable";
+import { scrollToClear } from "./reviewLanding";
+import { afterReplace, type SaveState } from "./saveState";
 import { SECTIONS, sectionNo } from "./sections";
 import { SettingsForm } from "./SettingsForm";
 import { TestPrice } from "./TestPrice";
@@ -39,8 +41,6 @@ interface Props {
   /** Emailed or uploaded sheets still waiting for a column map — the Import tile. */
   sheetsWaiting?: number;
 }
-
-type SaveState = "saved" | "dirty" | "saving" | "error";
 
 function daysAgo(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -83,11 +83,17 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
     setReview(null);
   };
 
-  /** Replace the whole draft (discard / restore / import) and remount the uncontrolled fields. */
-  const replace = (data: SiteData, state: SaveState = "saved") => {
+  /**
+   * Replace the whole draft (discard / restore / import / publish) and remount the
+   * uncontrolled fields. `storedAt` is the time the server stored this document;
+   * without it the replacement is local only and autosaves like an edit.
+   */
+  const replace = (data: SiteData, storedAt?: string) => {
     setDraft(data);
     setEpoch((e) => e + 1);
-    setSave(state);
+    const next = afterReplace(storedAt);
+    setSave(next.save);
+    if (next.savedAt) setSavedAt(next.savedAt);
     setReview(null);
   };
 
@@ -121,7 +127,17 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
   const showReview = () => {
     setPubMsg(null);
     setReview({ errors: validateSite(draft), diff: diffSite(liveData, draft), warnings: warnSite(draft) });
-    setTimeout(() => document.getElementById("reviewbox")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 0);
+    // Next tick, once the card exists: land it between the sticky section tabs and the
+    // fixed publish bar, measured as they are now. scrollIntoView("nearest") aligned the
+    // card with the viewport's bottom edge, which put its Publish/Cancel row under the bar.
+    setTimeout(() => {
+      const box = document.getElementById("reviewbox");
+      if (!box) return;
+      const bar = document.querySelector<HTMLElement>(".pubbar");
+      const tabs = document.querySelector<HTMLElement>(".subnav.sections");
+      const delta = scrollToClear(box.getBoundingClientRect(), bar?.getBoundingClientRect().top ?? window.innerHeight, tabs?.offsetHeight ?? 0);
+      if (delta) window.scrollBy({ top: delta, behavior: "smooth" });
+    }, 0);
   };
 
   const publish = async () => {
@@ -135,7 +151,7 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
       return;
     }
     // What we sent is now the live document; adopt it (with the live flag the server applied).
-    replace({ ...draft, live: live.live || goLive });
+    replace({ ...draft, live: live.live || goLive }, res.publishedAt);
     if (res.resumed) setHold((h) => ({ ...h, on: false, by: user.email, since: new Date().toISOString() }));
     const held = hold.on && !res.resumed;
     setPubMsg(held ? `Published version ${res.version}. Prices stay on hold until you resume them.` : `Published version ${res.version}. Customers see the new prices now.`);
@@ -148,8 +164,9 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
     const res = await discardDraftAction();
     setBusy(false);
     if (!res.ok) return showToast(res.message);
-    replace(res.data);
+    replace(res.data, res.updatedAt);
     showToast("Changes discarded");
+    router.refresh(); // sheets that were in the discarded draft are back to waiting
   };
 
   const restore = async (version: number) => {
@@ -157,8 +174,9 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
     const res = await restoreVersionAction(version);
     setBusy(false);
     if (!res.ok) return showToast(res.message);
-    replace(res.data);
+    replace(res.data, res.updatedAt);
     showToast(`Version ${version} loaded into the editor — publish to make it live`);
+    router.refresh(); // sheets the restore overwrote are back to waiting
     document.getElementById("sec-rates")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -237,8 +255,8 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
         imports={imports}
         intake={intake}
         isOwner={canPublish}
-        adopt={(data) => replace(data, "saved")}
-        adoptLocal={(data) => replace(data, "dirty")}
+        adopt={(data, updatedAt) => replace(data, updatedAt)}
+        adoptLocal={(data) => replace(data)}
         toast={showToast}
         refresh={() => router.refresh()}
       />

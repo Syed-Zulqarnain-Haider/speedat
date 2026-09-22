@@ -2,7 +2,7 @@
  * Quote objects and the WhatsApp message built from them. Pure so the same
  * text is produced on the site, in the admin's test panel and in tests.
  */
-import { gToKg } from "./engine";
+import { addonsList, gToKg } from "./engine";
 import { fmtMoney } from "./format";
 import type { Addon, Settings, ShipmentType, Weights } from "./types";
 
@@ -63,6 +63,23 @@ export interface QuoteTextInput {
   contents?: string;
 }
 
+/** "Pickup and service charges" → "pickup and service charges", so an add-on's label reads on inside "Includes PKR 500 …"; an acronym keeps its case. */
+export const midSentence = (s: string): string => s.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase());
+
+/** The one number the customer booked: shipping plus every add-on that was on. */
+export const bookedTotal = (shipping: number, addons: readonly Pick<Addon, "amount">[]): number => addons.reduce((t, a) => t + a.amount, shipping);
+
+/**
+ * The add-ons a booking named, resolved against the settings the price was
+ * computed from, so their amounts are the document's and never the browser's.
+ * Labels the document no longer has are dropped; order follows the settings.
+ */
+export function resolveAddons(settings: Pick<Settings, "addons">, labels: readonly string[] | undefined): Addon[] {
+  if (!labels?.length) return [];
+  const want = new Set(labels);
+  return addonsList(settings).filter((a) => want.has(a.label));
+}
+
 export function quoteText(q: Quote, ctx: QuoteTextInput): string {
   const out = [`Hi ${ctx.companyName}, I want to book a shipment.`, `Quote: ${q.id}`];
   if (q.from) out.push(`From: ${q.from}`);
@@ -72,16 +89,36 @@ export function quoteText(q: Quote, ctx: QuoteTextInput): string {
   out.push(`${q.type === "doc" ? "Documents" : "Packages"}: ${q.piecesText}`, `Charged on: ${gToKg(q.billableG)} kg`);
   if (ctx.addons.length) {
     out.push(`Shipping: ${fmtMoney(q.total, ctx.currency)}`);
-    let sum = q.total;
-    for (const a of ctx.addons) {
-      out.push(`${a.label}: ${fmtMoney(a.amount, ctx.currency)}`);
-      sum += a.amount;
-    }
-    out.push(`Total: ${fmtMoney(sum, ctx.currency)}`);
+    for (const a of ctx.addons) out.push(`${a.label}: ${fmtMoney(a.amount, ctx.currency)}`);
+    out.push(`Total: ${fmtMoney(bookedTotal(q.total, ctx.addons), ctx.currency)}`);
   } else out.push(`Price: ${fmtMoney(q.total, ctx.currency)}`);
   const c = ctx.contents?.trim();
   if (c) out.push(`Contents: ${c}`);
   return out.join("\n");
+}
+
+export interface LeadSummaryInput {
+  service: string;
+  dest: string;
+  billableG: number;
+  /** Shipping price before add-ons, as the engine computed it. */
+  shipping: number;
+  addons: readonly Addon[];
+  currency: string;
+  piecesText?: string;
+}
+
+/**
+ * The inbox line for a booked quote. Its price is the Total the customer's
+ * WhatsApp message carries, with what is inside it named the way the site
+ * names it, so the owner and the customer never read two different numbers:
+ * "Express to Canada · 5 kg · PKR 19,620 (includes PKR 500 pickup and service charges) · 1 × 5 kg".
+ */
+export function leadSummary(i: LeadSummaryInput): string {
+  const inside = i.addons.length ? ` (includes ${i.addons.map((a) => `${fmtMoney(a.amount, i.currency)} ${midSentence(a.label)}`).join(", ")})` : "";
+  let s = `${i.service} to ${i.dest} · ${gToKg(i.billableG)} kg · ${fmtMoney(bookedTotal(i.shipping, i.addons), i.currency)}${inside}`;
+  if (i.piecesText) s += ` · ${i.piecesText}`;
+  return s;
 }
 
 export function waLink(whatsapp: string, text: string): string {

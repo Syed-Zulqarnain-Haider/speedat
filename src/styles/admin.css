@@ -15,7 +15,10 @@
 }
 .admin-main {
   min-width: 0;
-  padding: 16px 16px 150px;
+  /* Room under the last block for the fixed publish bar: on phones it stacks its
+     state and buttons (~146px tall, 16px off the bottom), so 150px left the end of
+     the page — the review card's buttons — under it even at maximum scroll. */
+  padding: 16px 16px 200px;
 }
 .admin-side {
   display: none;
@@ -661,6 +664,16 @@ section.block .desc {
   background: inherit;
   border-right: 1px solid var(--line);
 }
+/* This table shares the class `rates` with the public board, whose site.css rules reach it:
+   from 720px up they set the first HEADER cell `position: static` at higher specificity than
+   the rule above, so "Destination" slid away with the scroll while the names under it stayed
+   pinned (it read "ION" at 1366px once the table was scrolled to the actions). Same range as
+   that rule: below 720px the board's phone rules hide the cell by other means, left as is. */
+@media (min-width: 720px) {
+  .admin-app table.rates thead th:first-child {
+    position: sticky;
+  }
+}
 .admin-app tr.grid-row > td {
   position: static;
   background: var(--bg);
@@ -668,10 +681,37 @@ section.block .desc {
   height: auto;
   border-right: 0;
 }
+/* ...and the actions column stays put on the right, so Undo and Remove never leave the screen. */
+.admin-app table.rates th:last-child,
+.admin-app table.rates td.row-actions {
+  position: sticky;
+  right: 0;
+  z-index: var(--z-sticky);
+  background: inherit;
+  border-left: 1px solid var(--line);
+}
+/* While a side still hides columns (data-overflow, set by RatesTable), the column pinned on that
+   side casts a shadow over them: the table visibly continues underneath. The overlay scrollbar
+   of Windows 11 and macOS is not drawn until the pointer reaches it, so it cannot be the cue. */
+.tablewrap[data-overflow~="right"] table.rates th:last-child,
+.tablewrap[data-overflow~="right"] table.rates td.row-actions {
+  box-shadow: -12px 0 12px -10px var(--scroll-shade);
+}
+.tablewrap[data-overflow~="left"] th:first-child,
+.tablewrap[data-overflow~="left"] tr:not(.grid-row) > td:first-child {
+  box-shadow: 12px 0 12px -10px var(--scroll-shade);
+}
 .admin-app tr.changed td:first-child {
   box-shadow: inset 3px 0 0 var(--hot-a);
 }
-.admin-app tr.inactive td {
+.tablewrap[data-overflow~="left"] tr.changed > td:first-child {
+  box-shadow:
+    inset 3px 0 0 var(--hot-a),
+    12px 0 12px -10px var(--scroll-shade);
+}
+/* Dim the contents, not the cells: a pinned cell at half opacity would let the columns
+   scrolling underneath show through it. */
+.admin-app tr.inactive td > * {
   opacity: 0.5;
 }
 .admin-app td.ctr {
@@ -680,6 +720,23 @@ section.block .desc {
 .admin-app td.row-actions,
 .admin-app td.grid-cell {
   white-space: nowrap;
+}
+/* In grid mode Undo sits above Remove (the rows are tall enough): side by side they widened
+   the pinned column by 64px, over the Prices control. */
+.admin-app table.rates-grid td.row-actions > .btn {
+  display: flex;
+  width: fit-content;
+  margin-inline: auto;
+}
+.admin-app table.rates-grid td.row-actions > .btn + .btn {
+  margin-top: 6px;
+}
+/* site.css right-aligns every `.rates` cell for the public rates board, which pushed the
+   Prices control to the far end of the widest column. It and its heading start at the left
+   edge, so they are on screen before the table is scrolled. */
+.admin-app th.grid-cell,
+.admin-app td.grid-cell {
+  text-align: left;
 }
 .admin-app td .hint,
 .admin-app td.meta {
@@ -817,6 +874,9 @@ section.block .desc {
 }
 .grid-summary {
   font-size: 0.75rem;
+}
+.grid-summary > span {
+  display: block;
 }
 .grid-boxes {
   display: grid;
@@ -1116,7 +1176,10 @@ section.block .desc {
   .hist.versions li {
     grid-template-columns: auto minmax(0, 1fr);
   }
-  .hist.versions li .meta:last-of-type,
+  /* The summary is the second .meta (after the date). Not :last-of-type: on
+     the live row the last <span> is the LIVE .tag, so that matched nothing,
+     the summary fell into column 1 and stretched it past the viewport. */
+  .hist.versions li .meta + .meta,
   .hist.versions li .btn,
   .hist.versions li .tag {
     grid-column: 2;

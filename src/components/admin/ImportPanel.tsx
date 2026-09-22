@@ -8,11 +8,12 @@
  */
 import { useMemo, useState, type ReactNode } from "react";
 import { applyImportAction, loadImportAction, rejectImportAction, saveIntakeAction, uploadSheetAction, type SheetPayload } from "@/app/admin/import-actions";
-import type { ImportStatus, ImportSummary, IntakeSettings } from "@/lib/import/intake";
+import type { ImportSummary, IntakeSettings } from "@/lib/import/intake";
 import { applyImport, buildImport, buildPasteImport, findProfile, headerNames, headerSignature, mapFields } from "@/lib/import/parse";
 import type { ImportOptions, ImportResult } from "@/lib/import/types";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/pricing/format";
 import type { SiteData } from "@/lib/site/types";
+import { importStatusText } from "./importStatus";
 import { sectionNo } from "./sections";
 
 interface Props {
@@ -20,21 +21,13 @@ interface Props {
   imports: ImportSummary[];
   intake: IntakeSettings;
   isOwner: boolean;
-  /** Replace the editor's draft with the server's post-import draft (already saved). */
-  adopt: (data: SiteData) => void;
+  /** Replace the editor's draft with the server's post-import draft (already saved, at `updatedAt`). */
+  adopt: (data: SiteData, updatedAt: string) => void;
   /** Replace the editor's draft with a local edit that still needs saving. */
   adoptLocal: (data: SiteData) => void;
   toast: (m: string) => void;
   refresh: () => void;
 }
-
-const STATUS_LABEL: Record<ImportStatus | string, string> = {
-  needs_mapping: "needs mapping",
-  applied: "in the editor — publish to go live",
-  published: "published automatically",
-  rejected: "rejected",
-  failed: "could not be read",
-};
 
 export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal, toast, refresh }: Props) {
   const [sheet, setSheet] = useState<SheetPayload | null>(null);
@@ -75,8 +68,10 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
     fd.append("file", file);
     const res = await uploadSheetAction(fd);
     setBusy(false);
-    if (!res.ok) return setMsg(<div className="notice err">{res.message}</div>);
-    open(res);
+    if (!res.ok) setMsg(<div className="notice err">{res.message}</div>);
+    else open(res);
+    // The server records every sheet it tried to read — an unreadable one as a
+    // "could not be read" row — so "Recent sheets" is stale either way.
     refresh();
   };
 
@@ -100,7 +95,7 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
     const res = await applyImportAction({ importId: sheet.importId, sheet: current, headerRow, map, opts });
     setBusy(false);
     if (!res.ok) return setMsg(<div className="notice err">{res.message}</div>);
-    adopt(res.draft);
+    adopt(res.draft, res.updatedAt);
     setSheet(null);
     setMsg(null);
     toast("Import applied — review and publish");
@@ -285,13 +280,7 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
               <span className="meta">
                 {fmtDateTime(i.receivedAt)} · {i.source === "email" ? `from ${i.fromEmail ?? "unknown"}` : "uploaded"}
               </span>
-              <span className={`meta${i.status === "failed" ? " warn" : ""}`}>
-                {STATUS_LABEL[i.status] ?? i.status}
-                {i.appliedVersion ? ` (version ${i.appliedVersion})` : ""}
-                {i.rows ? ` · ${i.rows} rows` : ""}
-                {i.errors ? ` · ${i.errors} skipped` : ""}
-                {i.error ? ` · ${i.error}` : ""}
-              </span>
+              <span className={`meta${i.status === "failed" ? " warn" : ""}`}>{importStatusText(i)}</span>
               {i.status === "needs_mapping" ? (
                 <button className="btn small outline" type="button" disabled={busy} onClick={() => openExisting(i.id)}>
                   Map columns

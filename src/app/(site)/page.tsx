@@ -4,6 +4,7 @@ import { Calculator } from "@/components/calculator/Calculator";
 import { Hero, type HeroStat } from "@/components/site/Hero";
 import { HoldPanel } from "@/components/site/HoldPanel";
 import { RatesBoard } from "@/components/site/home/RatesBoard";
+import { SampleNotice } from "@/components/site/SampleNotice";
 import { lines, parts } from "@/lib/pricing/engine";
 import { heroSubAuto, heroTitleAuto } from "@/lib/site/copy";
 import { getLiveHold, getLiveSite } from "@/lib/site/live";
@@ -44,7 +45,7 @@ export default async function QuotePage() {
     instrument = (
       <>
         <Calculator site={site} />
-        {site.live ? null : <p className="sample">Sample prices for now. We confirm the real price on WhatsApp.</p>}
+        <SampleNotice live={site.live} holdOn={hold.on} />
       </>
     );
   }

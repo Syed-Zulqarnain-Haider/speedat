@@ -17,7 +17,7 @@ import { setSession, useMounted, useSession } from "@/lib/client/session";
 import { addonsList, gToKg, gridWeights, isGrid, lines, priceAll, toNumLoose } from "@/lib/pricing/engine";
 import { estimateDelivery, type DeliveryEstimate } from "@/lib/pricing/dates";
 import { fmtDay, fmtHour, fmtMoney, fmtNum, fmtRange, inputDate, localDateFromInput, quoteId, quoteIdFor } from "@/lib/pricing/format";
-import { IN, LB, cargoText, piecesText, quoteText, waLink, weightSentence, type Quote, type Units } from "@/lib/pricing/quote";
+import { IN, LB, bookedTotal, cargoText, midSentence, piecesText, quoteText, waLink, weightSentence, type Quote, type Units } from "@/lib/pricing/quote";
 import type { Addon, PieceInput, PriceResult, ServicePrice, ShipmentType } from "@/lib/pricing/types";
 import type { PublishedVersion } from "@/lib/site/types";
 import { fromPrice } from "@/lib/site/copy";
@@ -61,13 +61,14 @@ function weightOptions(sets: PublishedVersion["settings"]): number[] {
   return out.filter((x) => !(maxKg > 0) || x <= maxKg);
 }
 
-function logQuote(q: Quote, extra: Record<string, unknown>): void {
+/** `total` is the number the customer saw — shipping plus the add-ons that were on; the server recomputes both from the live document. */
+function logQuote(q: Quote, addons: Addon[], extra: Record<string, unknown>): void {
   try {
     void fetch("/api/quotes", {
       method: "POST",
       keepalive: true,
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...q, ...extra }),
+      body: JSON.stringify({ ...q, total: bookedTotal(q.total, addons), addons: addons.map((a) => a.label), ...extra }),
     });
   } catch {
     /* logging never blocks a booking */
@@ -215,9 +216,6 @@ function etaQuick(p: ServicePrice): string {
   return p.days ? `${p.days} days` : "";
 }
 
-/** "Pickup and service charges" → "pickup and service charges", so an add-on's label reads on inside "Includes PKR 500 …"; an acronym keeps its case. */
-const midSentence = (s: string): string => s.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase());
-
 type ReadoutState = "country" | "weight" | "live" | "cargo" | "none";
 
 function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExact }: QuickProps) {
@@ -236,6 +234,10 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
 
   const p = res?.ok && chosen ? res.prices[chosen]! : null;
   const sum = p ? p.total + addonsTotal : 0;
+
+  // The from-price on every tile ("from PKR 5,220 · 4–6 days"): the shared `fromPrice`, the same function the
+  // headline and the rates board print, once per rate document.
+  const froms = useMemo(() => new Map(site.destinations.map((d) => [d.id, fromPrice(site, d.id)])), [site]);
 
   // The one sentence, in plain words: what to do next, or what the price is for. Live, a second short line says
   // when the parcel arrives (the only place the dates are printed). The live note is "Express · 5 kg · Canada";
@@ -256,7 +258,12 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
     note = sets.maxKg > 0 ? `Over ${sets.maxKg} kg? We price it on WhatsApp` : "We price this on WhatsApp";
   } else if (!available.length) {
     state = "none";
-    note = `No service to ${dest?.name} yet. Ask us on WhatsApp`;
+    // A country the tile and the rates board price (its grid has boxes, just not one at or above this weight)
+    // is served: the sentence names the weight, so it never contradicts the "from PKR …" printed beside it.
+    // "No service" is for a country priced at no weight at all. The green button beside the line says "Ask on
+    // WhatsApp", so the line does not repeat it: with a long country name it would take a fourth line on a
+    // phone and grow the bar.
+    note = froms.get(destId) ? `No price for ${kgv} kg to ${dest?.name} yet` : `No service to ${dest?.name} yet. Ask us on WhatsApp`;
   } else {
     state = "live";
     const sv = site.services.find((s) => s.id === chosen)!;
@@ -266,7 +273,8 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
     when = est ? `Arrives ${fmtRange(est)}` : "";
   }
 
-  // The green button always has somewhere to go: the quote, the cargo message, or the plain chat.
+  // The green button always has somewhere to go: the quote, the cargo message, the no-price-at-this-weight message,
+  // or the plain chat.
   let bookHref = `https://wa.me/${site.company.whatsapp}`;
   let bookLabel = "Ask on WhatsApp";
   let quote: Quote | null = null;
@@ -276,6 +284,10 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
     // no "about N kg" (it is more than N).
     bookHref = waLink(site.company.whatsapp, `Hi ${site.company.name}, I need a cargo rate.\nTo: ${dest.name}\nWeight: over ${sets.maxKg} kg`);
     bookLabel = "Ask for a cargo rate";
+  } else if (state === "none" && dest) {
+    // No price at this weight: the visitor has named the country and the weight, so the chat opens with both
+    // (the same shape as the cargo message) instead of blank.
+    bookHref = waLink(site.company.whatsapp, `Hi ${site.company.name}, I need a rate.\nTo: ${dest.name}\nWeight: ${kgv} kg`);
   } else if (p && res?.ok && dest) {
     const sv = site.services.find((s) => s.id === chosen)!;
     const est = sets.showEta && p.days ? estimateDelivery(p.days, sets, null, new Date()) : null;
@@ -318,9 +330,6 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
   const pickedId = destId && !tiles.some((d) => d.id === destId) ? destId : "";
   const priced = weightOptions(sets);
   const kgs = KG_BUTTONS.filter((k) => priced.includes(k));
-  // The from-price on every tile ("from PKR 5,220 · 4–6 days"): the shared `fromPrice`, the same function the
-  // headline and the rates board print, once per rate document.
-  const froms = useMemo(() => new Map(site.destinations.map((d) => [d.id, fromPrice(site, d.id)])), [site]);
 
   const waiting = state === "country" || state === "weight";
 
@@ -440,7 +449,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
               target="_blank"
               rel="noopener"
               onClick={() => {
-                if (quote) logQuote(quote, { booked: true, mode: "quick", addons: selectedAddons.map((a) => a.label) });
+                if (quote) logQuote(quote, selectedAddons, { booked: true, mode: "quick" });
               }}
             >
               <UI.wa />
@@ -905,7 +914,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
               target="_blank"
               rel="noopener"
               href={waLink(site.company.whatsapp, text)}
-              onClick={() => logQuote(quote, { booked: true, mode: "detail", addons: selectedAddons.map((a) => a.label), contents })}
+              onClick={() => logQuote(quote, selectedAddons, { booked: true, mode: "detail", contents })}
             >
               <UI.wa />
               Book on WhatsApp

@@ -27,10 +27,62 @@ export interface Diff {
 /** Rate moves at or above this are flagged in the review. */
 export const FLAG_PCT = 25;
 
-const short = (v: unknown): string => {
-  const s = String(v ?? "");
-  return s.length > 90 ? `${s.slice(0, 90)}…` : s;
-};
+/** Most a review line shows per side; the audit log keeps these lines, so they stay short. */
+const SHOW = 90;
+/** Characters kept before a change that does not fit whole, and after one that does. */
+const CTX = 30;
+const TAIL = 20;
+
+/**
+ * Cut two differing texts to a window that holds the difference. Cutting both to
+ * their first 90 characters hid every edit made past them: old and new read the
+ * same and the owner could not see what he was about to publish. The window
+ * starts at the beginning when that reaches the change, else as late as the
+ * change needs; a change longer than the window keeps its run-up instead.
+ */
+function around(x: string, y: string): [string, string] {
+  if (x.length <= SHOW && y.length <= SHOW) return [x, y];
+  const min = Math.min(x.length, y.length);
+  let p = 0;
+  while (p < min && x[p] === y[p]) p++;
+  let q = 0;
+  while (q < min - p && x[x.length - 1 - q] === y[y.length - 1 - q]) q++;
+  const need = Math.max(Math.min(x.length, x.length - q + TAIL), Math.min(y.length, y.length - q + TAIL));
+  let start = Math.max(0, need - SHOW);
+  if (start > p - CTX) start = Math.max(0, p - CTX);
+  const cut = (s: string) => {
+    const end = Math.min(s.length, start + SHOW);
+    return `${start > 0 ? "…" : ""}${s.slice(start, end)}${end < s.length ? "…" : ""}`;
+  };
+  return [cut(x), cut(y)];
+}
+
+/**
+ * Old and new text for a changed field, with `where` naming the changed line(s)
+ * of a multi-line field (FAQ, services, story, add-ons, holidays) so only those
+ * lines are shown; single lines are windowed around the change.
+ */
+export function fieldChange(a: unknown, b: unknown): { where?: string; old: string; new: string } {
+  const sa = String(a ?? "");
+  const sb = String(b ?? "");
+  const la = sa ? sa.split(/\r?\n/) : [];
+  const lb = sb ? sb.split(/\r?\n/) : [];
+  if (la.length <= 1 && lb.length <= 1) {
+    const [o, n] = around(sa, sb);
+    return { old: o, new: n };
+  }
+  let i = 0;
+  while (i < la.length && i < lb.length && la[i] === lb[i]) i++;
+  let j = 0;
+  while (j < la.length - i && j < lb.length - i && la[la.length - 1 - j] === lb[lb.length - 1 - j]) j++;
+  const oa = la.slice(i, la.length - j);
+  const ob = lb.slice(i, lb.length - j);
+  const n = Math.max(oa.length, ob.length);
+  const span = n <= 1 ? `line ${i + 1}` : `lines ${i + 1}–${i + n}`;
+  const where = !oa.length ? `${span} added` : !ob.length ? `${span} removed` : span;
+  const [o, nw] = around(oa.join(" ⏎ "), ob.join(" ⏎ "));
+  return { where, old: o, new: nw };
+}
 
 export function diffSite(a: SiteData, b: SiteData): Diff {
   const out: Diff = { count: 0, byDest: {}, lines: [] };
@@ -108,7 +160,9 @@ export function diffSite(a: SiteData, b: SiteData): Diff {
     for (const k of Object.keys(gb)) {
       if (String(ga[k] ?? "") === String(gb[k] ?? "")) continue;
       out.count++;
-      out.lines.push({ kind: "field", label: g === "content" ? `Website text · ${k}` : k, old: short(ga[k]), new: short(gb[k]) });
+      const ch = fieldChange(ga[k], gb[k]);
+      const base = g === "content" ? `Website text · ${k}` : k;
+      out.lines.push({ kind: "field", label: ch.where ? `${base} (${ch.where})` : base, old: ch.old, new: ch.new });
     }
   }
   if (!!a.live !== !!b.live) {
@@ -224,9 +278,25 @@ export function warnSite(s: SiteData): string[] {
             break;
           }
         }
-        const missing = gridWeights(s.settings).filter((k) => !isNum(q.grid?.[String(k)]));
-        if (missing.length && missing.length < gridWeights(s.settings).length)
-          w.push(`${x.name} · ${sv.name}: no price for ${missing.length} weight${missing.length === 1 ? "" : "s"} (${missing.slice(0, 6).join(", ")}${missing.length > 6 ? "…" : ""} kg) — those parcels are charged at the next heavier priced kg.`);
+        // Priced as the engine reads it (`gridPrice`): a blank box below a priced one is billed at the next
+        // heavier priced kg, but above the last priced kg there is no such kg — those parcels get no price at
+        // all, and the site sends the customer to WhatsApp. Say which is which.
+        const priced = gridWeights(s.settings).filter((k) => {
+          const v = q.grid?.[String(k)];
+          return isNum(v) && v > 0;
+        });
+        const missing = gridWeights(s.settings).filter((k) => !priced.includes(k));
+        if (missing.length && priced.length) {
+          const top = priced[priced.length - 1]!;
+          const gaps = missing.filter((k) => k < top);
+          const above = missing.filter((k) => k > top);
+          if (gaps.length)
+            w.push(`${x.name} · ${sv.name}: no price for ${gaps.length} weight${gaps.length === 1 ? "" : "s"} (${gaps.slice(0, 6).join(", ")}${gaps.length > 6 ? "…" : ""} kg) — those parcels are charged at the next heavier priced kg.`);
+          if (above.length)
+            w.push(
+              `${x.name} · ${sv.name}: no price above ${top} kg — parcels of ${above.length === 1 ? `${above[0]} kg` : `${above[0]}–${above[above.length - 1]} kg`} get no price on the site and are sent to WhatsApp.`,
+            );
+        }
       }
     }
     if (ex && no) {

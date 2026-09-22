@@ -68,6 +68,22 @@ describe("grid pricing end to end", () => {
     expect(d.lines[0]).toMatchObject({ label: "United Kingdom · Express 4 kg", old: "PKR 12,200", new: "PKR 100" });
     expect(d.lines[0]!.flag).toMatch(/-99%/);
   });
+  it("warns that weights above the last priced kg get no price, and only gaps fall to the next heavier kg", () => {
+    // A sheet whose columns stop at 3 kg: 4–25 kg have no heavier priced kg to fall to, so the engine prices nothing.
+    const t = structuredClone(s);
+    t.destinations[0]!.rates.express!.grid = { "1": 4000, "2": 6000, "3": 8000 };
+    expect(priceAll(t, { destId: "gb", rows: [{ kg: 5 }] })).toMatchObject({ ok: true, prices: { express: null } });
+    const w = warnSite(t);
+    expect(w).toContain("United Kingdom · Express: no price above 3 kg — parcels of 4–25 kg get no price on the site and are sent to WhatsApp.");
+    expect(w.some((x) => x.startsWith("United Kingdom · Express:") && x.includes("next heavier priced kg"))).toBe(false);
+    // A gap below the last priced kg is billed at the next heavier priced kg; the top-only case names one weight.
+    const u = structuredClone(s);
+    u.destinations[0]!.rates.express!.grid = { "1": 4000, "2": 6000, "5": 9000, "24": 20000 };
+    expect(priceAll(u, { destId: "gb", rows: [{ kg: 3 }] })).toMatchObject({ ok: true, prices: { express: { gridKg: 5 } } });
+    const w2 = warnSite(u);
+    expect(w2).toContain("United Kingdom · Express: no price for 20 weights (3, 4, 6, 7, 8, 9… kg) — those parcels are charged at the next heavier priced kg.");
+    expect(w2).toContain("United Kingdom · Express: no price above 24 kg — parcels of 25 kg get no price on the site and are sent to WhatsApp.");
+  });
 });
 
 describe("grid sheets", () => {

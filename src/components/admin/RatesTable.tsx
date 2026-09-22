@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { hiddenEdges } from "@/lib/client/overflow";
 import { gridWeights, isGrid, isNum } from "@/lib/pricing/engine";
 import { fmtNum, nameKey, slug } from "@/lib/pricing/format";
 import type { Destination } from "@/lib/pricing/types";
@@ -68,10 +69,39 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
   const [filter, setFilter] = useState("");
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // Per-row generation, bumped by Undo so that row's uncontrolled inputs remount and show
+  // the restored live values (the table-wide `epoch` only moves when the whole draft is replaced).
+  const [rowGen, setRowGen] = useState<Record<string, number>>({});
   const s = draft;
   const grid = isGrid(s.settings);
   const kgs = gridWeights(s.settings);
   const k = nameKey(filter);
+
+  // The table is wider than the page from about 1400px down (two services, the per-kg
+  // summary, the actions). `data-overflow` names the side(s) still hiding columns and the
+  // pinned first/last columns cast a shadow over that side (admin.css) — the cue that the
+  // table scrolls sideways, which the overlay scrollbar of today's browsers never gives at
+  // rest. Re-armed on `epoch` because the table remounts then.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const mark = () => {
+      const edges = hiddenEdges(el.scrollLeft, el.clientWidth, el.scrollWidth);
+      if (edges) el.setAttribute("data-overflow", edges);
+      else el.removeAttribute("data-overflow");
+    };
+    mark();
+    el.addEventListener("scroll", mark, { passive: true });
+    // The table's own box changes when a row is added, Undo appears or a name grows.
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(mark);
+    ro?.observe(el);
+    if (el.firstElementChild) ro?.observe(el.firstElementChild);
+    return () => {
+      el.removeEventListener("scroll", mark);
+      ro?.disconnect();
+    };
+  }, [epoch]);
 
   const setRate = (id: string, svc: string, field: "first" | "addl" | "doc", raw: string) => {
     const v = numOrNull(raw);
@@ -152,13 +182,15 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
           className="btn small primary"
           type="button"
           disabled={readOnly}
-          onClick={() =>
+          onClick={() => {
+            // `update` runs its callback inside setDraft's updater, i.e. while AdminEditor renders,
+            // so the row's own state (opening its price editor) must be set out here, not in there.
+            const id = uniqueId(slug("New destination"), s.destinations);
             update((d) => {
-              const id = uniqueId(slug("New destination"), d.destinations);
               d.destinations.push({ id, name: "New destination", active: false, rates: {} });
-              setOpen(id);
-            })
-          }
+            });
+            setOpen(id);
+          }}
         >
           Add country
         </button>
@@ -169,7 +201,7 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
           Copy as CSV
         </button>
       </div>
-      <div className="tablewrap">
+      <div className="tablewrap" ref={wrapRef}>
         <table className={grid ? "rates rates-grid" : "rates"} key={epoch}>
           <thead>
             <tr>
@@ -201,7 +233,13 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
                   </Fragment>
                 ),
               )}
-              {grid ? <th>Prices 1–{kgs[kgs.length - 1]} kg</th> : null}
+              {grid ? (
+                // Two lines: on one it runs under the pinned actions column at 1366px.
+                <th className="grid-cell">
+                  Prices <br />
+                  1–{kgs[kgs.length - 1]} kg
+                </th>
+              ) : null}
               <th />
             </tr>
           </thead>
@@ -210,8 +248,10 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
               const hidden = !!k && !nameKey(x.name).includes(k);
               const isChanged = !!changed[x.id];
               const isOpen = open === x.id;
+              // Ids are slugs ([a-z0-9-]), so "@" cannot occur in one and the key stays unique.
+              const rowKey = `${x.id}@${rowGen[x.id] ?? 0}`;
               return (
-                <Fragment key={x.id}>
+                <Fragment key={rowKey}>
                   <tr className={`${x.active ? "" : "inactive"}${isChanged ? " changed" : ""}`} hidden={hidden}>
                     <td>
                       <input
@@ -284,7 +324,14 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
                         <button className="btn small outline" type="button" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : x.id)}>
                           {isOpen ? "Hide prices ▴" : "Prices ▾"}
                         </button>
-                        <div className="hint grid-summary">{s.services.map((sv) => `${sv.name}: ${gridSummary(x, sv.id)}`).join(" · ")}</div>
+                        {/* One service per line: side by side they made this the widest column on the page. */}
+                        <div className="hint grid-summary">
+                          {s.services.map((sv) => (
+                            <span key={sv.id}>
+                              {sv.name}: {gridSummary(x, sv.id)}
+                            </span>
+                          ))}
+                        </div>
                       </td>
                     ) : null}
                     <td className="ctr row-actions">
@@ -294,15 +341,17 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
                             className="btn small outline"
                             type="button"
                             aria-label={`Undo changes to ${x.name}`}
-                            onClick={() =>
+                            onClick={() => {
                               update((d) => {
                                 const idx = d.destinations.findIndex((z) => z.id === x.id);
                                 const orig = live.destinations.find((z) => z.id === x.id);
                                 if (idx < 0) return;
                                 if (orig) d.destinations[idx] = structuredClone(orig);
                                 else d.destinations.splice(idx, 1);
-                              })
-                            }
+                              });
+                              // Remount the row so its inputs show the restored values, not what was typed.
+                              setRowGen((m) => ({ ...m, [x.id]: (m[x.id] ?? 0) + 1 }));
+                            }}
                           >
                             Undo
                           </button>{" "}

@@ -148,9 +148,14 @@ function hard(s: string): string {
 /**
  * "1 kg parcel · documents up to 0.5 kg · pickup PKR 500 included" — the
  * second line of the board's caption. On a phone it wraps once; the hard
- * spaces keep "PKR 500" and "0.5 kg" whole where it does.
+ * spaces keep "PKR 500" and "0.5 kg" whole where it does. On hold the board
+ * prints only the days per service (no price, no Documents column), so the
+ * caption says that instead: the parcel, the document limit and the pickup
+ * charge describe prices that are not there, and the hold's promise is that
+ * nothing price-shaped reaches the browser.
  */
-export function boardNote(site: SiteData): string {
+export function boardNote(site: SiteData, holdOn = false): string {
+  if (holdOn) return "Working days per service · prices are being updated";
   const s = site.settings;
   const addonTotal = addonsOnTotal(site);
   let out = `1${NBSP}kg parcel`;
