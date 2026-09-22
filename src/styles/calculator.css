@@ -50,12 +50,16 @@
 
 /* ---------- the instrument skin: overrides of the shared skins ---------- */
 /* The panel is the page below 1024 (no chrome; the wrap's gutter is its margin, which the sticky bar's negative
-   margin assumes); from 1024 it is a bordered box with --r3 and --panel-pad. Never a shadow. */
+   margin assumes); from 1024 it is a bordered box with --r3 and --panel-pad. Never a shadow. The shared skin's
+   --surface fill goes with the chrome: in light mode --surface is the page white, but in dark mode it is a shade
+   lighter than --bg, and a square, unpadded fill from "1 Country" down through the result block's reserved room
+   read as an empty frame with a hard bottom edge — and the sticky bar (--bg) as a darker strip inside it. */
 .instrument .panel {
   padding: 0;
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  background: transparent;
   margin-bottom: 24px;
 }
 .instrument .field {
@@ -1272,6 +1276,10 @@ details.how li {
     border: 1px solid var(--line);
     border-radius: var(--r3);
     margin-bottom: 16px;
+  }
+  /* The bordered box gets the shared skin's fill back (transparent below 1024, where the panel is the page). */
+  .instrument .panel {
+    background: var(--surface);
   }
   .instrument .panel > :last-child,
   .results > :last-child,

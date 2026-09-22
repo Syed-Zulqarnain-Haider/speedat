@@ -14,30 +14,20 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { UI } from "@/components/Icons";
 import { setSession, useMounted, useSession } from "@/lib/client/session";
-import { addonsList, gToKg, gridWeights, isGrid, lines, priceAll, toNumLoose } from "@/lib/pricing/engine";
+import { addonsList, gToKg, gridWeights, isGrid, lines, priceAll } from "@/lib/pricing/engine";
 import { estimateDelivery, type DeliveryEstimate } from "@/lib/pricing/dates";
 import { fmtDay, fmtHour, fmtMoney, fmtNum, fmtRange, inputDate, localDateFromInput, quoteId, quoteIdFor } from "@/lib/pricing/format";
-import { IN, LB, bookedTotal, cargoText, midSentence, piecesText, quoteText, waLink, weightSentence, type Quote, type Units } from "@/lib/pricing/quote";
-import type { Addon, PieceInput, PriceResult, ServicePrice, ShipmentType } from "@/lib/pricing/types";
+import { bookedTotal, cargoText, midSentence, piecesText, quoteText, waLink, weightSentence, type Quote, type Units } from "@/lib/pricing/quote";
+import type { Addon, PriceResult, ServicePrice, ShipmentType } from "@/lib/pricing/types";
 import type { PublishedVersion } from "@/lib/site/types";
 import { fromPrice } from "@/lib/site/copy";
 import { flagCode } from "@/lib/site/countries";
 import { originCities } from "@/lib/site/text";
 import { Flag } from "@/components/site/Flag";
+import { entry, newRow, shown, toRows, type PieceRow } from "./pieces";
 import { Toast, useToast } from "./Toast";
 
 type Mode = "quick" | "detail";
-
-interface PieceRow {
-  key: number;
-  kg: string;
-  qty: string;
-  L: string;
-  W: string;
-  H: string;
-}
-
-const newRow = (key: number, kg = ""): PieceRow => ({ key, kg, qty: "1", L: "", W: "", H: "" });
 
 /** The weight buttons on the quick view, in kilograms; only those the rate card can price are shown. */
 const KG_BUTTONS = [1, 2, 3, 5, 10, 15, 20, 25];
@@ -305,6 +295,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
       pieces: 1,
       piecesText: `1 × ${kgv} kg`,
       billableG: res.weights.billableG,
+      chargeG: res.weights.chargeG,
       total: p.total,
       docRate: false,
       version: site.version,
@@ -486,21 +477,6 @@ interface DetailProps {
   onBack: () => void;
 }
 
-function toRows(pieces: PieceRow[], type: ShipmentType, units: Units): PieceInput[] {
-  const imp = units === "imperial";
-  const n = (s: string): number | null => {
-    const v = toNumLoose(s);
-    return v == null || Number.isNaN(v) ? null : v;
-  };
-  const m = (v: number | null | undefined, k: number) => (v != null && v > 0 ? v * k : (v ?? null));
-  return pieces.map((pc) => {
-    let r: PieceInput = { kg: n(pc.kg), qty: n(pc.qty) ?? 1, L: n(pc.L), W: n(pc.W), H: n(pc.H) };
-    if (type === "doc") r = { ...r, L: null, W: null, H: null };
-    if (imp) r = { kg: m(r.kg, LB), qty: r.qty, L: m(r.L, IN), W: m(r.W, IN), H: m(r.H, IN) };
-    return r;
-  });
-}
-
 interface Chosen {
   serviceId: string;
   /** Snapshot of the inputs the choice was made for; any edit withdraws it. */
@@ -525,34 +501,18 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
   const shipDate = shipDateInput || today;
   const shipDateObj = localDateFromInput(shipDate);
 
-  const rows = useMemo(() => toRows(pieces, type, units), [pieces, type, units]);
+  // The engine prices what was typed, in the unit it was typed in; the units toggle only changes how the other
+  // system's fields are shown (see ./pieces). It never rewrites a value, so it never moves a price.
+  const rows = useMemo(() => toRows(pieces, type), [pieces, type]);
   const res = priceAll(site, { destId, type, rows });
   const inputSig = JSON.stringify({ destId, type, units, pieces, shipDate, from });
   const active = chosen && chosen.sig === inputSig ? chosen : null;
   const destSel = site.destinations.find((x) => x.id === destId && x.active);
 
   const updatePiece = (key: number, field: keyof Omit<PieceRow, "key">, value: string) => {
-    setPieces((ps) => ps.map((p) => (p.key === key ? { ...p, [field]: value } : p)));
-    if (field === "kg" && pieces[0]?.key === key) rememberKg(value);
-  };
-
-  const switchUnits = (u: Units) => {
-    if (u === units) return;
-    const toImp = u === "imperial";
-    const conv = (s: string, k: number) => {
-      const v = toNumLoose(s);
-      return v != null && !Number.isNaN(v) && v > 0 ? String(Math.round(v * k * 100) / 100) : s;
-    };
-    setPieces((ps) =>
-      ps.map((p) => ({
-        ...p,
-        kg: conv(p.kg, toImp ? 1 / LB : LB),
-        L: conv(p.L, toImp ? 1 / IN : IN),
-        W: conv(p.W, toImp ? 1 / IN : IN),
-        H: conv(p.H, toImp ? 1 / IN : IN),
-      })),
-    );
-    setUnits(u);
+    setPieces((ps) => ps.map((p) => (p.key === key ? { ...p, [field]: field === "qty" ? value : entry(value, units) } : p)));
+    // The quick view remembers kilograms: a weight typed in pounds is remembered as its kilograms.
+    if (field === "kg" && pieces[0]?.key === key) rememberKg(shown(entry(value, units), "metric", "kg"));
   };
 
   const imp = units === "imperial";
@@ -575,7 +535,10 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
       );
     } else if (res.reason === "destination") status = "Choose a destination to see prices and delivery dates.";
     // No weight yet: the field invites one by itself, so the line carries the one number worth knowing first.
-    else status = sets.maxKg > 0 ? `Up to ${sets.maxKg} kg per piece. Heavier is priced on WhatsApp.` : "";
+    // The engine judges the threshold on the whole shipment (every piece, times its quantity), never per piece:
+    // 2 × 13 kg is a 26 kg shipment and gets the cargo message under a 25 kg threshold. The line says so, or a
+    // visitor who reads "per piece" next to the Quantity field types two boxes that each fit and is refused.
+    else status = sets.maxKg > 0 ? `Up to ${sets.maxKg} kg per shipment, all pieces together. Heavier is priced on WhatsApp.` : "";
   } else {
     const bits = [weightSentence(res.weights, sets)];
     if (site.services.some((sv) => res.prices[sv.id]?.docRate)) bits.push(`Document rate applied (up to ${sets.docMaxKg} kg).`);
@@ -617,6 +580,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
       pieces: res.weights.pieces,
       piecesText: piecesText(res.weights, units),
       billableG: res.weights.billableG,
+      chargeG: res.weights.chargeG,
       total: price.total,
       docRate: price.docRate,
       version: site.version,
@@ -723,10 +687,10 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
         </p>
         <div className="units">
           <span className="hint">Units</span>
-          <button type="button" className="ubtn" aria-pressed={units === "metric"} onClick={() => switchUnits("metric")}>
+          <button type="button" className="ubtn" aria-pressed={units === "metric"} onClick={() => setUnits("metric")}>
             kg · cm
           </button>
-          <button type="button" className="ubtn" aria-pressed={units === "imperial"} onClick={() => switchUnits("imperial")}>
+          <button type="button" className="ubtn" aria-pressed={units === "imperial"} onClick={() => setUnits("imperial")}>
             lb · in
           </button>
         </div>
@@ -746,7 +710,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
                   <span>
                     {type === "doc" ? "Weight" : "Weight per piece"} ({imp ? "lb" : "kg"})
                   </span>
-                  <input type="number" inputMode="decimal" min="0.01" step="any" placeholder="e.g. 2.5" value={pc.kg} onChange={(e) => updatePiece(pc.key, "kg", e.target.value)} />
+                  <input type="number" inputMode="decimal" min="0.01" step="any" placeholder="e.g. 2.5" value={shown(pc.kg, units, "kg")} onChange={(e) => updatePiece(pc.key, "kg", e.target.value)} />
                 </label>
                 <label className="field">
                   <span>Quantity</span>
@@ -755,11 +719,11 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
                 <div className="field dims-field">
                   <span>Size per piece in {imp ? "inches" : "cm"} (optional)</span>
                   <div className="dims">
-                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="L" aria-label="Length" value={pc.L} onChange={(e) => updatePiece(pc.key, "L", e.target.value)} />
+                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="L" aria-label="Length" value={shown(pc.L, units, "L")} onChange={(e) => updatePiece(pc.key, "L", e.target.value)} />
                     <span className="x">×</span>
-                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="W" aria-label="Width" value={pc.W} onChange={(e) => updatePiece(pc.key, "W", e.target.value)} />
+                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="W" aria-label="Width" value={shown(pc.W, units, "W")} onChange={(e) => updatePiece(pc.key, "W", e.target.value)} />
                     <span className="x">×</span>
-                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="H" aria-label="Height" value={pc.H} onChange={(e) => updatePiece(pc.key, "H", e.target.value)} />
+                    <input type="number" inputMode="decimal" min="0.1" step="any" placeholder="H" aria-label="Height" value={shown(pc.H, units, "H")} onChange={(e) => updatePiece(pc.key, "H", e.target.value)} />
                   </div>
                 </div>
               </div>

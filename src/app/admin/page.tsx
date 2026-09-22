@@ -14,6 +14,7 @@ export default async function AdminPage() {
     getLatestVersion(),
     getDraft(),
     listVersions(20),
+    // The fifteen newest sheets plus every sheet still waiting: the tile below counts from this list.
     listImports(15),
     getIntakeSettings(),
     leadCounts(),

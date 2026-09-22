@@ -34,6 +34,41 @@ export async function getVersion(version: number): Promise<PublishedVersion | nu
   return row ? toPublished(row) : null;
 }
 
+export type NamedField = "destinations" | "services";
+
+/** The name an id last had, from the most recent version that still carried it; null when no version ever did. */
+async function retiredName(field: NamedField, id: string): Promise<string | null> {
+  const items = field === "destinations" ? sql`${schema.versions.data}->'destinations'` : sql`${schema.versions.data}->'services'`;
+  const [row] = await db
+    .select({ data: schema.versions.data })
+    .from(schema.versions)
+    .where(sql`${items} @> ${JSON.stringify([{ id }])}::jsonb`)
+    .orderBy(desc(schema.versions.version))
+    .limit(1);
+  if (!row) return null;
+  const list: readonly { id: string; name: string }[] = migrate(row.data)[field];
+  return list.find((x) => x.id === id)?.name ?? null;
+}
+
+/**
+ * `id → name` for the destinations or services in `ids`: the live document's
+ * name, or for an id it no longer carries, the name from the most recent
+ * version that still had it. Shipments and leads store only ids, so without
+ * this a country removed from the rates would print as "gb" on every record
+ * booked under it, the customer's WhatsApp update included. Ids no version
+ * ever knew are left out; callers fall back to the id itself.
+ */
+export async function namesFor(field: NamedField, live: SiteData | null, ids: Iterable<string>): Promise<Map<string, string>> {
+  const names = new Map<string, string>((live?.[field] ?? []).map((x) => [x.id, x.name]));
+  const missing = [...new Set(ids)].filter((id) => id && !names.has(id));
+  const found = await Promise.all(missing.map((id) => retiredName(field, id)));
+  missing.forEach((id, i) => {
+    const name = found[i];
+    if (name) names.set(id, name);
+  });
+  return names;
+}
+
 export async function listVersions(limit = 20): Promise<VersionMeta[]> {
   const rows = await db
     .select({

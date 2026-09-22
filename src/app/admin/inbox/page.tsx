@@ -4,7 +4,7 @@ import { InboxList, type LeadView } from "@/components/admin/InboxList";
 import { requireAdminPage } from "@/lib/auth/session";
 import { LEAD_STATUSES, leadCounts, listLeads, type LeadStatus } from "@/lib/leads";
 import { notifyConfigured } from "@/lib/notify";
-import { getLatestVersion } from "@/lib/site/repo";
+import { getLatestVersion, namesFor } from "@/lib/site/repo";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,8 @@ export default async function InboxPage(props: PageProps<"/admin/inbox">) {
   const raw = typeof sp.status === "string" ? sp.status : "new";
   const status: LeadStatus | "all" = raw === "all" || (LEAD_STATUSES as string[]).includes(raw) ? (raw as LeadStatus | "all") : "new";
   const [live, leads, counts] = await Promise.all([getLatestVersion(), listLeads(status), leadCounts()]);
-  const destName = new Map((live?.destinations ?? []).map((d) => [d.id, d.name]));
+  // A destination removed from the rates since keeps the name the lead asked about.
+  const destName = await namesFor("destinations", live, leads.flatMap((l) => (l.destId ? [l.destId] : [])));
   const views: LeadView[] = leads.map((l) => ({
     id: l.id,
     createdAt: l.createdAt.toISOString(),

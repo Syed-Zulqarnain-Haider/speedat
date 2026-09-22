@@ -48,8 +48,11 @@ export function gridPrice(grid: Record<string, number> | undefined, kg: number, 
   return null;
 }
 
-/** Slab settings the weight maths should use: grid mode bills whole kilograms from 1 kg up. */
-const effectiveSteps = (settings: Settings): { firstKg: number; stepKg: number } =>
+/**
+ * Slab settings the weight maths should use: grid mode bills whole kilograms from 1 kg up.
+ * Anything that explains a rounding to the customer must read these, not `settings.stepKg` alone.
+ */
+export const effectiveSteps = (settings: Pick<Settings, "pricingMode" | "firstKg" | "stepKg">): { firstKg: number; stepKg: number } =>
   isGrid(settings) ? { firstKg: 1, stepKg: 1 } : { firstKg: settings.firstKg, stepKg: settings.stepKg };
 
 export function computeWeights(settings: Settings, rows: PieceInput[]): Weights {

@@ -591,6 +591,9 @@ section.block .desc {
 }
 .tablewrap {
   overflow-x: auto;
+  /* A query container: the per-kilogram editor (grid editor, below) sizes itself to this box,
+     the width the owner can see, not to the table, which is wider from about 1400px down. */
+  container-type: inline-size;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
@@ -675,9 +678,10 @@ section.block .desc {
   }
 }
 .admin-app tr.grid-row > td {
+  --grid-gutter: 10px;
   position: static;
   background: var(--bg);
-  padding: 12px 10px 14px;
+  padding: 12px var(--grid-gutter) 14px;
   height: auto;
   border-right: 0;
 }
@@ -836,6 +840,17 @@ section.block .desc {
 }
 
 /* ---------- per-kilogram grid editor ---------- */
+/* The editor's row spans every column, so its cell is as wide as the table: 1,086px at 1366
+   where the wrapper shows 1,002px, and the boxes laid out 11 to a row with the 11th (11 kg,
+   22 kg) cut off at the visible edge until the table was dragged sideways. The editor keeps
+   to the wrapper's width instead (.tablewrap is the query container; the gutter is the cell's
+   own padding) and sticks to the wrapper's left edge, so the boxes wrap to what the owner can
+   see and stay put while the country rows scroll. */
+.grid-editor {
+  position: sticky;
+  left: var(--grid-gutter, 10px);
+  width: calc(100cqw - 2 * var(--grid-gutter, 10px));
+}
 .grid-service + .grid-service {
   margin-top: 16px;
   padding-top: 16px;

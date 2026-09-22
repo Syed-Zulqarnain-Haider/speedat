@@ -5,7 +5,7 @@ import { ShipmentDesk } from "@/components/admin/ShipmentDesk";
 import { requireAdminPage } from "@/lib/auth/session";
 import { leadCounts } from "@/lib/leads";
 import { getShipment } from "@/lib/shipments";
-import { getLatestVersion } from "@/lib/site/repo";
+import { getLatestVersion, namesFor } from "@/lib/site/repo";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +15,11 @@ export default async function ShipmentPage(props: PageProps<"/admin/shipments/[i
   if (!/^SH-[A-Z0-9]{8}$/.test(id)) notFound();
   const [live, found, counts] = await Promise.all([getLatestVersion(), getShipment(id), leadCounts()]);
   if (!found || !live) notFound();
-  const dest = live.destinations.find((d) => d.id === found.shipment.destId);
-  const svc = live.services.find((s) => s.id === found.shipment.serviceId);
+  // A destination or service removed from the rates since keeps the name it was booked under;
+  // the customer's WhatsApp update reads it too.
+  const [destNames, svcNames] = await Promise.all([namesFor("destinations", live, [found.shipment.destId]), namesFor("services", live, [found.shipment.serviceId])]);
+  const destination = destNames.get(found.shipment.destId) ?? found.shipment.destId;
+  const service = svcNames.get(found.shipment.serviceId) ?? found.shipment.serviceId;
   return (
     <AdminShell companyName={live.company.name} user={user} badges={{ inbox: counts.new }}>
       <section className="admin">
@@ -27,7 +30,7 @@ export default async function ShipmentPage(props: PageProps<"/admin/shipments/[i
           </div>
           <div className="topbar-right">
             <span className="meta">
-              {svc?.name ?? found.shipment.serviceId} to {dest?.name ?? found.shipment.destId}
+              {service} to {destination}
             </span>
             <Link className="btn outline small" href="/admin/shipments">
               ← All shipments
@@ -46,8 +49,8 @@ export default async function ShipmentPage(props: PageProps<"/admin/shipments/[i
             notes: found.shipment.notes,
             status: found.shipment.status,
             createdAt: found.shipment.createdAt.toISOString(),
-            destination: dest?.name ?? found.shipment.destId,
-            service: svc?.name ?? found.shipment.serviceId,
+            destination,
+            service,
           }}
           events={found.events.map((e) => ({ id: e.id, status: e.status, note: e.note, at: e.at.toISOString(), by: e.by }))}
           companyName={live.company.name}

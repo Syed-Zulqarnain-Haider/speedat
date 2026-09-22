@@ -2,7 +2,7 @@
  * Quote objects and the WhatsApp message built from them. Pure so the same
  * text is produced on the site, in the admin's test panel and in tests.
  */
-import { addonsList, gToKg } from "./engine";
+import { addonsList, effectiveSteps, gToKg, kgToG } from "./engine";
 import { fmtMoney } from "./format";
 import type { Addon, Settings, ShipmentType, Weights } from "./types";
 
@@ -25,6 +25,11 @@ export interface Quote {
   pieces: number;
   piecesText: string;
   billableG: number;
+  /**
+   * Chargeable grams before step rounding (`Weights.chargeG`). The server re-prices a booked quote from the
+   * weights, and the document limit is judged on this one: a 0.3 kg letter billed as 1 kg is still a document.
+   */
+  chargeG: number;
   /** Shipping price before add-ons. */
   total: number;
   docRate: boolean;
@@ -47,12 +52,20 @@ export function piecesText(w: Weights, units: Units): string {
     .join("; ");
 }
 
-/** One sentence explaining what weight the price is charged on. */
-export function weightSentence(w: Weights, settings: Pick<Settings, "stepKg">): string {
+/**
+ * One sentence explaining what weight the price is charged on. The rounding it names is the one the
+ * engine did (`effectiveSteps`): grid mode bills whole kilograms whatever the slab step says, and a
+ * weight under the first slab is billed as that slab, not "rounded up to the next step".
+ */
+export function weightSentence(w: Weights, settings: Pick<Settings, "pricingMode" | "firstKg" | "stepKg">): string {
   let txt = `Charged on ${gToKg(w.billableG)} kg${w.pieces > 1 ? ` for ${w.pieces} pieces` : ""}`;
   if (w.volumetricWins) txt += ` — volumetric weight (${gToKg(w.chargeG)} kg) is higher than actual (${gToKg(w.actualG)} kg).`;
-  else if (w.billableG !== w.chargeG) txt += ` (${gToKg(w.actualG)} kg, rounded up to the next ${settings.stepKg} kg).`;
-  else txt += ".";
+  else if (w.billableG !== w.chargeG) {
+    const eff = effectiveSteps(settings);
+    const stepG = kgToG(eff.stepKg);
+    const byMinimum = Math.ceil(w.chargeG / stepG) * stepG < kgToG(eff.firstKg);
+    txt += ` (${gToKg(w.actualG)} kg, ${byMinimum ? `minimum ${eff.firstKg} kg` : `rounded up to the next ${eff.stepKg} kg`}).`;
+  } else txt += ".";
   return txt;
 }
 

@@ -90,6 +90,33 @@ suite("version store", () => {
     expect(fresh.data.company.name).toBe(seed.company.name);
     expect(fresh.baseVersion).toBe(5);
   });
+
+  it("keeps naming a destination or service after it leaves the rate card", async () => {
+    const live = await repo.getLatestVersion();
+    expect((await repo.namesFor("destinations", live, ["gb", "ca"])).get("gb")).toBe("United Kingdom");
+    // v6 renames it, v7 removes it (and drops a service): the last name it had is what history answers.
+    const renamed = structuredClone((await repo.getDraft()).data);
+    renamed.destinations.find((d) => d.id === "gb")!.name = "Britain";
+    await repo.publishVersion({ data: renamed, by: "t", source: "admin", summary: "rename", changeCount: 1 });
+    const removed = structuredClone(renamed);
+    removed.destinations = removed.destinations.filter((d) => d.id !== "gb");
+    removed.services = removed.services.filter((s) => s.id !== "normal");
+    const v7 = await repo.publishVersion({ data: removed, by: "t", source: "admin", summary: "remove", changeCount: 2 });
+    expect(v7.version).toBe(7);
+    const dests = await repo.namesFor("destinations", v7, ["gb", "ca", "zz", ""]);
+    expect(dests.get("gb")).toBe("Britain");
+    expect(dests.get("ca")).toBe("Canada");
+    expect(dests.has("zz")).toBe(false);
+    expect(dests.has("")).toBe(false);
+    const svcs = await repo.namesFor("services", v7, ["normal", "express"]);
+    expect(svcs.get("normal")).toBe("Normal");
+    expect(svcs.get("express")).toBe("Express");
+    // Live still wins for an id it carries, and an empty database still answers from history.
+    const back = structuredClone(renamed);
+    back.destinations.find((d) => d.id === "gb")!.name = "Great Britain";
+    expect((await repo.namesFor("destinations", back, ["gb"])).get("gb")).toBe("Great Britain");
+    expect((await repo.namesFor("destinations", null, ["gb"])).get("gb")).toBe("Britain");
+  });
 });
 
 suite("rate sheets across a publish", () => {
@@ -158,6 +185,27 @@ suite("rate sheets across a publish", () => {
     // A later publish must not claim the released sheet went live.
     expect(await intake.markImportsPublished(3)).toEqual([]);
     expect(await byName("f.xlsx")).toMatchObject({ status: "needs_mapping", appliedVersion: null });
+  });
+
+  it("keeps every open sheet in the list however many newer sheets exist, and bounds only the settled ones", async () => {
+    // c and f wait for a mapping, g for a publish; then sixteen settled sheets arrive after them.
+    await sheet("g.xlsx", "applied");
+    for (let i = 0; i < 16; i++) await sheet(`later-${i}.xlsx`, i % 2 ? "published" : "rejected");
+    const list = await intake.listImports(15);
+    const names = list.map((i) => i.fileName);
+    expect(names).toEqual(expect.arrayContaining(["c.xlsx", "f.xlsx", "g.xlsx"]));
+    expect(list.filter((i) => i.status === "needs_mapping")).toHaveLength(2);
+    // The window still bounds settled sheets: the oldest published/rejected ones are not listed.
+    const settled = list.filter((i) => !(intake.OPEN_IMPORT_STATUSES as readonly string[]).includes(i.status));
+    expect(settled).toHaveLength(15);
+    expect(names).not.toContain("later-0.xlsx");
+    expect(names).not.toContain("a.xlsx");
+    expect(names).not.toContain("d.xlsx");
+    // Newest first, whatever the status.
+    expect(names[0]).toBe("later-15.xlsx");
+    expect(names[names.length - 1]).toBe("c.xlsx");
+    // The daily check still sees the newest sheet of all.
+    expect((await intake.listImports(1))[0]?.fileName).toBe("later-15.xlsx");
   });
 });
 

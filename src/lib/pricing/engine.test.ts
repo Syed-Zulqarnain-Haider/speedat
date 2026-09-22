@@ -100,6 +100,22 @@ describe("priceAll with the seed rates", () => {
     expect(res.weights.billableG).toBe(70500);
   });
 
+  it("judges the cargo threshold on the whole shipment, not per piece", () => {
+    // The calculator's idle line promises "Up to N kg per shipment, all pieces together": two pieces that each
+    // fit under the threshold are still refused when they exceed it together, and priced when they do not.
+    const s: RateCard = structuredClone(card);
+    s.settings.maxKg = 25;
+    const over = priceAll(s, { destId: "gb", rows: [{ kg: 13, qty: 2 }] });
+    expect(over).toMatchObject({ ok: false, reason: "overmax" });
+    if (over.ok || over.reason !== "overmax") throw new Error("expected overmax");
+    expect(over.weights.pieces).toBe(2);
+    expect(over.weights.billableG).toBe(26000);
+    expect(priceAll(s, { destId: "gb", rows: [{ kg: 12, qty: 2 }] }).ok).toBe(true);
+    expect(priceAll(s, { destId: "gb", rows: [{ kg: 25, qty: 1 }] }).ok).toBe(true);
+    // Two rows count together the same way one row with a quantity does.
+    expect(priceAll(s, { destId: "gb", rows: [{ kg: 13 }, { kg: 13 }] })).toMatchObject({ ok: false, reason: "overmax" });
+  });
+
   it("returns null for a service the destination does not offer", () => {
     const partial: RateCard = {
       ...card,

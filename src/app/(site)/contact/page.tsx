@@ -7,9 +7,9 @@ import { PhoneText } from "@/components/site/pages/PhoneText";
 import { SectionHead } from "@/components/site/pages/SectionHead";
 import { phoneSegmentsExcept } from "@/components/site/pages/phones";
 import { issueFormToken } from "@/lib/form-token";
-import { fmtHour, fmtPhone } from "@/lib/pricing/format";
+import { fmtPhone } from "@/lib/pricing/format";
 import { getLiveSite } from "@/lib/site/live";
-import { originCities } from "@/lib/site/text";
+import { cutoffFact, originCities } from "@/lib/site/text";
 
 export const metadata: Metadata = { title: "Contact" };
 
@@ -34,7 +34,7 @@ export default async function ContactPage() {
   const co = site.company;
   const cities = originCities(co);
   const mapHref = c.mapUrl || (c.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address)}` : "");
-  const cutoff = site.settings.cutoffHour != null ? fmtHour(site.settings.cutoffHour) : "";
+  const cutoff = cutoffFact(site.settings.cutoffHour);
   const dests = site.destinations
     .filter((d) => d.active)
     .map((d) => ({ id: d.id, name: d.name }))
@@ -108,7 +108,7 @@ export default async function ContactPage() {
             {cutoff ? (
               <div>
                 <dt>Cutoff</dt>
-                <dd>Book before {cutoff} for same-day pickup</dd>
+                <dd>{cutoff}</dd>
               </div>
             ) : null}
           </dl>

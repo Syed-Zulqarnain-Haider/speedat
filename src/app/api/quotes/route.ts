@@ -2,9 +2,10 @@
  * POST /api/quotes — log a quote the customer acted on. Best-effort: the
  * browser fires it with keepalive when Book is tapped and never waits for
  * it. Input is validated and capped; the price is recomputed server-side
- * against the live document (shipping from the engine, add-ons by label
- * from the settings) so a tampered total is stored as what the engine
- * says, not what the client sent. The stored `total` is the one number the
+ * against the live document (shipping from the engine, from the billed and
+ * the chargeable weight the browser priced on; add-ons by label from the
+ * settings) so a tampered total is stored as what the engine says, not
+ * what the client sent. The stored `total` is the one number the
  * customer booked — shipping plus the add-ons that were on, the "Total" of
  * their WhatsApp message — with the parts itemised in `detail`.
  */
@@ -23,6 +24,12 @@ const Body = z.object({
   serviceId: z.string().max(40),
   type: z.enum(["pkg", "doc"]),
   billableG: z.number().int().min(1).max(1_000_000),
+  /**
+   * Chargeable grams before step rounding, the weight the engine judges the document limit on. Without it a
+   * 0.3 kg letter billed as 1 kg is re-priced as a 1 kg parcel. Optional so a tab opened before this field
+   * existed still logs its quote; it then falls back to the billed weight, as before.
+   */
+  chargeG: z.number().int().min(1).max(1_000_000).optional(),
   /** The number the customer's screen showed: shipping plus the add-ons that were on. Kept only as a note when it disagrees with the engine. */
   total: z.number().min(0).max(100_000_000),
   version: z.number().int().min(0),
@@ -54,12 +61,14 @@ export async function POST(req: Request) {
   const dest = site.destinations.find((d) => d.id === parsed.destId && d.active);
   const service = site.services.find((s) => s.id === parsed.serviceId);
   if (!dest || !service) return NextResponse.json({ error: { code: "not_found", message: "Unknown destination or service" } }, { status: 404 });
-  const { id, destId, serviceId, type, billableG, total: clientTotal, version, booked, addons: addonLabels, ...rest } = parsed;
-  const price = priceService(site.settings, dest, serviceId, billableG, type);
+  const { id, destId, serviceId, type, billableG, chargeG: clientChargeG, total: clientTotal, version, booked, addons: addonLabels, ...rest } = parsed;
+  // The chargeable weight never exceeds the billed one (the billed weight is the chargeable one rounded up).
+  const chargeG = Math.min(clientChargeG ?? billableG, billableG);
+  const price = priceService(site.settings, dest, serviceId, billableG, type, chargeG);
   if (!price) return NextResponse.json({ error: { code: "not_found", message: "Service not offered" } }, { status: 404 });
   const addons = resolveAddons(site.settings, addonLabels);
   const total = bookedTotal(price.total, addons);
-  const detail: Record<string, unknown> = { ...rest, shipping: price.total, addons: addons.map((a) => ({ label: a.label, amount: a.amount })) };
+  const detail: Record<string, unknown> = { ...rest, chargeG, shipping: price.total, docRate: price.docRate, addons: addons.map((a) => ({ label: a.label, amount: a.amount })) };
   if (Math.round(clientTotal) !== total) detail.clientTotal = clientTotal;
   try {
     await db

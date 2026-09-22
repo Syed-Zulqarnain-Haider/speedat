@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { priceAll } from "./engine";
-import { bookedTotal, leadSummary, midSentence, quoteText, resolveAddons, type Quote } from "./quote";
-import { SEED } from "@/lib/site/seed";
+import { computeWeights, priceAll, priceService } from "./engine";
+import { bookedTotal, leadSummary, midSentence, quoteText, resolveAddons, weightSentence, type Quote } from "./quote";
+import type { RateCard, Settings } from "./types";
+import { SEED, gridSeed } from "@/lib/site/seed";
 
 /** Canada · 5 kg · Express, priced from the seed rates the way the site prices it. */
 function canadaExpress5kg(): Quote {
@@ -23,6 +24,7 @@ function canadaExpress5kg(): Quote {
     pieces: 1,
     piecesText: "1 × 5 kg",
     billableG: res.weights.billableG,
+    chargeG: res.weights.chargeG,
     total: p.total,
     docRate: false,
     version: 1,
@@ -77,5 +79,83 @@ describe("the customer's WhatsApp Total and the owner's inbox line agree", () =>
     expect(leadSummary({ service: "Express", dest: "Canada", billableG: q.billableG, shipping: q.total, addons: [], currency })).toBe(
       `Express to Canada · 5 kg · ${currency} ${q.total.toLocaleString("en-US")}`,
     );
+  });
+});
+
+describe("a booked document quote is re-priced on the server from the weights the browser priced on", () => {
+  /**
+   * What POST /api/quotes does with a quote body: the engine again, from the billed and the chargeable weight
+   * the browser sent. The customer's number and the stored one must be the same number.
+   */
+  const reprice = (card: RateCard, destId: string, kg: number) => {
+    const shown = priceAll(card, { destId, type: "doc", rows: [{ kg, qty: 1 }] });
+    if (!shown.ok) throw new Error(`expected ok, got ${shown.reason}`);
+    const dest = card.destinations.find((d) => d.id === destId)!;
+    const stored = priceService(card.settings, dest, "express", shown.weights.billableG, "doc", shown.weights.chargeG);
+    if (!stored) throw new Error("express not priced on the server");
+    return { shown: shown.prices.express!, weights: shown.weights, stored };
+  };
+
+  it("keeps the document rate when whole kilograms are priced and a 0.3 kg letter is billed as 1 kg", () => {
+    const site = gridSeed();
+    const { shown, weights, stored } = reprice(site, "gb", 0.3);
+    expect([weights.chargeG, weights.billableG]).toEqual([300, 1000]);
+    expect(shown.docRate).toBe(true);
+    expect(stored.docRate).toBe(true);
+    expect(stored.total).toBe(shown.total);
+    const addons = resolveAddons(site.settings, ["Pickup and service charges"]);
+    expect(bookedTotal(stored.total, addons)).toBe(bookedTotal(shown.total, addons));
+    // The billed kilogram alone would have made it a 1 kg parcel — the trap this test guards.
+    expect(priceService(site.settings, site.destinations.find((d) => d.id === "gb")!, "express", weights.billableG, "doc")?.docRate).toBe(false);
+  });
+
+  it("keeps the document rate when the first slab is heavier than the document limit", () => {
+    const card: RateCard = { ...SEED, settings: { ...SEED.settings, firstKg: 1, stepKg: 1 } };
+    const { shown, weights, stored } = reprice(card, "gb", 0.3);
+    expect([weights.chargeG, weights.billableG]).toEqual([300, 1000]);
+    expect(shown.docRate).toBe(true);
+    expect(stored.docRate).toBe(true);
+    expect(stored.total).toBe(shown.total);
+  });
+
+  it("still charges a document over the limit as a parcel, on both sides", () => {
+    const { shown, stored } = reprice(gridSeed(), "gb", 0.6);
+    expect(shown.docRate).toBe(false);
+    expect(stored.docRate).toBe(false);
+    expect(stored.total).toBe(shown.total);
+  });
+});
+
+describe("the status line names the rounding the engine actually did", () => {
+  const sentence = (settings: Settings, kg: number) => weightSentence(computeWeights(settings, [{ kg, qty: 1 }]), settings);
+
+  it("says whole kilograms in grid mode, whatever the slab step is set to", () => {
+    const s = gridSeed().settings;
+    expect(s.stepKg).toBe(0.5);
+    // A 0.5 kg envelope billed as 1 kg was never "rounded up to the next 0.5 kg".
+    expect(sentence(s, 0.5)).toBe("Charged on 1 kg (0.5 kg, rounded up to the next 1 kg).");
+    expect(sentence(s, 1.2)).toBe("Charged on 2 kg (1.2 kg, rounded up to the next 1 kg).");
+    expect(sentence(s, 2)).toBe("Charged on 2 kg.");
+  });
+
+  it("keeps the slab step in slab mode", () => {
+    const s = SEED.settings;
+    expect(s.pricingMode).toBe("slab");
+    expect(sentence(s, 0.3)).toBe("Charged on 0.5 kg (0.3 kg, rounded up to the next 0.5 kg).");
+    expect(sentence(s, 1.2)).toBe("Charged on 1.5 kg (1.2 kg, rounded up to the next 0.5 kg).");
+  });
+
+  it("names the first slab when that, not the step, decided the billed weight", () => {
+    const s: Settings = { ...SEED.settings, firstKg: 1, stepKg: 0.5 };
+    expect(sentence(s, 0.3)).toBe("Charged on 1 kg (0.3 kg, minimum 1 kg).");
+    expect(sentence(s, 0.7)).toBe("Charged on 1 kg (0.7 kg, rounded up to the next 0.5 kg).");
+    expect(sentence(s, 1.2)).toBe("Charged on 1.5 kg (1.2 kg, rounded up to the next 0.5 kg).");
+  });
+
+  it("still reports volumetric weight winning and several pieces", () => {
+    const s = gridSeed().settings;
+    const w = computeWeights(s, [{ kg: 1, qty: 2, L: 50, W: 40, H: 30 }]);
+    expect(w.volumetricWins).toBe(true);
+    expect(weightSentence(w, s)).toBe("Charged on 24 kg for 2 pieces — volumetric weight (24 kg) is higher than actual (2 kg).");
   });
 });

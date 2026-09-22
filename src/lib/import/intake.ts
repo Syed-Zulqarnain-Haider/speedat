@@ -6,7 +6,7 @@
  * no price by more than that.
  */
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray, or } from "drizzle-orm";
 import { revalidateTag } from "next/cache";
 import { alertNow } from "@/lib/alerts";
 import { audit } from "@/lib/audit";
@@ -246,7 +246,19 @@ export interface ImportSummary {
   publishedAuto: boolean;
 }
 
+/** Statuses of a sheet that still waits on an admin: for a column mapping, or for a publish. */
+export const OPEN_IMPORT_STATUSES: readonly ImportStatus[] = ["needs_mapping", "applied"];
+
+/**
+ * The `limit` most recent sheets — plus every sheet that is still open,
+ * however old. This list is the only place a waiting sheet can be mapped or
+ * rejected, and "sheets waiting" is counted from it: a sheet that fell off a
+ * plain recency window (fifteen newer uploads, about three weeks of daily
+ * rate sheets) could be neither reached nor counted, though the intake still
+ * held it. Newest first.
+ */
 export async function listImports(limit = 15): Promise<ImportSummary[]> {
+  const recent = db.select({ id: schema.imports.id }).from(schema.imports).orderBy(desc(schema.imports.receivedAt), desc(schema.imports.id)).limit(limit);
   const rows = await db
     .select({
       id: schema.imports.id,
@@ -262,8 +274,8 @@ export async function listImports(limit = 15): Promise<ImportSummary[]> {
     })
     .from(schema.imports)
     .leftJoin(schema.versions, eq(schema.versions.version, schema.imports.appliedVersion))
-    .orderBy(desc(schema.imports.receivedAt))
-    .limit(limit);
+    .where(or(inArray(schema.imports.id, recent), inArray(schema.imports.status, [...OPEN_IMPORT_STATUSES])))
+    .orderBy(desc(schema.imports.receivedAt), desc(schema.imports.id));
   return rows.map((r) => ({
     id: r.id,
     receivedAt: r.receivedAt.toISOString(),

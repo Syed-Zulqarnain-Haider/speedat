@@ -4,7 +4,7 @@ import { requireAdminPage } from "@/lib/auth/session";
 import { leadCounts } from "@/lib/leads";
 import { fmtDateTime } from "@/lib/pricing/format";
 import { SHIPMENT_STATUSES, STATUS_LABEL, listShipments, shipmentCounts, type ShipmentStatus } from "@/lib/shipments";
-import { getLatestVersion } from "@/lib/site/repo";
+import { getLatestVersion, namesFor } from "@/lib/site/repo";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +14,11 @@ export default async function ShipmentsPage(props: PageProps<"/admin/shipments">
   const raw = typeof sp.status === "string" ? sp.status : "open";
   const status: ShipmentStatus | "open" | "all" = raw === "all" || raw === "open" || (SHIPMENT_STATUSES as readonly string[]).includes(raw) ? (raw as ShipmentStatus | "open" | "all") : "open";
   const [live, rows, counts, leads] = await Promise.all([getLatestVersion(), listShipments(status), shipmentCounts(), leadCounts()]);
-  const destName = new Map((live?.destinations ?? []).map((d) => [d.id, d.name]));
-  const svcName = new Map((live?.services ?? []).map((s) => [s.id, s.name]));
+  // A destination or service removed from the rates since keeps the name it was booked under.
+  const [destName, svcName] = await Promise.all([
+    namesFor("destinations", live, rows.map((s) => s.destId)),
+    namesFor("services", live, rows.map((s) => s.serviceId)),
+  ]);
   return (
     <AdminShell companyName={live?.company.name ?? "Speedat"} user={user} badges={{ inbox: leads.new, shipments: counts.exception }}>
       <section className="admin">

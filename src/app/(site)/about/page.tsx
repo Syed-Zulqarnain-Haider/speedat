@@ -3,9 +3,8 @@ import { CtaBand } from "@/components/site/CtaBand";
 import { PageHead } from "@/components/site/PageHead";
 import { SectionHead } from "@/components/site/pages/SectionHead";
 import { lines, parts } from "@/lib/pricing/engine";
-import { fmtHour } from "@/lib/pricing/format";
 import { getLiveSite } from "@/lib/site/live";
-import { originCities } from "@/lib/site/text";
+import { cutoffFact, originCities } from "@/lib/site/text";
 
 export const metadata: Metadata = { title: "About us" };
 
@@ -32,7 +31,7 @@ export default async function AboutPage() {
   const story = lines(c.story);
   const vals = lines(c.values).map((ln) => parts(ln, 2));
   const cities = originCities(co);
-  const cutoff = site.settings.cutoffHour != null ? fmtHour(site.settings.cutoffHour) : "";
+  const cutoff = cutoffFact(site.settings.cutoffHour);
   const mapHref = c.mapUrl || (c.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address)}` : "");
   const hasFacts = Boolean(c.address || cities.length || c.hours || cutoff);
   return (
@@ -79,7 +78,7 @@ export default async function AboutPage() {
             {cutoff ? (
               <div>
                 <dt>Cutoff</dt>
-                <dd>Book before {cutoff} for same-day pickup</dd>
+                <dd>{cutoff}</dd>
               </div>
             ) : null}
           </dl>

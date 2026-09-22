@@ -5,9 +5,8 @@ import { PageHead } from "@/components/site/PageHead";
 import { RatesBoard } from "@/components/site/home/RatesBoard";
 import { ServiceList } from "@/components/site/pages/ServiceList";
 import { SampleNotice } from "@/components/site/SampleNotice";
-import { fmtHour } from "@/lib/pricing/format";
 import { getLiveHold, getLiveSite } from "@/lib/site/live";
-import { originCities } from "@/lib/site/text";
+import { cutoffFact, originCities } from "@/lib/site/text";
 
 export const metadata: Metadata = { title: "Services" };
 
@@ -28,7 +27,7 @@ export default async function ServicesPage() {
   const co = site.company;
   const s = site.settings;
   const cities = originCities(co);
-  const cutoff = s.cutoffHour != null ? fmtHour(s.cutoffHour) : "";
+  const cutoff = cutoffFact(s.cutoffHour);
   const hasFacts = cities.length > 0 || Boolean(cutoff) || s.docMaxKg > 0 || s.maxKg > 0;
   return (
     <>
@@ -38,7 +37,7 @@ export default async function ServicesPage() {
         {hasFacts ? (
           <p className="facts">
             {cities.length ? <>Pickup in {cities.join(" and ")}. </> : null}
-            {cutoff ? <>Book before {cutoff} for same-day pickup. </> : null}
+            {cutoff ? <>{cutoff}. </> : null}
             {s.docMaxKg > 0 ? <>Documents up to {s.docMaxKg} kg. </> : null}
             {s.maxKg > 0 ? (
               <>
