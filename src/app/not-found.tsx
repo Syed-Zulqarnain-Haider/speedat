@@ -25,7 +25,7 @@ export default async function NotFound() {
   const site = await getLiveSite();
   return (
     <SiteLayout params={Promise.resolve({})}>
-      <NotFoundBody code="404" title={NOT_FOUND.title} lede={NOT_FOUND.lede} whatsapp={site.company.whatsapp} />
+      <NotFoundBody title={NOT_FOUND.title} line={NOT_FOUND.line} whatsapp={site.company.whatsapp} />
     </SiteLayout>
   );
 }

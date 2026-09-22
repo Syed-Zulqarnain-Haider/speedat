@@ -1,19 +1,15 @@
 import type { Metadata } from "next";
-import { UI } from "@/components/Icons";
 import { CtaBand } from "@/components/site/CtaBand";
 import { PageHead } from "@/components/site/PageHead";
-import { Reveal } from "@/components/site/Reveal";
-import { FaqItem } from "@/components/site/pages/FaqItem";
 import { lines, parts } from "@/lib/pricing/engine";
 import { getLiveSite } from "@/lib/site/live";
 
-export const metadata: Metadata = { title: "FAQ" };
+export const metadata: Metadata = { title: "Questions" };
 
 /**
- * FAQ: `content.faq` (`Question? | Answer` per line) as a simple accordion of
- * native details with 56px rows, beside a card that turns `faqLede` ("If
- * yours is not here, ask us on WhatsApp.") into a giant green button; then
- * the WhatsApp / Call band.
+ * Questions (brief v3 §3): `content.faq` (`Question? | Answer` per line)
+ * as one list with every answer open — nothing to tap to read, nothing
+ * that folds — a hairline after each pair, then the contact line.
  */
 export default async function FaqPage() {
   const site = await getLiveSite();
@@ -23,32 +19,19 @@ export default async function FaqPage() {
   return (
     <>
       <section className="page">
-        <PageHead title="Questions people *ask*" />
-        <div className="faq-grid">
-          {items.length ? (
-            <div className="faq">
-              {items.map(([q, a], i) => (
-                <Reveal key={i} index={i} stagger={0.05} cap={6} distance={16}>
-                  <FaqItem question={q}>
-                    <p>{a}</p>
-                  </FaqItem>
-                </Reveal>
-              ))}
-            </div>
-          ) : null}
-          <aside className="card faq-ask" aria-label="Ask us">
-            <span className="card-ico" aria-hidden="true">
-              <UI.wa />
-            </span>
-            {c.faqLede ? <p>{c.faqLede}</p> : null}
-            <a className="btn wa giant" href={`https://wa.me/${co.whatsapp}`} target="_blank" rel="noopener">
-              <UI.wa />
-              Ask on WhatsApp
-            </a>
-          </aside>
-        </div>
+        <PageHead title="Questions" lede={c.faqLede} />
+        {items.length ? (
+          <dl className="faq-list">
+            {items.map(([q, a], i) => (
+              <div key={i}>
+                <dt>{q}</dt>
+                <dd>{a}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
       </section>
-      <CtaBand whatsapp={co.whatsapp} phone={co.phone} title={c.ctaTitle} sub={c.ctaSub} />
+      <CtaBand whatsapp={co.whatsapp} phone={co.phone} hours={c.hours} title={c.ctaTitle} sub={c.ctaSub} />
     </>
   );
 }

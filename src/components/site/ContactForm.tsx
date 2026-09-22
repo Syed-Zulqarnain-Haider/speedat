@@ -13,10 +13,11 @@ interface Props {
 }
 
 /**
- * The message form on /contact: 52px fields with short plain labels, one
- * big "Send message" and a green WhatsApp way out beside it. Field names,
- * the signed token, the honeypot, validation echo and the success card are
- * the server action's contract and stay exactly as they are.
+ * The message form on /contact: 52px fields with short plain labels and
+ * one big "Send message" (the WhatsApp way out is the contact line right
+ * under the form). Field names, the signed token, the honeypot, validation
+ * echo and the success card are the server action's contract and stay
+ * exactly as they are.
  */
 export function ContactForm({ destinations, whatsapp, token }: Props) {
   const [state, action, pending] = useActionState(contactAction, INITIAL_CONTACT);
@@ -90,10 +91,6 @@ export function ContactForm({ destinations, whatsapp, token }: Props) {
         <button className="btn primary big" type="submit" disabled={pending}>
           {pending ? "Sending…" : "Send message"}
         </button>
-        <a className="btn wa big" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
-          <UI.wa />
-          Or WhatsApp us
-        </a>
       </div>
     </form>
   );

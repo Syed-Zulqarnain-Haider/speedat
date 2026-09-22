@@ -8,13 +8,20 @@
   .head-row .btn,
   .head-actions,
   .nav,
+  .btn.theme,
   footer a,
   .quote .actions,
-  .ctas {
+  .ctas,
+  .pricebar .btn {
     display: none !important; /* print: chrome must never win over a screen display rule */
   }
   .admin-app {
     display: block;
+  }
+  /* On paper the shell is plain flow again: a window-tall flex column would push the footer to a page's foot. */
+  .site.wrap {
+    display: block;
+    min-height: 0;
   }
   .admin-side,
   .admin-top,
@@ -25,7 +32,10 @@
   .site-head {
     position: static;
     background: none;
-    backdrop-filter: none;
+  }
+  .pricebar {
+    position: static;
+    box-shadow: none;
   }
   body {
     background: #fff;

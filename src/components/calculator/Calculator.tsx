@@ -6,24 +6,25 @@
  * (pieces, sizes, documents, ship date). All pricing happens here in the
  * browser with the published document handed in as props; the only network
  * call is a fire-and-forget log when someone taps Book.
+ *
+ * v3 (brief §4): the page never scrolls itself, the price is printed at
+ * once, nothing on screen moves when it lands, and no control ever looks
+ * dead — the Book button exists only once there is somewhere to go.
  */
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { CardIcons, UI } from "@/components/Icons";
-import { useReducedMotion } from "@/lib/client/motion";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { UI } from "@/components/Icons";
 import { setSession, useMounted, useSession } from "@/lib/client/session";
 import { addonsList, gToKg, gridWeights, isGrid, lines, priceAll, toNumLoose } from "@/lib/pricing/engine";
-import { estimateDelivery, parseDaysRange, type DeliveryEstimate } from "@/lib/pricing/dates";
+import { estimateDelivery, type DeliveryEstimate } from "@/lib/pricing/dates";
 import { fmtDay, fmtHour, fmtMoney, fmtNum, fmtRange, inputDate, localDateFromInput, quoteId, quoteIdFor } from "@/lib/pricing/format";
 import { IN, LB, cargoText, piecesText, quoteText, waLink, weightSentence, type Quote, type Units } from "@/lib/pricing/quote";
 import type { Addon, PieceInput, PriceResult, ServicePrice, ShipmentType } from "@/lib/pricing/types";
 import type { PublishedVersion } from "@/lib/site/types";
+import { fromPrice } from "@/lib/site/copy";
 import { flagCode } from "@/lib/site/countries";
 import { originCities } from "@/lib/site/text";
 import { Flag } from "@/components/site/Flag";
-import { PriceReadout } from "./PriceReadout";
 import { Toast, useToast } from "./Toast";
-import ClickSpark from "@/components/bits/ClickSpark";
-import { Pull } from "@/components/site/fx/Pull";
 
 type Mode = "quick" | "detail";
 
@@ -47,60 +48,6 @@ const KG_BUTTONS = [1, 2, 3, 5, 10, 15, 20, 25];
  * grid keeps the same height (two rows beside the hero) whatever the count.
  */
 const TILE_MAX = 8;
-
-/**
- * Once a country and a weight are in, the price card and the buttons under
- * it must be on screen: on a phone they sit some 700px below the weight row,
- * and a visitor who reads nothing has no other way to learn the price has
- * arrived. Scrolls the page just far enough for the buttons to show, never
- * so far that the card's top slips under the (sticky) header, and not at all
- * when everything is already in view — the 1366×768 fold stays put.
- */
-function revealPrice(total: HTMLElement | null, ctas: HTMLElement | null, smooth: boolean): void {
-  if (!total || !ctas) return;
-  const t = total.getBoundingClientRect();
-  const c = ctas.getBoundingClientRect();
-  // Zero height: the quick view is hidden behind the detailed one.
-  if (!t.height || !c.height) return;
-  const head = document.querySelector<HTMLElement>(".site-head");
-  const headBottom = head && getComputedStyle(head).position === "sticky" ? head.getBoundingClientRect().bottom : 0;
-  const margin = 16;
-  let delta = c.bottom + margin - window.innerHeight;
-  delta = Math.min(delta, t.top - headBottom - margin);
-  if (delta < 1) return;
-  window.scrollBy({ top: delta, behavior: smooth ? "smooth" : "auto" });
-}
-
-/** How long the nudged step stays highlighted (two 600ms rings when motion is allowed, a still colour when not). */
-const NUDGE_MS = 1200;
-const nudgeTimers = new WeakMap<HTMLElement, number>();
-
-/**
- * An early tap on the grey Book button: there is nothing to book yet, so the
- * step that is still waiting gets the attention instead — scrolled under the
- * header when it is off screen, then its head pulses (calculator.css
- * `.nudge`; a still orange highlight when motion is reduced). The class comes
- * off again after the pulse, so a second tap replays it.
- */
-function nudge(el: HTMLElement | null, smooth: boolean): void {
-  if (!el) return;
-  const r = el.getBoundingClientRect();
-  const head = document.querySelector<HTMLElement>(".site-head");
-  const headBottom = head && getComputedStyle(head).position === "sticky" ? head.getBoundingClientRect().bottom : 0;
-  const margin = 16;
-  if (r.top < headBottom + margin || r.bottom > window.innerHeight - margin) {
-    window.scrollBy({ top: r.top - headBottom - margin, behavior: smooth ? "smooth" : "auto" });
-  }
-  el.classList.remove("nudge");
-  void el.offsetWidth; // flushes style between the removal and the re-add, so a second tap restarts the ring
-  el.classList.add("nudge");
-  const prev = nudgeTimers.get(el);
-  if (prev) clearTimeout(prev);
-  nudgeTimers.set(
-    el,
-    window.setTimeout(() => el.classList.remove("nudge"), NUDGE_MS),
-  );
-}
 
 function weightOptions(sets: PublishedVersion["settings"]): number[] {
   const maxKg = sets.maxKg;
@@ -142,20 +89,6 @@ function readRemembered(raw: string | null): Remembered {
   }
 }
 
-/** "1 Country" / "2 Weight" / "3 Your price": the numbered, iconed head of a step. The ref lets an early Book tap nudge it. */
-function StepHead({ n, icon, name, children, ref }: { n: number; icon: ReactNode; name: string; children?: ReactNode; ref?: Ref<HTMLDivElement> }) {
-  return (
-    <div ref={ref} className="step-head">
-      <span className="n" aria-hidden="true">
-        {n}
-      </span>
-      {icon}
-      <span className="step-name">{name}</span>
-      {children}
-    </div>
-  );
-}
-
 export function Calculator({ site }: { site: PublishedVersion }) {
   const sets = site.settings;
   const cur = sets.currency;
@@ -177,8 +110,8 @@ export function Calculator({ site }: { site: PublishedVersion }) {
 
   const switchMode = (m: Mode) => setSession("sp-mode", m);
 
-  // The fine print under the calculator — what is included, the owner's notes, the disclaimer — lives behind one
-  // disclosure row, so the panel that should have nothing to read shows nothing to read.
+  // The fine print — what is included, the owner's notes, the disclaimer — is plain text at the end of the detailed
+  // view. The quick view carries none of it: page.tsx prints the one-line promise under the calculator.
   const includes = site.company.includes.trim();
   const disclaimer = sets.disclaimer.trim();
   const notes = lines(site.company.notes);
@@ -215,29 +148,16 @@ export function Calculator({ site }: { site: PublishedVersion }) {
           showToast={showToast}
           onBack={() => switchMode("quick")}
         />
+        {includes ? <p className="includes">{includes}</p> : null}
+        {notes.length ? (
+          <ul className="notes">
+            {notes.map((x, i) => (
+              <li key={i}>{x}</li>
+            ))}
+          </ul>
+        ) : null}
+        {disclaimer ? <p className="disclaimer">{disclaimer}</p> : null}
       </div>
-      {includes || disclaimer || notes.length ? (
-        <details className="how notes">
-          <summary>Good to know before you book</summary>
-          {includes ? <p className="includes">{includes}</p> : null}
-          {notes.length ? (
-            <ul>
-              {notes.map((x, i) => (
-                <li key={i}>{x}</li>
-              ))}
-            </ul>
-          ) : null}
-          {disclaimer ? <p className="disclaimer">{disclaimer}</p> : null}
-        </details>
-      ) : null}
-      {/* The second way into the detailed view (the first is the "Other" weight button). It sits under the notes,
-          outside the panel, so nothing competes with the one green button; hidden with the quick view. */}
-      <p className="switch" hidden={mode !== "quick"}>
-        Documents or big boxes?{" "}
-        <button type="button" className="link" onClick={() => switchMode("detail")}>
-          Get a detailed price
-        </button>
-      </p>
       <Toast message={toast} />
     </>
   );
@@ -287,8 +207,8 @@ interface QuickProps {
 
 /**
  * The line under a service's name on the quick view: how many days it takes,
- * the one figure the visitor compares between the two cards. The arrival
- * dates belong to the chosen service and sit in the price card, so they
+ * the one figure the visitor compares between the two rows. The arrival
+ * dates belong to the chosen service and sit under the rows, so they
  * appear once.
  */
 function etaQuick(p: ServicePrice): string {
@@ -314,30 +234,20 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
   const available = res?.ok ? site.services.filter((s) => res.prices[s.id]).map((s) => s.id) : [];
   const chosen = available.includes(svc) ? svc : (available[0] ?? "");
 
-  let cheapest = "";
-  let fastest = "";
-  if (res?.ok && available.length > 1) {
-    cheapest = available.reduce((b, id) => (res.prices[id]!.total < res.prices[b]!.total ? id : b));
-    fastest = available.reduce((b, id) => {
-      const ra = parseDaysRange(res.prices[id]!.days);
-      const rb = parseDaysRange(res.prices[b]!.days);
-      return ra && (!rb || ra[0] < rb[0]) ? id : b;
-    });
-    if (!parseDaysRange(res.prices[fastest]!.days)) fastest = "";
-  }
-
   const p = res?.ok && chosen ? res.prices[chosen]! : null;
   const sum = p ? p.total + addonsTotal : 0;
 
-  // The readout's one sentence, in plain words: what to do next, or what the price is for. Live, a second short
-  // line says when the parcel arrives (the only place the dates are printed).
+  // The one sentence, in plain words: what to do next, or what the price is for. Live, a second short line says
+  // when the parcel arrives (the only place the dates are printed). The live note is "Express · 5 kg · Canada";
+  // its country is a separate span, so on phones — where the step head already shows it and the bar's column is
+  // 125px beside the green button — the CSS can drop it instead of ellipsizing the whole line.
   let note: string;
+  let noteTo = "";
   let when = "";
   let state: ReadoutState;
-  let idle = true;
   if (!destId) {
     state = "country";
-    note = "Tap a country above";
+    note = "Tap a country";
   } else if (!kgv || kgv === "exact") {
     state = "weight";
     note = "Now tap a weight";
@@ -349,15 +259,16 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
     note = `No service to ${dest?.name} yet. Ask us on WhatsApp`;
   } else {
     state = "live";
-    idle = false;
     const sv = site.services.find((s) => s.id === chosen)!;
     const est = sets.showEta && p?.days ? estimateDelivery(p.days, sets, null, new Date()) : null;
-    note = `${sv.name} · ${kgv} kg · ${dest?.name}`;
+    note = `${sv.name} · ${kgv} kg`;
+    noteTo = dest?.name ?? "";
     when = est ? `Arrives ${fmtRange(est)}` : "";
   }
 
-  let bookHref: string | null = null;
-  let bookLabel = "Book on WhatsApp";
+  // The green button always has somewhere to go: the quote, the cargo message, or the plain chat.
+  let bookHref = `https://wa.me/${site.company.whatsapp}`;
+  let bookLabel = "Ask on WhatsApp";
   let quote: Quote | null = null;
   if (kgv === "more" && dest) {
     // "Over N kg" is all the visitor has said, so the message says exactly that: the country and the weight, in
@@ -365,10 +276,6 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
     // no "about N kg" (it is more than N).
     bookHref = waLink(site.company.whatsapp, `Hi ${site.company.name}, I need a cargo rate.\nTo: ${dest.name}\nWeight: over ${sets.maxKg} kg`);
     bookLabel = "Ask for a cargo rate";
-  } else if (state === "none") {
-    // No service prices this country at this weight: the one button still opens WhatsApp (the plain chat link).
-    bookHref = `https://wa.me/${site.company.whatsapp}`;
-    bookLabel = "Ask on WhatsApp";
   } else if (p && res?.ok && dest) {
     const sv = site.services.find((s) => s.id === chosen)!;
     const est = sets.showEta && p.days ? estimateDelivery(p.days, sets, null, new Date()) : null;
@@ -391,6 +298,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
       version: site.version,
     };
     bookHref = waLink(site.company.whatsapp, quoteText(quote, { companyName: site.company.name, currency: cur, addons: selectedAddons }));
+    bookLabel = "Book on WhatsApp";
   }
 
   const onKg = (v: string) => {
@@ -410,43 +318,41 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
   const pickedId = destId && !tiles.some((d) => d.id === destId) ? destId : "";
   const priced = weightOptions(sets);
   const kgs = KG_BUTTONS.filter((k) => priced.includes(k));
-  const noteIcon = state === "country" ? <UI.pin /> : state === "weight" ? <UI.scale /> : state === "live" ? null : <UI.wa />;
+  // The from-price on every tile ("from PKR 5,220 · 4–6 days"): the shared `fromPrice`, the same function the
+  // headline and the rates board print, once per rate document.
+  const froms = useMemo(() => new Map(site.destinations.map((d) => [d.id, fromPrice(site, d.id)])), [site]);
 
-  const totalRef = useRef<HTMLDivElement>(null);
-  const ctasRef = useRef<HTMLDivElement>(null);
-  const step1Ref = useRef<HTMLDivElement>(null);
-  const step2Ref = useRef<HTMLDivElement>(null);
-  const reduced = useReducedMotion();
-  // The grey Book button answers an early tap by pointing at whatever is still waiting: step 1 or step 2.
-  const earlyTap = () => nudge(state === "weight" ? step2Ref.current : step1Ref.current, !reduced);
-  // The key changes on every tap that produces a price (or the note that stands in for one): scroll the result
-  // into view then, and only then — never on a service or add-on change, never while a step is still waiting.
-  const revealKey = state === "live" || state === "cargo" || state === "none" ? `${destId}|${kgv}` : "";
-  useEffect(() => {
-    if (!revealKey) return;
-    revealPrice(totalRef.current, ctasRef.current, !reduced);
-  }, [revealKey, reduced]);
+  const waiting = state === "country" || state === "weight";
 
   return (
     <div className="panel quick">
       <h2 className="sr">Get your price</h2>
 
-      <StepHead n={1} icon={<UI.pin />} name="Country" ref={step1Ref}>
+      <div className="step-head">
+        <span className="step-name">1 Country</span>
         {dest ? (
-          <span className="step-done" key={dest.id}>
+          <span className="step-done">
             <Flag code={flagCode(dest.name, dest.id)} name={dest.name} size={24} />
             {dest.name}
-            <UI.check />
           </span>
         ) : null}
-      </StepHead>
+      </div>
       <div className="ctiles" role="radiogroup" aria-label="Country">
-        {tiles.map((d) => (
-          <button key={d.id} type="button" role="radio" className="ctile" aria-checked={destId === d.id} onClick={() => setDestId(d.id)}>
-            <Flag code={flagCode(d.name, d.id)} name={d.name} size={32} />
-            <span>{d.name}</span>
-          </button>
-        ))}
+        {tiles.map((d) => {
+          const from = froms.get(d.id) ?? null;
+          return (
+            <button key={d.id} type="button" role="radio" className="ctile" aria-checked={destId === d.id} onClick={() => setDestId(d.id)}>
+              <Flag code={flagCode(d.name, d.id)} name={d.name} size={32} />
+              <span className="ctile-name">{d.name}</span>
+              {from ? (
+                <span className="ctile-from">
+                  from {fmtMoney(from.total, cur)}
+                  {from.days ? <span className="ctile-days"> · {from.days} days</span> : null}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
         {more ? (
           <select className="ctile-more" aria-label="More countries" data-chosen={pickedId ? "true" : undefined} value={pickedId} onChange={(e) => setDestId(e.target.value)}>
             <DestOptions site={site} placeholder="More countries" />
@@ -454,14 +360,10 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
         ) : null}
       </div>
 
-      <StepHead n={2} icon={<UI.scale />} name="Weight" ref={step2Ref}>
-        {kgv && kgv !== "more" ? (
-          <span className="step-done" key={kgv}>
-            {kgv} kg
-            <UI.check />
-          </span>
-        ) : null}
-      </StepHead>
+      <div className="step-head">
+        <span className="step-name">2 Weight</span>
+        {kgv && kgv !== "more" ? <span className="step-done">{kgv} kg</span> : null}
+      </div>
       <div className="kgs" role="group" aria-label="Weight">
         {kgs.map((k) => (
           <button key={k} type="button" className="kg" aria-pressed={kgv === String(k)} onClick={() => onKg(String(k))}>
@@ -471,117 +373,89 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
         ))}
         {sets.maxKg > 0 ? (
           <button type="button" className="kg more" aria-pressed={kgv === "more"} onClick={() => onKg("more")}>
-            <UI.box />
             Over {sets.maxKg} kg
           </button>
         ) : null}
-        {/* One word and the document glyph: the detailed view it opens explains itself (documents, box sizes, many
-            boxes); a three-noun label here was one more thing to read on the row that should need none. */}
+        {/* The way out to the detailed view (documents, box sizes, many boxes). */}
         <button type="button" className="kg other" onClick={() => onKg("exact")}>
-          <CardIcons.doc />
-          Other
+          Documents · box size
         </button>
       </div>
 
-      <StepHead n={3} icon={<UI.tag />} name="Your price" />
-      {/* Step 3 stacks: the two services, the price, the one green button. On a short desktop screen (the 1366×768
-          tier) it splits in two columns — the choice on the left, the price and the green button on the right — so
-          both sit inside the first screen. */}
-      <div className="step3">
-        <div className="step3-pick">
-          <fieldset className="opts" data-state={res?.ok ? "live" : "wait"}>
-            <legend className="sr">Service</legend>
-            <div>
-              {site.services.map((sv) => {
-                const sp = res?.ok ? res.prices[sv.id] : null;
-                const on = !!sp;
-                // The tag sits on the days row, not beside the name, so "Normal" + "Cheapest" never folds under the
-                // name while "Express" + "Fastest" holds one line: the pair the visitor compares stays level.
-                const badge = on && sv.id === fastest ? <span className="opt-badge">Fastest</span> : on && sv.id === cheapest ? <span className="opt-badge price">Cheapest</span> : null;
-                const eta = sp ? etaQuick(sp) : sv.note;
-                return (
-                  <label key={sv.id} className={`opt${on ? "" : " dim"}`}>
-                    <input type="radio" name="q-svc" value={sv.id} disabled={!on} checked={on && chosen === sv.id} onChange={() => setSvc(sv.id)} />
-                    <span className="opt-name">{sv.name}</span>
-                    {badge || eta ? (
-                      <span className="opt-meta">
-                        {badge}
-                        <span className="opt-eta">{eta}</span>
-                      </span>
-                    ) : null}
-                    {/* The card's figure is the visitor's figure: add-ons that are on are inside it, exactly as they are
-                        inside the price card below, so the two numbers he sees for one service are the same number. */}
-                    <span className="opt-price">{sp ? fmtMoney(sp.total + addonsTotal, cur) : null}</span>
-                  </label>
-                );
-              })}
+      {/* The result block is always in the page and always the same height: the CSS reserves the room the rows, the
+          lines and the bar take once live (per tier, and per how many services the document has, hence data-n),
+          so the third tap paints the price into a slot that was already there and nothing under the calculator
+          moves. Waiting, the block holds the one line that says what to do next, at its start, 12px under the
+          weights (the reserved room is under the line, where it reads as page space, not as an empty frame between
+          the controls and the prompt); cargo / no service, only the bar, at the block's end where it sits live. */}
+      <div className="result" data-state={state} data-n={String(Math.min(site.services.length, 4))}>
+        {state === "live" && res?.ok ? (
+          <>
+            {/* Only the services that price this parcel, in the document's order; the row's figure is the visitor's
+                figure: add-ons that are on are inside it, exactly as they are inside the bar, so the two numbers he
+                sees for one service are the same number. */}
+            <fieldset className="opts">
+              <legend className="sr">Service</legend>
+              <div>
+                {site.services.map((svx) => {
+                  const sp = res.prices[svx.id];
+                  if (!sp) return null;
+                  return (
+                    <label key={svx.id} className="opt">
+                      <input type="radio" name="q-svc" value={svx.id} checked={chosen === svx.id} onChange={() => setSvc(svx.id)} />
+                      <span className="opt-name">{svx.name}</span>
+                      <span className="opt-eta">{etaQuick(sp)}</span>
+                      <span className="opt-price">{fmtMoney(sp.total + addonsTotal, cur)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <p className="lines">
+              {when ? <span className="twhen">{when}</span> : null}
+              {selectedAddons.map((a) => (
+                <span key={a.id} className="tline">
+                  Includes {fmtMoney(a.amount, cur)} {midSentence(a.label)}
+                </span>
+              ))}
+            </p>
+          </>
+        ) : null}
+
+        {/* The price bar: the figure and the one green button. On phones it sticks to the bottom of the screen while
+            the calculator is in view; it is the block's last child, so it comes to rest at the panel's end and never
+            covers what follows. Rendered only once there is something to say and somewhere to go. */}
+        {!waiting ? (
+          <div className="pricebar" data-state={state}>
+            <div className="pricebar-sum" aria-live="polite">
+              {state === "live" ? <span className="tval">{fmtMoney(sum, cur)}</span> : null}
+              <span className="tnote">
+                {note}
+                {noteTo ? <span className="tnote-to"> · {noteTo}</span> : null}
+              </span>
             </div>
-          </fieldset>
-        </div>
-        <div className="step3-price">
-          {/* The readout keeps its element across values so the count carries on; the keyed sweep replays once per new sum.
-              Under the figure: what it is for, when the parcel arrives, and what is included — three short lines, no
-              decision to make (the detailed view keeps the itemised quote and the add-on opt-out). */}
-          <div ref={totalRef} className={`total${idle ? " idle" : ""}`} data-state={state} data-sum={idle ? "" : String(sum)} aria-live="polite">
-            <span className="tlabel">Your price</span>
-            <PriceReadout value={idle ? 0 : sum} currency={cur} idle={idle} />
-            {!idle ? <i className="sweep" key={sum} aria-hidden="true" /> : null}
-            <span className="tnote">
-              {noteIcon}
-              {note}
-            </span>
-            {when ? (
-              <span className="twhen">
-                <UI.clock />
-                {when}
-              </span>
-            ) : null}
-            {!idle && selectedAddons.length ? (
-              <span className="tlines">
-                {selectedAddons.map((a) => (
-                  <span key={a.id} className="tline">
-                    <UI.check />
-                    Includes {fmtMoney(a.amount, cur)} {midSentence(a.label)}
-                  </span>
-                ))}
-              </span>
-            ) : null}
+            <a
+              className="btn book giant"
+              href={bookHref}
+              target="_blank"
+              rel="noopener"
+              onClick={() => {
+                if (quote) logQuote(quote, { booked: true, mode: "quick", addons: selectedAddons.map((a) => a.label) });
+              }}
+            >
+              <UI.wa />
+              {bookLabel}
+            </a>
           </div>
-          <ClickSpark sparkColor="#ea580c" sparkSize={10} sparkRadius={22} sparkCount={10} duration={450}>
-            <div ref={ctasRef} className="ctas" data-live={!idle}>
-              <Pull>
-                {/* Grey until there is a price (a button, still focusable, that answers a tap by nudging the waiting step);
-                    green with the WhatsApp link once there is — the only button under the price. Call and a plain
-                    WhatsApp chat live in the header and the band at the foot of the page. */}
-                <a
-                  className="btn book giant"
-                  href={bookHref ?? undefined}
-                  role={bookHref ? undefined : "button"}
-                  tabIndex={bookHref ? undefined : 0}
-                  aria-disabled={bookHref ? undefined : "true"}
-                  target="_blank"
-                  rel="noopener"
-                  onClick={(e) => {
-                    if (!bookHref) {
-                      e.preventDefault();
-                      earlyTap();
-                      return;
-                    }
-                    if (quote) logQuote(quote, { booked: true, mode: "quick", addons: selectedAddons.map((a) => a.label) });
-                  }}
-                  onKeyDown={(e) => {
-                    if (bookHref || (e.key !== "Enter" && e.key !== " ")) return;
-                    e.preventDefault();
-                    earlyTap();
-                  }}
-                >
-                  <UI.wa />
-                  {bookLabel}
-                </a>
-              </Pull>
-            </div>
-          </ClickSpark>
-        </div>
+        ) : null}
+
+        {/* The line that waits: "Tap a country" / "Now tap a weight", at the top of the slot until there is a bar
+            (the CSS pins it there; the bar, when it comes, lands at the slot's end). */}
+        {waiting ? (
+          <p className="wait" aria-live="polite">
+            {note}
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -691,7 +565,8 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
         </>
       );
     } else if (res.reason === "destination") status = "Choose a destination to see prices and delivery dates.";
-    else status = type === "doc" ? "Enter the weight of your documents." : "Enter the weight of your package.";
+    // No weight yet: the field invites one by itself, so the line carries the one number worth knowing first.
+    else status = sets.maxKg > 0 ? `Up to ${sets.maxKg} kg per piece. Heavier is priced on WhatsApp.` : "";
   } else {
     const bits = [weightSentence(res.weights, sets)];
     if (site.services.some((sv) => res.prices[sv.id]?.docRate)) bits.push(`Document rate applied (up to ${sets.docMaxKg} kg).`);
@@ -771,7 +646,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
     if (navigator.clipboard?.writeText)
       navigator.clipboard.writeText(text).then(
         () => showToast("Quote copied"),
-        () => showToast("Copy failed — select the text instead"),
+        () => showToast("Copy failed. Select the text instead"),
       );
     else showToast("Copy is not supported here");
   };
@@ -784,12 +659,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
       </button>
 
       <div className="panel">
-        <h2 className="step step-head">
-          <span className="n" aria-hidden="true">
-            1
-          </span>
-          Where to?
-        </h2>
+        <h2 className="step-head step-title">1 Where to?</h2>
         <div className="row">
           {cities.length > 1 ? (
             <label className="field">
@@ -815,7 +685,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
             <span className="lab">
               To
               {destSel ? (
-                <span className="step-done" key={destSel.id}>
+                <span className="step-done">
                   <Flag code={flagCode(destSel.name, destSel.id)} name={destSel.name} size={24} />
                 </span>
               ) : null}
@@ -828,12 +698,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
       </div>
 
       <div className="panel">
-        <h2 className="step step-head">
-          <span className="n" aria-hidden="true">
-            2
-          </span>
-          What are you sending?
-        </h2>
+        <h2 className="step-head step-title">2 What are you sending?</h2>
         <div className="seg" role="radiogroup" aria-label="Shipment type">
           <button type="button" className="segbtn" role="radio" aria-checked={type === "pkg"} onClick={() => setType("pkg")}>
             Packages
@@ -845,7 +710,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
         <p className="hint">
           {type === "doc"
             ? `Paperwork only: contracts, certificates, passports, letters. Up to ${sets.docMaxKg} kg gets the document rate.`
-            : "Boxes, gifts, clothes, samples — anything that is not paperwork."}
+            : "Boxes, gifts, clothes, samples."}
         </p>
         <div className="units">
           <span className="hint">Units</span>
@@ -914,12 +779,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
       </div>
 
       <div className="results">
-        <h2 className="step step-head">
-          <span className="n" aria-hidden="true">
-            3
-          </span>
-          Choose a service
-        </h2>
+        <h2 className="step-head step-title">3 Choose a service</h2>
         <div className="svcs">
           {site.services.map((sv) => {
             const sp = res.ok ? res.prices[sv.id] : null;
@@ -1039,32 +899,28 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
             </span>
             <input type="text" maxLength={120} placeholder="e.g. clothes and a gift" value={contents} onChange={(e) => setContents(e.target.value)} />
           </label>
-          <ClickSpark sparkColor="#ea580c" sparkSize={10} sparkRadius={22} sparkCount={10} duration={450}>
-            <div className="actions">
-              <Pull>
-                <a
-                  className="btn book giant"
-                  target="_blank"
-                  rel="noopener"
-                  href={waLink(site.company.whatsapp, text)}
-                  onClick={() => logQuote(quote, { booked: true, mode: "detail", addons: selectedAddons.map((a) => a.label), contents })}
-                >
-                  <UI.wa />
-                  Book on WhatsApp
-                </a>
-              </Pull>
-              <div className="actions-2">
-                {canShare ? (
-                  <button className="btn outline" type="button" onClick={() => navigator.share({ title: `${site.company.name} quote ${quote.id}`, text }).catch(() => {})}>
-                    Share
-                  </button>
-                ) : null}
-                <button className="btn outline" type="button" onClick={copyQuote}>
-                  Copy
+          <div className="actions">
+            <a
+              className="btn book giant"
+              target="_blank"
+              rel="noopener"
+              href={waLink(site.company.whatsapp, text)}
+              onClick={() => logQuote(quote, { booked: true, mode: "detail", addons: selectedAddons.map((a) => a.label), contents })}
+            >
+              <UI.wa />
+              Book on WhatsApp
+            </a>
+            <div className="actions-2">
+              {canShare ? (
+                <button className="btn outline" type="button" onClick={() => navigator.share({ title: `${site.company.name} quote ${quote.id}`, text }).catch(() => {})}>
+                  Share
                 </button>
-              </div>
+              ) : null}
+              <button className="btn outline" type="button" onClick={copyQuote}>
+                Copy
+              </button>
             </div>
-          </ClickSpark>
+          </div>
         </div>
       ) : null}
     </>

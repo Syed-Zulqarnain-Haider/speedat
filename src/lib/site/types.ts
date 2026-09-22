@@ -23,35 +23,38 @@ export interface Company {
 }
 
 /**
- * Headline fields (`heroTitle`, `routesTitle`, `stepsTitle`, `servicesTitle`,
- * `ctaTitle`) accept one `*word*` that the site sets in the italic serif accent;
- * an unbalanced or empty pair prints literally (see `accent.ts`).
+ * Every text field prints exactly as typed (brief v3: no accent, no
+ * markup). Three are "blank = automatic": the site generates them from the
+ * rate document (`lib/site/copy.ts`) unless the owner types his own. No
+ * key is ever removed — `migrate` keeps old documents loading — but some
+ * render nowhere any more and are hidden in the admin form.
  */
 export interface Content {
-  /** The home headline: under 45 characters, two short sentences read best. */
+  /** The home headline; blank = `heroTitleAuto` ("Lahore to Australia, Canada, France and Germany."). */
   heroTitle: string;
+  /** The line under it; blank = `heroSubAuto` ("1 kg from PKR 5,000 · 3 to 10 days"). */
   heroSub: string;
-  /** Optional proof points under the headline, one per line: `Label | Value`; blank = automatic. */
+  /** Optional points under the headline, one per line: `Label | Value`; blank = no line. */
   stats: string;
-  /** Promise line under the calculator; blank hides it. */
+  /** One plain line under the calculator; blank hides it. */
   promise: string;
-  /** "Where we deliver" heading (home + /services). */
+  /** The rates board caption (home + /services), e.g. "Rates". */
   routesTitle: string;
-  /** Note under the "Where we deliver" heading. */
+  /** Second line of the caption; blank = `boardNote` ("1 kg parcel · documents up to 0.5 kg · pickup PKR 500 included"). */
   routesNote: string;
-  /** "How it works" heading. */
+  /** Rendered nowhere since v3; hidden in the admin form. */
   stepsTitle: string;
-  /** One per line: `Title | text`. */
+  /** Rendered nowhere since v3; hidden in the admin form. */
   steps: string;
-  /** Home services teaser heading. */
+  /** Rendered nowhere since v3; hidden in the admin form. */
   servicesTitle: string;
-  /** /services intro line. */
+  /** /services line under the h1. */
   servicesLede: string;
-  /** One per line: `icon | Title | Description`. */
+  /** One per line: `icon | Title | text` (the icon token is parsed and ignored). */
   services: string;
-  /** Stamp band heading. */
+  /** Contact line heading on inner pages, when set. */
   ctaTitle: string;
-  /** Stamp band line under the heading. */
+  /** Contact line sentence on inner pages, when set. */
   ctaSub: string;
   /** /contact intro line. */
   contactLede: string;

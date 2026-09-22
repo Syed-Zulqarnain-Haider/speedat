@@ -11,25 +11,29 @@ interface Props {
   epoch: number;
 }
 
-/** The headline fits two lines on a laptop up to this many printed characters; longer wraps to three. */
-const HEADLINE_MAX = 45;
+/** The headline fits two lines on a laptop up to this many characters; longer wraps to three. */
+const HEADLINE_MAX = 60;
 
-/** Printed length of a headline: the accent asterisks never show. */
-function headlineLength(raw: string): number {
-  return raw.replace(/\*/g, "").trim().length;
-}
-
+/**
+ * The words on the site. Three fields are "blank = automatic": the site
+ * writes them from the rate document (the pickup city, the live countries,
+ * the lowest 1 kg price, the day span, the document limit, the pickup
+ * charge), so they can never say a number the rates do not. `stepsTitle`,
+ * `steps` and `servicesTitle` render nowhere since v3 and are not shown
+ * here; the keys stay in the document.
+ */
 export function ContentForm({ draft, readOnly, update, epoch }: Props) {
   const ct = draft.content;
   const set = (k: keyof typeof ct) => (raw: string) =>
     update((d) => {
       d.content[k] = raw;
     });
-  const titleLen = headlineLength(ct.heroTitle);
-  const titleHint =
-    titleLen > HEADLINE_MAX
-      ? `Too long: ${titleLen} characters. Over ${HEADLINE_MAX} the headline wraps to three lines on a laptop — shorten it.`
-      : `${titleLen} of ${HEADLINE_MAX} characters. Keep it under ${HEADLINE_MAX} — two short sentences read best.`;
+  const titleLen = ct.heroTitle.trim().length;
+  const titleHint = !titleLen
+    ? "Blank = automatic: the first pickup city and the countries on the site, e.g. Lahore to Australia, Canada, France and Germany."
+    : titleLen > HEADLINE_MAX
+      ? `Too long: ${titleLen} characters. Over ${HEADLINE_MAX} the headline wraps to three lines on a laptop — shorten it, or leave it blank for the automatic one.`
+      : `${titleLen} of ${HEADLINE_MAX} characters. Printed exactly as typed. Leave it blank for the automatic one: the first pickup city and the countries on the site.`;
   return (
     <section className="block" id="sec-content" key={epoch}>
       <p className="eyebrow">{sectionNo("content")} — Pages</p>
@@ -37,45 +41,45 @@ export function ContentForm({ draft, readOnly, update, epoch }: Props) {
       <p className="desc">The words on the site. One line per item where it says so; separate the parts of a line with a vertical bar |. Publishing rates publishes these too.</p>
       <h3 className="fh">Home</h3>
       <div className="grid2">
+        <Fld label="Headline (blank = automatic)" value={ct.heroTitle} onChange={set("heroTitle")} disabled={readOnly} hint={titleHint} />
         <Fld
-          label="Headline"
-          value={ct.heroTitle}
-          onChange={set("heroTitle")}
+          label="Line under the headline (blank = automatic)"
+          value={ct.heroSub}
+          onChange={set("heroSub")}
           disabled={readOnly}
-          hint={`${titleHint} Wrap one word in *asterisks* to set it in italic, e.g. Send anything *abroad*. An unbalanced asterisk prints as typed. Every heading below accepts the same.`}
+          hint="Blank = automatic: the lowest 1 kg price (pickup included) and the day span, e.g. 1 kg from PKR 5,000 · 3 to 10 days. While prices are on hold: Pickup in Lahore · 3 to 10 days. Keep your own line to about ten words so the country tiles stay on the first phone screen."
         />
-        <Fld label="Line under the headline" value={ct.heroSub} onChange={set("heroSub")} disabled={readOnly} />
-        <Fld label="Promise line under the calculator (blank = none)" value={ct.promise} onChange={set("promise")} disabled={readOnly} />
+        <Fld label="Line under the calculator (blank = none)" value={ct.promise} onChange={set("promise")} disabled={readOnly} />
       </div>
-      <Area label="Proof points under the headline (optional, one per line: Label | Value; blank = automatic)" value={ct.stats} placeholder="Years in business | 12" onChange={set("stats")} disabled={readOnly} />
-      <h3 className="fh">Where we deliver</h3>
+      <Area label="Extra line under the headline (optional, one per line: Label | Value; blank = none)" value={ct.stats} placeholder="Years in business | 12" onChange={set("stats")} disabled={readOnly} />
+      <h3 className="fh">Rates board</h3>
       <div className="grid2">
-        <Fld label="Heading" value={ct.routesTitle} onChange={set("routesTitle")} disabled={readOnly} />
-        <Fld label="Note under the heading" value={ct.routesNote} onChange={set("routesNote")} disabled={readOnly} />
+        <Fld label="Caption" value={ct.routesTitle} onChange={set("routesTitle")} disabled={readOnly} hint="The heading of the rates table on the home page and on Services, e.g. Rates." />
+        <Fld
+          label="Second line of the caption (blank = automatic)"
+          value={ct.routesNote}
+          onChange={set("routesNote")}
+          disabled={readOnly}
+          hint="Blank = automatic: the parcel weight, the document limit and the pickup charge, e.g. 1 kg parcel · documents up to 0.5 kg · pickup PKR 500 included."
+        />
       </div>
-      <h3 className="fh">How it works</h3>
-      <Fld label="Heading" value={ct.stepsTitle} onChange={set("stepsTitle")} disabled={readOnly} />
-      <Area label="Steps, one per line: Title | text" value={ct.steps} onChange={set("steps")} disabled={readOnly} />
-      <h3 className="fh">Services</h3>
+      <h3 className="fh">Services page</h3>
+      <Fld label="Line under the heading" value={ct.servicesLede} onChange={set("servicesLede")} disabled={readOnly} />
+      <Area label="Services, one per line: icon | Title | text (the icon word is kept for older pages and not shown)" value={ct.services} onChange={set("services")} disabled={readOnly} />
+      <h3 className="fh">Contact line (inner pages)</h3>
       <div className="grid2">
-        <Fld label="Home services heading" value={ct.servicesTitle} onChange={set("servicesTitle")} disabled={readOnly} />
-        <Fld label="Services page intro" value={ct.servicesLede} onChange={set("servicesLede")} disabled={readOnly} />
-      </div>
-      <Area label="Services, one per line: icon | Title | Description (icons: plane, globe, doc, box, truck, shield, clock, phone)" value={ct.services} onChange={set("services")} disabled={readOnly} />
-      <h3 className="fh">Book band</h3>
-      <div className="grid2">
-        <Fld label="Heading" value={ct.ctaTitle} onChange={set("ctaTitle")} disabled={readOnly} />
-        <Fld label="Line under the heading" value={ct.ctaSub} onChange={set("ctaSub")} disabled={readOnly} />
+        <Fld label="Heading (optional)" value={ct.ctaTitle} onChange={set("ctaTitle")} disabled={readOnly} />
+        <Fld label="Line under the heading (optional)" value={ct.ctaSub} onChange={set("ctaSub")} disabled={readOnly} />
       </div>
       <h3 className="fh">About page</h3>
       <Area label="Our story (one paragraph per line)" value={ct.story} onChange={set("story")} disabled={readOnly} />
       <div className="grid2">
-        <Area label="Mission" value={ct.mission} onChange={set("mission")} disabled={readOnly} />
-        <Area label="Vision" value={ct.vision} onChange={set("vision")} disabled={readOnly} />
+        <Area label="Mission (optional)" value={ct.mission} onChange={set("mission")} disabled={readOnly} />
+        <Area label="Vision (optional)" value={ct.vision} onChange={set("vision")} disabled={readOnly} />
       </div>
-      <Area label="Values, one per line: Value | one-line explanation" value={ct.values} onChange={set("values")} disabled={readOnly} />
+      <Area label="Values (optional), one per line: Value | one-line explanation" value={ct.values} onChange={set("values")} disabled={readOnly} />
       <h3 className="fh">Contact page</h3>
-      <Fld label="Intro line" value={ct.contactLede} onChange={set("contactLede")} disabled={readOnly} />
+      <Fld label="Line under the heading" value={ct.contactLede} onChange={set("contactLede")} disabled={readOnly} />
       <div className="grid2">
         <Fld label="Office address" value={ct.address} onChange={set("address")} disabled={readOnly} />
         <Fld label="Working hours" value={ct.hours} onChange={set("hours")} disabled={readOnly} />
@@ -83,7 +87,7 @@ export function ContentForm({ draft, readOnly, update, epoch }: Props) {
         <Fld label="Google Maps link (optional; blank = search by address)" value={ct.mapUrl} onChange={set("mapUrl")} disabled={readOnly} />
       </div>
       <h3 className="fh">FAQ page</h3>
-      <Fld label="Intro line" value={ct.faqLede} onChange={set("faqLede")} disabled={readOnly} />
+      <Fld label="Line under the heading (optional)" value={ct.faqLede} onChange={set("faqLede")} disabled={readOnly} />
       <Area label="Questions, one per line: Question? | Answer" value={ct.faq} onChange={set("faq")} disabled={readOnly} />
     </section>
   );

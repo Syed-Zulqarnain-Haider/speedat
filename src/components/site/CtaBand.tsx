@@ -1,63 +1,72 @@
-import Link from "next/link";
 import { UI } from "@/components/Icons";
-import { SEED } from "@/lib/site/seed";
-import { Accent } from "./Accent";
-import { Pull } from "./fx/Pull";
+import { fmtPhone } from "@/lib/pricing/format";
 
 interface Props {
   /** Digits only with country code. */
   whatsapp: string;
-  /** `company.phone` as the owner typed it; adds the "Call …" button when set. */
+  /** `company.phone` as the owner typed it; adds the Call link and button when set. */
   phone?: string;
-  /** `content.ctaTitle`; accepts one `*word*` for the italic accent. Falls back to the seed default. */
+  /** `content.hours`; joins the line when set. */
+  hours?: string;
+  /** `content.ctaTitle`; an h2 above the line only when the owner set one. */
   title?: string;
-  /** `content.ctaSub`. Falls back to the seed default. */
+  /** `content.ctaSub`; a sentence above the line only when the owner set one. */
   sub?: string;
-  /** Adds "Get a price" (→ the calculator) as a third button. Inner pages leave it on; the home page passes false. */
+  /**
+   * Whether the numbers line renders (default true). /contact passes false:
+   * it states each number once above the form, so under it the buttons go
+   * alone (QA round 3 — the same number four times in two screens read as a
+   * template).
+   */
+  showLine?: boolean;
+  /** Kept for callers from earlier rounds; no third button renders any more. */
   quoteLink?: boolean;
-  /** Kept for callers from the first round; no eyebrow line renders any more. */
+  /** Kept for callers from earlier rounds; no eyebrow line renders any more. */
   eyebrow?: string;
 }
 
 /**
- * The WhatsApp / Call band that closes every page: navy, full bleed, a
- * short heading, one line, and giant buttons — green WhatsApp first, then
- * Call and (on inner pages) Get a price. Pages pass `content.ctaTitle` /
- * `content.ctaSub`. Server component.
+ * The contact line that closes every inner page (brief v3 §3): the two
+ * numbers as plain links and the hours on one line, then a WhatsApp button
+ * and, when there is a landline, a Call button. A hairline above, no band,
+ * nothing centred. The file keeps its old name so the pages' imports hold.
+ * Server component.
  */
-export function CtaBand({ whatsapp, phone, title, sub, quoteLink }: Props) {
-  const h = title?.trim() || SEED.content.ctaTitle;
-  const s = sub?.trim() || SEED.content.ctaSub;
+export function CtaBand({ whatsapp, phone, hours, title, sub, showLine = true }: Props) {
+  const h = title?.trim();
+  const s = sub?.trim();
   const tel = phone ? `tel:${phone.replace(/[^0-9+]/g, "")}` : "";
+  const wa = `https://wa.me/${whatsapp}`;
   return (
-    <section className="cta-band bleed on-navy" aria-labelledby="cta-title">
-      <div className="wrap cta-grid">
-        <div className="cta-copy">
-          <h2 id="cta-title">
-            <Accent text={h} />
-          </h2>
-          {s ? <p>{s}</p> : null}
-        </div>
-        <div className="cta-actions">
-          <Pull>
-            <a className="btn wa giant" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener">
-              <UI.wa />
-              WhatsApp us
-            </a>
-          </Pull>
+    <div className="reach">
+      {h ? <h2>{h}</h2> : null}
+      {s ? <p className="reach-sub">{s}</p> : null}
+      {showLine ? (
+        <p className="reach-line">
+          WhatsApp{" "}
+          <a href={wa} target="_blank" rel="noopener">
+            {fmtPhone(whatsapp)}
+          </a>
           {tel ? (
-            <a className="btn giant paper" href={tel}>
-              <UI.phone />
-              Call {phone}
-            </a>
+            <>
+              {" · "}Call <a href={tel}>{phone}</a>
+            </>
           ) : null}
-          {quoteLink !== false ? (
-            <Link className="btn giant paper" href="/#quote-instrument">
-              Get a price
-            </Link>
-          ) : null}
-        </div>
+          {hours ? ` · ${hours}` : null}
+        </p>
+      ) : null}
+      <div className="reach-actions">
+        <a className="btn wa big" href={wa} target="_blank" rel="noopener">
+          <UI.wa />
+          WhatsApp us
+        </a>
+        {tel ? (
+          <a className="btn outline big" href={tel}>
+            <UI.phone />
+            Call
+          </a>
+        ) : null}
       </div>
-    </section>
+    </div>
   );
 }

@@ -1,22 +1,30 @@
 import type { Metadata } from "next";
 import { CtaBand } from "@/components/site/CtaBand";
 import { PageHead } from "@/components/site/PageHead";
-import { Reveal } from "@/components/site/Reveal";
 import { SectionHead } from "@/components/site/pages/SectionHead";
 import { lines, parts } from "@/lib/pricing/engine";
+import { fmtHour } from "@/lib/pricing/format";
 import { getLiveSite } from "@/lib/site/live";
 import { originCities } from "@/lib/site/text";
 
 export const metadata: Metadata = { title: "About us" };
 
-/** "About Speedat International Courier" with the first word of the name as the italic accent (a name with its own asterisk prints as typed). */
-function aboutTitle(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length < 2 || name.includes("*")) return `About ${name.trim()}`;
-  return `About *${words[0]}* ${words.slice(1).join(" ")}`;
+/** "Honesty." — a value's name as the start of its sentence; a name that already ends in punctuation is left alone. */
+function lead(name: string): string {
+  return /[.!?:]$/.test(name) ? name : `${name}.`;
 }
 
-/** About: the story in plain paragraphs beside its heading, mission and vision as two cards, the values as numbered rows, the WhatsApp / Call band. */
+/**
+ * About (brief v3 §3): the story as plain paragraphs, then the facts as a
+ * list of rows — office, pickup cities, hours, cutoff — every one from the
+ * company, content and settings fields. The two numbers are NOT rows here:
+ * the contact line under the list and the footer already print them, and a
+ * third copy 200px above the second was one of the restatements the owner
+ * read as a template (QA, round 1). For the same reason the contact line
+ * on this page goes without the hours, which sit in the row just above it.
+ * Mission, vision and values are plain h2 + paragraphs, and only when the
+ * owner wrote them. Then the contact line. No cards, no numerals, no split.
+ */
 export default async function AboutPage() {
   const site = await getLiveSite();
   const c = site.content;
@@ -24,60 +32,79 @@ export default async function AboutPage() {
   const story = lines(c.story);
   const vals = lines(c.values).map((ln) => parts(ln, 2));
   const cities = originCities(co);
-  const from = cities.length ? `${cities.join(" · ")}${co.origin ? ` — ${co.origin}` : ""}` : co.origin;
+  const cutoff = site.settings.cutoffHour != null ? fmtHour(site.settings.cutoffHour) : "";
+  const mapHref = c.mapUrl || (c.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address)}` : "");
+  const hasFacts = Boolean(c.address || cities.length || c.hours || cutoff);
   return (
     <>
       <section className="page">
-        <PageHead title={aboutTitle(co.name)} lede={co.tagline} />
+        <PageHead title={`About ${co.name.trim()}`} />
         {story.length ? (
-          <div className="story page-split">
-            <div className="page-split-side">
-              <h2 id="story-title">Our story</h2>
-              {from ? <p className="from">From {from}</p> : null}
-            </div>
-            <div className="story-body page-split-body">
-              {story.map((x, i) => (
-                <p key={i}>{x}</p>
-              ))}
-            </div>
+          <div className="story">
+            {story.map((x, i) => (
+              <p key={i}>{x}</p>
+            ))}
           </div>
         ) : null}
-        {c.mission || c.vision ? (
-          <div className="mv">
-            {c.mission ? (
-              <Reveal delay={0.05} distance={24}>
-                <div className="card">
-                  <h3>Mission</h3>
-                  <p className="mv-text">{c.mission}</p>
-                </div>
-              </Reveal>
+        {hasFacts ? (
+          <dl className="facts">
+            {c.address ? (
+              <div>
+                <dt>Office</dt>
+                <dd>
+                  {c.address}
+                  {mapHref ? (
+                    <>
+                      {" · "}
+                      <a href={mapHref} target="_blank" rel="noopener">
+                        Google Maps
+                      </a>
+                    </>
+                  ) : null}
+                </dd>
+              </div>
             ) : null}
-            {c.vision ? (
-              <Reveal delay={0.1} distance={24}>
-                <div className="card">
-                  <h3>Vision</h3>
-                  <p className="mv-text">{c.vision}</p>
-                </div>
-              </Reveal>
+            {cities.length ? (
+              <div>
+                <dt>Pickup</dt>
+                <dd>{cities.join(" and ")}</dd>
+              </div>
             ) : null}
-          </div>
+            {c.hours ? (
+              <div>
+                <dt>Hours</dt>
+                <dd>{c.hours}</dd>
+              </div>
+            ) : null}
+            {cutoff ? (
+              <div>
+                <dt>Cutoff</dt>
+                <dd>Book before {cutoff} for same-day pickup</dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
+        {c.mission.trim() ? (
+          <>
+            <SectionHead title="Mission" id="mission-title" />
+            <p className="prose">{c.mission.trim()}</p>
+          </>
+        ) : null}
+        {c.vision.trim() ? (
+          <>
+            <SectionHead title="Vision" id="vision-title" />
+            <p className="prose">{c.vision.trim()}</p>
+          </>
         ) : null}
         {vals.length ? (
           <>
-            <SectionHead title="What we stand for" id="values-title" />
-            <ol className="values" aria-labelledby="values-title">
-              {vals.map(([name, text], i) => (
-                <li key={i}>
-                  <Reveal className="values-row" index={i} stagger={0.06} distance={20}>
-                    <span className="n" aria-hidden="true">
-                      {i + 1}
-                    </span>
-                    <strong>{name}</strong>
-                    {text ? <span>{text}</span> : null}
-                  </Reveal>
-                </li>
-              ))}
-            </ol>
+            <SectionHead title="Values" id="values-title" />
+            {vals.map(([name, text], i) => (
+              <p key={i} className="prose">
+                {name ? <strong>{text ? lead(name) : name}</strong> : null}
+                {text ? <> {text}</> : null}
+              </p>
+            ))}
           </>
         ) : null}
       </section>

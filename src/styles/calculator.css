@@ -1,18 +1,28 @@
 /* =====================================================================
    calculator.css — owner: CALCULATOR
    Everything under the instrument (#quote-instrument.instrument, rendered
-   by HOME): the three-tap quick view (country tiles, weight buttons, the
-   two service cards, the price, the green button), the detailed view (back
-   button, three panels, the service cards, the quote card) and the notes
-   under the instrument. Shared skins (.panel, .field, inputs, .btn) are
-   overridden only under `.instrument`; the calculator's own class names
-   are unscoped because nothing else uses them. Brief v2 section 4 is the
-   spec. No mono, no uppercase, nothing under 14.9px for the customer.
-   Motion lives at the end, inside @media (prefers-reduced-motion:
-   no-preference); dark-mode rules use :root[data-theme="dark"] only.
+   by HOME): the three-tap quick view (country tiles with their from-price,
+   weight buttons, the two service rows, the price bar with the one green
+   button), the detailed view (back button, three panels, the service rows,
+   the quote card) and the fine print at the detailed view's end. Shared
+   skins (.panel, .field, inputs, .btn) are overridden only under
+   `.instrument`; the calculator's own class names are unscoped because
+   nothing else uses them. Brief v3 §4–6 is the spec.
+   No mono, no uppercase, nothing under 14.9px for the customer.
+   Motion policy (v3 §5): colour on hover / focus / checked ≤ 80ms, :active
+   feedback at 0ms, the price bar's 120ms first-mount entrance — nothing
+   else moves, nothing counts, nothing glows. Dark-mode rules use
+   :root[data-theme="dark"] only.
+   Stillness (v3 §4 rule 4): the result block is in the page from the first
+   paint at the height it has once live — rows + lines + bar — so the panel
+   measures the same in all five states and nothing under it moves when the
+   price lands. On a phone the whole live result ends above the sticky bar:
+   the two wide weight buttons share a row, the two service rows stand side
+   by side (name / days / price stacked beside the radio, 70px), the lines
+   take 44px, and the bar's note drops the country.
    ===================================================================== */
 
-/* ---------- the instrument's own tokens: v2 values from tokens.css, with fallbacks until they land ---------- */
+/* ---------- the instrument's own tokens ---------- */
 .instrument {
   --i-edge: var(--edge, var(--dash));
   --i-tap: var(--tap, 48px);
@@ -23,14 +33,30 @@
   --i-button: var(--fs-button, 1.1rem);
   --i-kg: var(--fs-kg, 1.35rem);
   --i-price: var(--fs-price, clamp(2.6rem, 1.4rem + 4vw, 4.25rem));
-  --i-step: 1.0625rem; /* 18px — the words of a step head ("1 Country") */
-  --i-gap: 16px; /* between the calculator's blocks; 8px on the 1366×768 density tier */
+  --i-fast: 80ms; /* the one transition length inside the instrument: colour on hover / focus / checked */
+  --i-gap: 12px; /* between a step's block and the next head */
+  --i-tile: 64px; /* country tile */
+  --i-kgh: var(--i-tap-big); /* weight button */
+  --i-wide: var(--i-tap); /* "Over N kg" / "Documents · box size" */
+  --i-opt: 70px; /* service row: three lines beside the radio on phones (69px of content + borders); 64px two-line rows from 560 */
+  --i-lines: 44px; /* the two lines under the rows: 44px on phones (and the density tier), 48px from 560 */
+  /* The price bar's height. Below 1024 it is the sticky bar: the 56px button, 8px above and below, the 1px
+     hairline and the safe-area inset — written out so the result block can reserve exactly that. */
+  --i-bar: calc(var(--i-tap-big) + 17px + env(safe-area-inset-bottom, 0px));
+  --i-book: var(--i-tap-giant); /* the green button from 1024 */
+  /* How many rows the service rows take: two services stack under 360, share a row from 360 (see .result). */
+  --i-rows: 2;
 }
 
 /* ---------- the instrument skin: overrides of the shared skins ---------- */
+/* The panel is the page below 1024 (no chrome; the wrap's gutter is its margin, which the sticky bar's negative
+   margin assumes); from 1024 it is a bordered box with --r3 and --panel-pad. Never a shadow. */
 .instrument .panel {
-  box-shadow: var(--shadow-instrument);
-  margin-bottom: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  margin-bottom: 24px;
 }
 .instrument .field {
   gap: 8px;
@@ -55,11 +81,6 @@
   letter-spacing: 0;
   color: var(--muted);
 }
-.instrument .lab svg {
-  width: 18px;
-  height: 18px;
-  color: var(--orange-ink);
-}
 .instrument .hint {
   font-size: var(--i-small);
   line-height: 1.45;
@@ -77,6 +98,7 @@
   font-size: 1.05rem;
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
+  transition: border-color var(--i-fast);
 }
 .instrument input:hover,
 .instrument select:hover,
@@ -87,14 +109,24 @@
 .instrument select {
   padding-right: 40px;
 }
-/* Buttons inside the instrument: 48px, control edges; the green Book button; outline Back / Share / Copy. */
+/* Buttons inside the instrument: 48px, control edges; the green Book button; outline Back / Share / Copy. A button
+   is a rectangle that does not move: colour only on hover, a darker fill at 0ms while pressed. */
 .instrument .btn {
   min-height: var(--i-tap);
   font-size: 1rem;
   border-color: var(--i-edge);
+  transition:
+    background-color var(--i-fast),
+    border-color var(--i-fast),
+    color var(--i-fast);
 }
 .instrument .btn:hover {
   border-color: var(--ink);
+}
+.instrument .btn:active {
+  transform: none;
+  filter: brightness(0.92);
+  transition: none;
 }
 .instrument .btn svg {
   width: 20px;
@@ -118,123 +150,66 @@
   width: 24px;
   height: 24px;
 }
-/* Book is green on customer pages: the one button that finishes the job. Orange stays for the price stage and ticks. */
+/* Book is green on customer pages: the one button that finishes the job. It exists only with somewhere to go. */
 .instrument .btn.book {
   background: var(--wa);
   color: var(--wa-ink);
   border-color: var(--wa);
+  transition: none;
 }
 .instrument .btn.book:hover {
   background: var(--wa-hover);
   border-color: var(--wa-hover);
 }
-/* Not yet: grey, never pale green — the visitor's colour rule is grey = wait, green = go. It stays tappable, because an
-   early tap is answered (Calculator.tsx nudges the step that is still waiting); the shared skin's faded, untappable
-   disabled look is undone here. Muted on this grey: 5.7:1 light, 6.9:1 dark. */
-.instrument .btn.book[aria-disabled="true"],
-.instrument .btn.book[aria-disabled="true"]:hover {
-  background: color-mix(in srgb, var(--ink) 6%, var(--paper-2));
-  color: var(--muted);
-  border-color: var(--i-edge);
-  opacity: 1;
-  pointer-events: auto;
-  cursor: not-allowed;
+.instrument .btn.book:active {
+  filter: brightness(0.92);
 }
 
-/* ---------- step heads: "1 Country", "2 Weight", "3 Your price" ----------
-   Sized to read from arm's length and to match the "How it works" list beside the calculator: a 40px ink circle
-   with a 22px numeral, a 28px orange glyph, an 18px label. */
+/* ---------- step heads: "1 Country", "2 Weight" — a 24px text row, the choice at its right end ---------- */
 .step-head {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 40px;
-  margin: 0 0 10px;
+  min-height: 24px;
+  margin: 0 0 8px;
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: var(--i-step);
+  font-size: var(--i-label);
   line-height: 1.2;
+  letter-spacing: 0;
   color: var(--ink);
-}
-.step-head .n {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--ink);
-  color: var(--bg);
-  font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-weight: 700;
-  font-size: 22px;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-.step-head > svg {
-  width: 28px;
-  height: 28px;
-  flex: none;
-  color: var(--orange-ink);
 }
 .step-name {
   flex: none;
 }
-/* The tick: what has been chosen, with the flag, in the step's own head. */
+/* What has been chosen, in the step's own head: the flag and the name, or the kilograms. */
 .step-done {
   margin-left: auto;
   min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--ok);
+  color: var(--muted);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
-.step-done svg {
-  width: 20px;
-  height: 20px;
-  flex: none;
-}
-/* The detailed view's panel titles take the same look (the shared h2.step skin prints "01"; not here). */
-.instrument h2.step {
-  gap: 12px;
-  margin: 0 0 16px;
+/* The detailed view's panel titles: the same words, in the display face at h3 size, no numeral circle. */
+.instrument h2.step-title {
+  min-height: auto;
+  margin: 0 0 14px;
   font-family: var(--font-display);
   font-optical-sizing: auto;
   font-weight: 600;
   font-size: var(--fs-h3);
   line-height: 1.15;
   letter-spacing: 0;
-  color: var(--ink);
-}
-.instrument h2.step .n {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--ink);
-  color: var(--bg);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 22px;
-  line-height: 1;
-}
-.instrument h2.step .n::before {
-  content: none;
-}
-.instrument h2.step svg {
-  width: 28px;
-  height: 28px;
-  color: var(--orange-ink);
 }
 
-/* ---------- step 1: country tiles ---------- */
+/* ---------- step 1: country tiles ----------
+   A tile is the flag and the name on one line, the from-price under them across the tile's whole width: "from
+   PKR 5,220", and "· 4–6 days" after it when the tile is wide enough for both (the days are on the rates board
+   in any case). Fixed height, so the grid measures the same cold and live. Checked = ink fill, paper text. */
 .ctiles {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -244,11 +219,14 @@
 .ctile {
   appearance: none;
   min-width: 0;
-  min-height: var(--i-tap-big);
-  display: flex;
+  min-height: var(--i-tile);
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
   align-items: center;
-  gap: 12px;
-  padding: 4px 14px;
+  gap: 2px 10px;
+  padding: 8px 12px;
   background: var(--surface);
   border: 1.5px solid var(--i-edge);
   border-radius: var(--r3);
@@ -259,25 +237,79 @@
   color: var(--ink);
   text-align: left;
   cursor: pointer;
+  transition:
+    background-color var(--i-fast),
+    border-color var(--i-fast),
+    color var(--i-fast);
 }
-.ctile > span {
+.ctile .flag {
+  grid-row: 1;
+  grid-column: 1;
+}
+.ctile-name {
+  grid-row: 1;
+  grid-column: 2;
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.ctile-from {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  min-width: 0;
+  font-weight: 500;
+  font-size: var(--i-small);
+  line-height: 1.2;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The days join the from-line only where they physically fit: each tile is its own inline-size container, and the
+   days show once its content box is 196px wide — "from PKR 5,850 · 7–10 days" measures 172.5px at 14.9px, so a
+   five-digit price or two-digit days still fit and the line never ellipsizes. That is 3-up from about 720 wide
+   and 2-up phones in landscape; a 4-up tile beside the hero (138px at 1366, 145px at 1920) keeps "from PKR 5,850"
+   alone, and the days stand on the rates board next to it. The panel stays a container for the narrow-desktop
+   3-up rule at the end of the widths section. */
+.ctile-days {
+  display: none;
+}
+.instrument .panel.quick {
+  container-type: inline-size;
+}
+.ctile {
+  container-type: inline-size;
+}
+@container (min-width: 196px) {
+  .ctile-days {
+    display: inline;
+  }
+}
 .ctile:hover {
   border-color: var(--ink);
+}
+.ctile:active {
+  background: var(--paper-2);
+  transition: none;
 }
 .ctile[aria-checked="true"] {
   background: var(--ink);
   color: var(--bg);
   border-color: var(--ink);
 }
+.ctile[aria-checked="true"]:active {
+  background: var(--ink);
+}
+.ctile[aria-checked="true"] .ctile-from {
+  color: inherit;
+  opacity: 0.8;
+}
 /* The "More countries" picker: the grid's last cell when the destinations outnumber it. It looks like a tile,
    opens the native list, and once a country is chosen there it reads that name and fills ink like a checked tile —
-   so the grid keeps its two rows beside the hero and nothing is added under it. */
+   so the grid keeps its two rows and nothing is added under it. */
 .instrument select.ctile-more {
   min-width: 0;
-  min-height: var(--i-tap-big);
+  min-height: var(--i-tile);
   padding: 0 26px 0 12px; /* the chevron sits 8–22px from the right edge */
   border: 1.5px solid var(--i-edge);
   border-radius: var(--r3);
@@ -290,6 +322,10 @@
   color: var(--ink);
   text-overflow: ellipsis;
   cursor: pointer;
+  transition:
+    background-color var(--i-fast),
+    border-color var(--i-fast),
+    color var(--i-fast);
 }
 .instrument select.ctile-more:hover {
   border-color: var(--ink);
@@ -311,7 +347,7 @@
 .kg {
   appearance: none;
   min-width: 0;
-  min-height: var(--i-tap-big);
+  min-height: var(--i-kgh);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -324,6 +360,10 @@
   color: var(--ink);
   font-family: var(--font-sans);
   cursor: pointer;
+  transition:
+    background-color var(--i-fast),
+    border-color var(--i-fast),
+    color var(--i-fast);
 }
 .kg strong {
   font-family: var(--font-display);
@@ -331,6 +371,7 @@
   font-weight: 700;
   font-size: var(--i-kg);
   line-height: 1;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 .kg span {
@@ -341,80 +382,153 @@
 .kg:hover {
   border-color: var(--ink);
 }
+.kg:active {
+  background: var(--paper-2);
+  transition: none;
+}
 .kg[aria-pressed="true"] {
   background: var(--ink);
   color: var(--bg);
   border-color: var(--ink);
 }
-.kg[aria-pressed="true"] span,
-.kg[aria-pressed="true"] svg {
+.kg[aria-pressed="true"]:active {
+  background: var(--ink);
+}
+.kg[aria-pressed="true"] span {
   color: inherit;
 }
-/* The two wide buttons: "Over N kg" and "Other" (the document glyph and one word — the way out to the detailed
-   view) — a full row each on phones, half a row each from 560. */
+/* The two wide buttons: "Over N kg" and "Documents · box size" (the way out to the detailed view) — side by
+   side from 360 (half a row each: two of the four weight columns, then four of the eight from 560), so the
+   phone's live result ends above the sticky bar; a full row each only on the narrowest phones. Words only, no
+   glyph. The padding is 4px because "Documents · box size" is 149px and the half-row cell is 160px at 360. */
 .kg.more,
 .kg.other {
   grid-column: 1 / -1;
-  min-height: var(--i-tap);
+  min-height: var(--i-wide);
   flex-direction: row;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 6px 4px;
   font-weight: 600;
   font-size: var(--i-label);
   line-height: 1.2;
   text-align: center;
 }
-.kg.more svg,
-.kg.other svg {
-  width: 22px;
-  height: 22px;
-  flex: none;
-  color: var(--orange-ink);
+@media (min-width: 360px) {
+  .kg.more,
+  .kg.other {
+    grid-column: span 2;
+  }
+  .kgs:not(:has(.kg.more)) .kg.other {
+    grid-column: 1 / -1;
+  }
 }
 
-/* ---------- step 3: the two service cards ---------- */
+/* ---------- the line that waits: "Tap a country" / "Now tap a weight" ----------
+   The result block's only child while it waits, at the block's TOP (margin-bottom auto): 12px under the weights,
+   where the eye is after the last tap, in the step heads' rhythm — "1 Country", "2 Weight", "Now tap a weight".
+   The reserved room is under the line, so it reads as page space; pushed to the block's end the line stood 120px
+   (1366) / 146px (375) below the controls it named, behind a blank that read as a loading state, and below the
+   fold of a 375×667 phone. Still at least as tall as the bar it stands in for, so the block can never be shorter
+   waiting than live even if the reservation above were wrong; the words sit at its top. No box, no border. */
+.wait {
+  min-height: var(--i-bar);
+  display: flex;
+  align-items: flex-start;
+  margin: 0 0 auto;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1.1765rem; /* 20px */
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+/* ---------- the result: the service rows, the two lines under them and the bar ----------
+   Always rendered, always this tall: the rows (as many as the services need), 8px, the lines, 12px, the bar. So
+   the block measures the same whether it holds the waiting line, the live result or the cargo bar, and the
+   third tap moves nothing under the calculator. A column, with the bar pushed to its end (the bar's top margin
+   is auto), so in the cargo and no-service states — no rows, no lines — the bar still sits exactly where it
+   sits live; the waiting line, the other way round, is pinned to the block's start (see .wait). The row count
+   comes from data-n (how many services the document has, capped at 4). */
+.result {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: calc(var(--i-rows) * var(--i-opt) + (var(--i-rows) - 1) * 8px + 8px + var(--i-lines) + 12px + var(--i-bar));
+  margin: 12px 0 0;
+}
+.result[data-n="1"] {
+  --i-rows: 1;
+}
+.result[data-n="3"] {
+  --i-rows: 3;
+}
+.result[data-n="4"] {
+  --i-rows: 4;
+}
+@media (min-width: 360px) {
+  .result {
+    --i-rows: 1;
+  }
+  .result[data-n="3"],
+  .result[data-n="4"] {
+    --i-rows: 2;
+  }
+}
 .opts {
   border: 0;
-  margin: 0 0 var(--i-gap);
+  margin: 0;
   padding: 0;
   min-width: 0;
 }
-/* The pair the visitor compares is level: equal rows when the cards stack (phones, the 1366×768 tier) and one
-   stretched row when they sit side by side, whatever either card's dates line wraps to. */
+/* The pair the visitor compares is level: fixed-height rows, side by side from 360 so both fit above the sticky
+   bar on a phone (stacked only on the narrowest phones). */
 .opts > div {
   display: grid;
-  grid-auto-rows: 1fr;
   gap: 8px;
 }
-/* A service card: drawn radio, the name with the price on the same line (one word each, so that row never folds),
-   then the tag ("Fastest" / "Cheapest") and the days ("4–6 days") on one line across the card's whole width — the
-   arrival dates are printed once, in the price card. Greyed until a weight exists; the price cell is simply empty
-   until then — never a dash. The rows are centred, so the shorter card of a level pair keeps its content in the
-   middle. */
+@media (min-width: 360px) {
+  .opts > div {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+/* A service row. On a phone the cell is 160–168px wide, so the name, the days and the price stack beside the
+   drawn radio (17px + 15px + 24px lines, 2px gaps, 2px padding and the 1.5px borders: 69px in a 70px row); from 560 the name and the price share the first line
+   and the days sit under the name. Only priced services render, so a row is never dim and never empty. Checked:
+   ink border and the 3px orange bar. */
 .opt {
   position: relative;
-  min-height: var(--i-tap-big);
+  min-height: var(--i-opt);
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr);
   grid-template-areas:
-    "radio name price"
-    "meta meta meta";
-  gap: 2px 12px;
+    "radio name"
+    "radio eta"
+    "radio price";
+  gap: 2px 8px;
   align-items: center;
   align-content: center;
-  padding: 12px 14px;
+  padding: 2px 8px;
   border: 1.5px solid var(--i-edge);
   border-radius: var(--r3);
   background: var(--surface);
   cursor: pointer;
+  transition:
+    border-color var(--i-fast),
+    box-shadow var(--i-fast);
 }
 .opt:hover {
   border-color: var(--ink);
 }
+.opt:active {
+  background: var(--paper-2);
+  transition: none;
+}
 .opt input {
   grid-area: radio;
   justify-self: center;
-  align-self: start;
+  align-self: center;
   appearance: none;
   -webkit-appearance: none;
   width: 24px;
@@ -425,35 +539,28 @@
   background: var(--surface);
   cursor: inherit;
   flex: none;
+  transition:
+    border-color var(--i-fast),
+    background-color var(--i-fast);
 }
 .opt input:checked {
   border-color: var(--hot-a);
   background: radial-gradient(circle, var(--hot-a) 0 5.5px, transparent 6.5px) var(--surface);
-}
-.opt input:disabled {
-  border-color: var(--line);
-  background: var(--paper-2);
 }
 .opt-name {
   grid-area: name;
   min-width: 0;
   font-weight: 600;
   font-size: 1rem;
-  line-height: 1.25;
+  line-height: 1.1;
 }
-/* The tag and the days flow as one line of text (the pill is inline); should a long service note wrap, it wraps
-   under the pill rather than hanging beside it. */
-.opt-meta {
-  grid-area: meta;
+.opt-eta {
+  grid-area: eta;
   min-width: 0;
   color: var(--muted);
   font-size: var(--i-small);
-  line-height: 1.35;
-  text-wrap: balance;
-}
-.opt-meta .opt-badge {
-  margin-right: 6px;
-  vertical-align: middle;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 .opt-eta:empty {
   display: none;
@@ -463,294 +570,133 @@
   font-family: var(--font-display);
   font-optical-sizing: auto;
   font-weight: 700;
-  font-size: 1.5rem;
+  font-size: 1.41rem; /* 24px */
   line-height: 1;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   white-space: nowrap;
-  text-align: right;
-}
-.opt-price:empty {
-  display: none;
-}
-/* Not yet (no weight, or a service that cannot price this one): the card says "wait" with its frame — a hairline
-   instead of a control edge, no price, a blank radio — while every word stays readable at full opacity: the name and
-   the note in --muted (7.2:1 light, 7.8:1 dark). Fading the whole card dropped the note to 2.5:1. */
-.opts[data-state="wait"] .opt,
-.opt.dim {
-  border-color: var(--line);
-  cursor: default;
-}
-.opts[data-state="wait"] .opt:hover,
-.opt.dim:hover {
-  border-color: var(--line);
-}
-.opts[data-state="wait"] .opt .opt-name,
-.opt.dim .opt-name {
-  color: var(--muted);
+  text-align: left;
 }
 .opt:has(input:checked) {
+  border-color: var(--ink);
   box-shadow: inset 3px 0 0 var(--hot-a);
-  background: var(--paper-2);
 }
-.opt:has(input:checked) .opt-meta {
-  color: var(--ink-2);
-}
-/* The one word that tells the two cards apart for someone who reads little — label size (16px), never the floor. */
-.opt-badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: var(--r-pill);
-  background: var(--blue-soft);
-  color: var(--orange-ink);
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: var(--i-label);
-  line-height: 1.2;
-}
-.opt-badge.price {
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-
-/* ---------- the add-on row (the detailed view only: the quick view names what is included under its figure) ---------- */
-.addons {
+/* Under the rows: when the parcel arrives, and what the figure includes. Two 16px lines (1.3 keeps two inside the
+   44px tiers); fixed height, and the 12px under them is the bar's gap, so the bar never moves when a service or
+   a weight changes. */
+.lines {
+  min-height: var(--i-lines);
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 2px;
-  margin: 0 0 var(--i-gap);
-}
-.addons label {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: var(--i-tap);
-  font-family: var(--font-sans);
-  font-weight: 500;
+  margin: 8px 0 12px;
   font-size: var(--i-label);
   line-height: 1.3;
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  cursor: pointer;
 }
-.addons input {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 24px;
-  height: 24px;
-  margin: 0;
-  flex: none;
-  border: 2px solid var(--i-edge);
-  border-radius: var(--r1);
-  background: var(--surface);
-  display: grid;
-  place-content: center;
-  cursor: inherit;
-}
-.addons input::before {
-  content: "";
-  width: 6px;
-  height: 12px;
-  margin-top: -2px;
-  border: solid var(--book-ink);
-  border-width: 0 2.5px 2.5px 0;
-  transform: rotate(45deg) scale(0);
-}
-.addons input:checked {
-  background: var(--hot-a);
-  border-color: var(--hot-a);
-}
-.addons input:checked::before {
-  transform: rotate(45deg) scale(1);
+.lines > span {
+  display: block;
+  min-width: 0;
 }
 
-/* ---------- the price: a paper card that says what to do next, then navy with the figure ---------- */
-.total {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
+/* ---------- the price bar: the figure and the one green button ----------
+   Below 1024 it sticks to the bottom of the screen while the calculator is in view (it is the result block's last
+   child, so it comes to rest at the panel's end and never covers what follows); from 1024 it sits under the rows.
+   Its top margin is auto: it is pushed to the block's end, so it sits in the same place whether or not rows are
+   above it. The figure is printed at once and left-aligned, so a changing width only moves its own right edge.
+   No shadow: the 1px hairline is its whole edge, stuck over the rates board or at rest in the flow between the
+   "Includes" line and the promise — a rule, like every other separation on the page, never a floating card. */
+.pricebar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  min-height: var(--i-bar);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin: auto calc(var(--gutter) * -1) 0;
+  padding: 8px var(--gutter) calc(8px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+.pricebar-sum {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin: 0 0 14px;
-  padding: 20px;
-  border-radius: var(--r4);
-  text-align: left;
-  color: var(--paper-ink);
-  background: var(--navy);
-  border: 1px solid var(--navy-2);
-  box-shadow: var(--glow-live);
+  justify-content: center;
+  gap: 2px;
 }
-.total .tlabel {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: var(--i-label);
-  line-height: 1.2;
-  color: var(--paper-70);
-}
-/* The figure: the biggest thing on the screen, left-aligned so a changing width only moves the right edge. */
-.total .tval {
+.tval {
   display: block;
-  margin: 4px 0 0;
   font-family: var(--font-display);
   font-optical-sizing: auto;
   font-weight: 700;
-  font-size: var(--i-price);
-  line-height: 1;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-  color: var(--paper-ink);
-  white-space: nowrap;
-}
-.total .num {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.total .cur {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 1rem;
+  font-size: 1.65rem; /* 28px */
   line-height: 1;
   letter-spacing: 0;
-  color: var(--paper-70);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
 }
-.total .sweep {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: linear-gradient(105deg, transparent 40%, rgba(245, 240, 231, 0.18) 50%, transparent 60%);
-  transform: translateX(-100%);
-  opacity: 0;
+.tnote {
+  display: block;
+  min-width: 0;
+  font-size: var(--i-small);
+  line-height: 1.3;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-/* Under the figure, live: three short lines — what it is for ("Express · 5 kg · Australia"), when it arrives
-   ("Arrives Sat 26 Sept – Tue 29 Sept", the only place the dates are printed) and what is inside it ("Includes
-   PKR 500 pickup and service charges"). Idle, the note alone: the next tap, with a glyph. */
-.total .tnote {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  font-size: var(--i-label);
-  line-height: 1.35;
-  color: var(--paper-70);
+/* "· Canada" after "Express · 5 kg": the country is in the step head, and the phone bar keeps ~125px beside the
+   green button, so it joins the note only from 560. */
+.tnote-to {
+  display: none;
 }
-.total .tnote svg {
+/* Cargo or no service: the bar has a sentence and the button, no figure. The same two columns as live (rule 4:
+   the bar is ONE height in every state, and the green button stands where it stands live, at the same width its
+   label needs — stacking the sentence over a full-width button made the bar 106px against 73 and the button
+   343px against 206). The sentence is the line that waits, in ink, wrapping beside the button: the button is
+   ~200px wide with "Ask for a cargo rate", so a 360–375 phone keeps 110–130px for it, and "Over 25 kg? We price
+   it on WhatsApp" takes three lines there — 14.9px (the live bar's second line's size) at 1.2 is 53.5px, inside
+   the 56px row. 16px from 560, where the column is ≥ 300px and two lines fit; 20px from 1024 (below). Only under
+   360 (a 320px phone would keep 67px) does the button take the row below. */
+.pricebar:not([data-state="live"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 360px) {
+  .pricebar:not([data-state="live"]) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+.pricebar:not([data-state="live"]) .tnote {
+  font-weight: 600;
+  font-size: var(--i-small);
+  line-height: 1.2;
+  color: var(--ink);
+  white-space: normal;
+  overflow: visible;
+}
+/* The phone button: 56px tall, 17px words, so a 343px bar keeps ≥ 136px for the figure beside it. */
+.instrument .pricebar .btn.book {
+  min-height: var(--i-tap-big);
+  min-width: 168px;
+  padding: 0 16px;
+  border-radius: var(--r3);
+  font-size: 1rem;
+}
+.instrument .pricebar .btn.book svg {
   width: 22px;
   height: 22px;
-  flex: none;
-  color: var(--orange-ink);
-}
-.total .twhen,
-.total .tline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--i-label);
-  line-height: 1.35;
-  color: var(--paper-70);
-}
-.total .tlines {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.total .twhen svg,
-.total .tline svg {
-  width: 18px;
-  height: 18px;
-  flex: none;
-  color: var(--paper-70);
-}
-/* Idle: the paper card. The note is the only sentence and says the next tap. */
-.total.idle {
-  background: var(--paper-2);
-  color: var(--ink);
-  border: 1.5px dashed var(--i-edge);
-  box-shadow: none;
-}
-.total.idle .tlabel {
-  color: var(--muted);
-}
-.total.idle .tnote {
-  margin-top: 6px;
-  font-weight: 600;
-  font-size: 1.25rem;
-  line-height: 1.3;
-  color: var(--ink);
-}
-:root[data-theme="dark"] .total:not(.idle) {
-  border-color: var(--line);
-}
-/* The nudge: an early tap on the grey Book button turns the waiting step's head orange for a moment (Calculator.tsx
-   adds `.nudge` for 1.2s) — or, when this country has no service, the card whose sentence says to ask on WhatsApp.
-   With motion allowed the numeral rings twice as well (the motion block at the end). */
-.step-head.nudge {
-  color: var(--orange-ink);
-}
-.step-head.nudge .n {
-  background: var(--hot-a);
-  color: var(--book-ink);
-}
-.total.idle.nudge {
-  border-color: var(--hot-a);
-}
-
-/* ---------- the button: one giant green Book, nothing beside it ---------- */
-/* Step 3 in flow: the two services, the price card, Book. The density tier below turns .step3 into two columns.
-   Call and a plain WhatsApp chat are in the header and in the band at the foot of the page, not here: after the
-   price there is exactly one thing to tap. */
-.step3 {
-  min-width: 0;
-}
-.ctas {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-}
-.ctas .pull,
-.ctas .pull-in {
-  display: block;
-}
-.ctas .pull .btn,
-.quote .actions .pull .btn {
-  width: 100%;
-}
-/* The sentence link to the detailed view. It lives under the notes, outside the panel (Calculator.tsx), so it never
-   sits under the green button competing with it: a quiet muted line, the link in ink with a soft underline that
-   turns full on hover and focus. Still a 48px tap target through its padding. */
-.switch {
-  margin: 12px 0 0;
-  font-size: var(--i-label);
-  line-height: 1.5;
-  color: var(--muted);
-}
-.instrument .switch .link {
-  appearance: none;
-  display: inline-block;
-  border: 0;
-  background: none;
-  padding: 12px 4px;
-  margin: -12px -4px;
-  color: var(--ink);
-  font: inherit;
-  font-weight: 600;
-  text-decoration: underline;
-  text-decoration-color: var(--i-edge);
-  text-decoration-thickness: 1.5px;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-.instrument .switch .link:hover,
-.instrument .switch .link:focus-visible {
-  color: var(--orange-ink);
-  text-decoration-color: currentColor;
 }
 
 /* ---------- detailed view: back, type, units, pieces ---------- */
 .instrument .btn.back {
-  margin: 0 0 12px;
+  margin: 0 0 16px;
 }
 .static {
   min-height: 52px;
@@ -768,7 +714,7 @@
   max-width: 420px;
   padding: 4px;
   margin-bottom: 10px;
-  background: var(--paper-2);
+  background: var(--surface);
   border: 1.5px solid var(--i-edge);
   border-radius: var(--r3);
 }
@@ -785,9 +731,16 @@
   font-size: 1.05rem;
   line-height: 1.2;
   cursor: pointer;
+  transition:
+    background-color var(--i-fast),
+    color var(--i-fast);
 }
 .segbtn:hover {
   color: var(--ink);
+}
+.segbtn:active {
+  background: var(--paper-2);
+  transition: none;
 }
 .segbtn[aria-checked="true"] {
   background: var(--ink);
@@ -808,17 +761,25 @@
   min-height: var(--i-tap);
   padding: 0 18px;
   border: 1.5px solid var(--i-edge);
-  border-radius: var(--r-pill);
+  border-radius: var(--r3);
   background: var(--surface);
   color: var(--muted);
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: var(--i-label);
   cursor: pointer;
+  transition:
+    background-color var(--i-fast),
+    border-color var(--i-fast),
+    color var(--i-fast);
 }
 .ubtn:hover {
   border-color: var(--ink);
   color: var(--ink);
+}
+.ubtn:active {
+  background: var(--paper-2);
+  transition: none;
 }
 .ubtn[aria-pressed="true"] {
   background: var(--ink);
@@ -848,7 +809,7 @@
   text-align: center;
 }
 .piece + .piece {
-  border-top: 1px dashed var(--i-edge);
+  border-top: 1px solid var(--line);
   padding-top: 16px;
   margin-top: 4px;
 }
@@ -862,7 +823,7 @@
 .piece .ptitle .pnum {
   font-weight: 600;
   font-size: var(--i-label);
-  color: var(--orange-ink);
+  color: var(--ink);
 }
 .instrument .btn.p-remove {
   padding: 0 14px;
@@ -883,16 +844,64 @@
   margin-top: 6px;
 }
 
-/* ---------- results: the service cards, the add-on, the status sentence ---------- */
-.results {
-  margin: 8px 0 16px;
-  padding: var(--panel-pad);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r4);
-  box-shadow: var(--shadow-instrument);
+/* ---------- the add-on row (the detailed view only: the quick view names what is included under its rows) ---------- */
+.addons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.results h2.step {
+.addons label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--i-tap);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: var(--i-label);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  cursor: pointer;
+}
+.addons input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  flex: none;
+  border: 2px solid var(--i-edge);
+  border-radius: var(--r1);
+  background: var(--surface);
+  display: grid;
+  place-content: center;
+  cursor: inherit;
+  transition:
+    border-color var(--i-fast),
+    background-color var(--i-fast);
+}
+.addons input::before {
+  content: "";
+  width: 6px;
+  height: 12px;
+  margin-top: -2px;
+  border: solid var(--book-ink);
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg) scale(0);
+}
+.addons input:checked {
+  background: var(--hot-a);
+  border-color: var(--hot-a);
+}
+.addons input:checked::before {
+  transform: rotate(45deg) scale(1);
+}
+
+/* ---------- results: the service rows, the add-on, the status sentence ---------- */
+.results {
+  margin: 0 0 24px;
+}
+.results h2.step-title {
   margin-bottom: 12px;
 }
 .svcs {
@@ -902,29 +911,40 @@
 .svc {
   appearance: none;
   width: 100%;
-  min-height: var(--i-tap-big);
+  min-height: var(--i-opt);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px 12px;
   align-items: center;
-  padding: 12px 14px;
+  padding: 8px 14px;
   border: 1.5px solid var(--i-edge);
   border-radius: var(--r3);
   background: var(--surface);
   color: inherit;
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color var(--i-fast),
+    box-shadow var(--i-fast);
 }
 .svc:hover:not(:disabled) {
   border-color: var(--ink);
 }
+.svc:active:not(:disabled) {
+  background: var(--paper-2);
+  transition: none;
+}
 .svc:disabled {
-  opacity: 0.55;
+  border-color: var(--line);
   cursor: default;
 }
+.svc:disabled .svc-name,
+.svc:disabled .svc-eta {
+  color: var(--muted);
+}
 .svc[aria-pressed="true"] {
+  border-color: var(--ink);
   box-shadow: inset 3px 0 0 var(--hot-a);
-  background: var(--paper-2);
 }
 .svc-main {
   display: flex;
@@ -941,19 +961,16 @@
   font-size: 1rem;
   line-height: 1.25;
 }
+/* "Choose" / "Chosen": one plain word after the name, never a pill. */
 .svc-cta {
-  display: inline-block;
-  padding: 2px 9px;
-  border-radius: var(--r-pill);
-  background: var(--blue-soft);
-  color: var(--orange-ink);
-  font-weight: 600;
+  color: var(--muted);
+  font-weight: 500;
   font-size: var(--i-small);
   line-height: 1.3;
 }
 .svc[aria-pressed="true"] .svc-cta {
-  background: var(--ok-soft);
-  color: var(--ok);
+  color: var(--ink);
+  font-weight: 600;
 }
 .svc-eta {
   color: var(--muted);
@@ -968,8 +985,9 @@
   font-family: var(--font-display);
   font-optical-sizing: auto;
   font-weight: 700;
-  font-size: 1.5rem;
+  font-size: 1.41rem;
   line-height: 1;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-align: right;
@@ -977,17 +995,15 @@
 .svc-price:empty {
   display: none;
 }
+/* The status sentence: plain text, no box; a warning reads in the warning colour. */
 .status {
   margin-top: 12px;
-  padding: 12px 14px;
-  border-radius: var(--r2);
-  background: var(--paper-2);
   color: var(--ink);
   font-size: 1rem;
   line-height: 1.5;
+  max-width: 66ch;
 }
 .status.warn {
-  background: var(--warn-soft);
   color: var(--warn);
 }
 .status a {
@@ -1006,12 +1022,7 @@
 /* ---------- the quote card ---------- */
 .quote {
   position: relative;
-  margin-top: 16px;
-  padding: var(--panel-pad);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r4);
-  box-shadow: var(--shadow-instrument);
+  margin: 0 0 24px;
 }
 .quote h2 {
   display: flex;
@@ -1024,15 +1035,19 @@
   line-height: 1.15;
   letter-spacing: 0;
 }
+/* "Document rate": a plain muted word after the title, never a pill. */
 .quote h2 .tag {
   margin: 0;
-  padding: 3px 10px;
+  padding: 0;
+  background: none;
+  border-radius: 0;
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: var(--i-small);
+  font-weight: 500;
+  font-size: var(--i-label);
   line-height: 1.3;
   letter-spacing: 0;
   text-transform: none;
+  color: var(--muted);
 }
 .quote dl {
   display: grid;
@@ -1079,8 +1094,8 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-/* A disclosure row (48px, a chevron at the right end) with muted fine print inside; the only place under the
-   instrument where there is anything to read. */
+/* "How this price is calculated": a disclosure row (48px, a chevron at the right end) with the working inside;
+   the one accordion in the calculator, and it lives on the detailed view only. */
 details.how {
   margin: 0 0 16px;
   border-top: 1px solid var(--line);
@@ -1130,11 +1145,6 @@ details.how ul {
 details.how li {
   margin: 2px 0;
 }
-details.notes {
-  margin: 12px 0 0;
-  border-top: 0;
-  padding-top: 0;
-}
 .quote details.how {
   border-top: 0;
   padding-top: 0;
@@ -1146,9 +1156,8 @@ details.notes {
   display: grid;
   gap: 10px;
 }
-.quote .actions .pull,
-.quote .actions .pull-in {
-  display: block;
+.quote .actions .btn.book {
+  width: 100%;
 }
 .actions-2 {
   display: grid;
@@ -1159,31 +1168,44 @@ details.notes {
   grid-column: 1 / -1;
 }
 
-/* ---------- the fine print inside "Good to know before you book" ---------- */
+/* ---------- the fine print at the end of the detailed view: what is included, the notes, the disclaimer ---------- */
 .includes,
+.notes,
 .disclaimer {
-  margin: 4px 0 8px;
+  margin: 0 0 8px;
   max-width: 66ch;
   color: var(--muted);
   font-size: var(--i-small);
   line-height: 1.5;
 }
+.includes {
+  margin-top: 16px;
+}
+.notes {
+  padding-left: 18px;
+  list-style: disc;
+}
+.notes li {
+  margin: 2px 0;
+}
+/* "Sample prices for now." — one muted line, no box (page.tsx prints it). */
 .sample {
-  margin: 0 0 16px;
-  padding: 12px 14px;
-  border-radius: var(--r2);
-  background: var(--warn-soft);
-  color: var(--warn);
-  font-weight: 500;
-  font-size: 1rem;
+  margin: 0 0 12px;
+  font-size: var(--i-label);
   line-height: 1.45;
+  color: var(--muted);
 }
 
 /* ---------- widths ----------
-   375: tiles 2-up (the picker cell included), weights 4-up + two wide, services stacked. From 560: tiles 3-up,
-   weights 8 + 2, services and detailed service cards side by side. From 1200 (the instrument is 600px+ wide beside
-   the hero): tiles 4-up. */
+   375: tiles 2-up (the picker cell included), weights 4-up + the two wide buttons side by side, service rows side
+   by side with the name / days / price stacked. From 560: tiles 3-up (the days join the from-line once a tile is
+   196px wide inside, see .ctile-days), weights 8 + 2, two-line service rows, the country back in the bar's note.
+   From 1024: the panel is a bordered box, the bar is static under the rows, tiles 4-up. */
 @media (min-width: 560px) {
+  .instrument {
+    --i-opt: 64px;
+    --i-lines: 48px;
+  }
   .ctiles {
     grid-template-columns: repeat(3, 1fr);
   }
@@ -1193,18 +1215,111 @@ details.notes {
   .kg.more,
   .kg.other {
     grid-column: span 4;
+    padding: 6px 10px;
   }
   .kgs:not(:has(.kg.more)) .kg.other {
     grid-column: 1 / -1;
   }
-  .opts > div,
   .svcs {
     grid-template-columns: 1fr 1fr;
   }
+  .opt {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "radio name price"
+      "radio eta price";
+    gap: 2px 12px;
+    padding: 8px 14px;
+  }
+  .opt-name,
+  .opt-eta {
+    line-height: 1.2;
+  }
+  .opt-price {
+    text-align: right;
+  }
+  .tnote-to {
+    display: inline;
+  }
+  .pricebar:not([data-state="live"]) .tnote {
+    font-size: var(--i-label);
+    line-height: 1.3;
+  }
+  .quote .actions {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .quote .actions .btn.book {
+    width: auto;
+    min-width: 260px;
+  }
+}
+/* Below 1024 the detailed view's sections are separated by a hairline and whitespace, never a box. */
+@media (max-width: 1023px) {
+  .instrument .panel + .panel,
+  .results,
+  .quote {
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+  }
 }
 @media (min-width: 1024px) {
-  .instrument .panel.quick {
-    padding: 20px;
+  .instrument .panel,
+  .results,
+  .quote {
+    padding: var(--panel-pad);
+    border: 1px solid var(--line);
+    border-radius: var(--r3);
+    margin-bottom: 16px;
+  }
+  .instrument .panel > :last-child,
+  .results > :last-child,
+  .quote > :last-child {
+    margin-bottom: 0;
+  }
+  .instrument {
+    --i-bar: 88px;
+  }
+  .ctiles {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  /* The bar sits under the rows: static, unboxed, the figure at its full size, the button 64px and 260px wide.
+     A fixed height, so it never changes between states. */
+  .pricebar {
+    position: static;
+    min-height: var(--i-bar);
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    margin: auto 0 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .pricebar:not([data-state="live"]) .tnote {
+    font-size: 1.1765rem; /* 20px, the line that waits */
+  }
+  /* The 72px figure at 0.9 plus the 21px note is 86px: no gap, so the pair stays inside the 88px bar and the bar
+     never grows by the fraction that would move the panel's end. */
+  .pricebar-sum {
+    gap: 0;
+  }
+  .tval {
+    font-size: var(--i-price);
+    line-height: 0.9;
+    letter-spacing: -0.01em;
+  }
+  .tnote {
+    font-size: var(--i-label);
+  }
+  .instrument .pricebar .btn.book {
+    min-height: var(--i-book);
+    min-width: 260px;
+    padding: 0 28px;
+    font-size: var(--i-button);
+  }
+  .instrument .pricebar .btn.book svg {
+    width: 24px;
+    height: 24px;
   }
   /* Detailed quote: weight | quantity | L × W × H. The quantity holds one or two digits, so it gives its width
      to the weight ("e.g. 2.5" plus Chrome's spinner) and the three dimension boxes. */
@@ -1215,31 +1330,26 @@ details.notes {
     padding: 0 6px;
   }
 }
-@media (min-width: 1200px) {
-  .ctiles {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-/* The 1366×768 density tier: beside the hero, the figure and the whole green button must sit inside the first
-   screen once a weight is chosen — with eight country cells (two rows). Step 3 goes two columns (the services
-   left; the price card and the green button right), which costs one column of width and buys the height of the
-   service cards and their gap. Only the gaps and the figure shrink: tiles, weights and service cards keep 56px,
-   the green button 64px, the step heads their 40px circles. Budget with eight tiles (two rows): 64 header + 24 +
-   15 panel top + (40 + 4 + 120 + 6) + (40 + 4 + 112 + 6) + (40 + 4) + price card ≈ 200 (the "Includes" line wraps)
-   + 6 + 64 button ≈ 750. Measured with the dev database's four tiles: the button's bottom edge at 686. */
+/* The 1366×768 density tier: beside the hero, the green button must sit inside the first screen once a weight is
+   chosen — with eight country cells (two rows). Budget: 64 header + 24 + 16 panel + (24 + 8 + 120 + 12) tiles +
+   (24 + 8 + 100 + 12) weights + (56 + 8 + 44) rows and lines + 12 + 80 bar + 16 = 688. Only the heights of the
+   controls and the figure shrink; nothing under 44px. */
 @media (min-width: 1024px) and (max-height: 820px) {
   .instrument {
-    --i-gap: 6px;
-    --i-price: 3.4rem;
+    --i-price: 3.4rem; /* 58px */
+    --i-tile: 56px;
+    --i-kgh: 48px;
+    --i-wide: 44px;
+    --i-opt: 56px;
+    --i-lines: 44px;
+    --i-bar: 80px;
+    --i-book: 60px;
   }
   .instrument .panel.quick {
-    padding-top: 14px;
-  }
-  .step-head {
-    margin-bottom: 4px;
+    padding: 16px;
   }
   .ctile {
-    padding: 2px 12px;
+    padding: 4px 12px;
   }
   .kg {
     padding: 2px 4px;
@@ -1247,163 +1357,51 @@ details.notes {
   .kg span {
     line-height: 1.1;
   }
-  .step3 {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas: "pick price";
-    gap: 0 12px;
-    align-items: start;
+  .opt {
+    padding: 4px 14px;
   }
-  .step3-pick {
-    grid-area: pick;
-    min-width: 0;
-  }
-  .step3-price {
-    grid-area: price;
-    min-width: 0;
-  }
-  .opts > div {
-    grid-template-columns: 1fr;
-  }
-  .total {
-    gap: 2px;
-    margin-bottom: 6px;
-    padding: 12px 16px;
-  }
-  .total .tval {
-    margin-top: 2px;
-  }
-  .total.idle .tnote {
-    margin-top: 4px;
-  }
-  .ctas {
-    margin-top: 6px;
-    gap: 8px;
+}
+/* 4-up needs a 141px tile ("Australia" beside a 32px flag, "from PKR 5,850" under them, whole): 588px of panel.
+   Narrower — 1024 to about 1200 wide, iPads in landscape, where the panel is 509–585px — the tiles go 3-up, the
+   same 137px tile as at 1366, instead of breaking a country's name mid-word. Eight cells make three rows there
+   (+64px on the density tier's 688px budget: the green button still ends inside 768). The panel is the query
+   container (a tile cannot query its own width); after the 1024 block, whose 4-up this narrows. */
+@media (min-width: 1024px) {
+  @container (max-width: 592px) {
+    .ctiles {
+      grid-template-columns: repeat(3, 1fr);
+    }
   }
 }
 
-/* ---------- motion (only here does anything move) ---------- */
+/* ---------- motion: the price bar arrives once ----------
+   The only animation in the instrument (v3 §5): the bar fades in over 120ms on its first mount and, below 1024,
+   rises from the bottom edge. Nothing else moves; reduced motion gets nothing at all. */
 @media (prefers-reduced-motion: no-preference) {
-  /* Wow 1 — the price lands: paper prints to navy, the figure counts up (PriceReadout), the sweep crosses once,
-     and the green button lifts. */
-  .total {
-    transition:
-      background-color var(--t-print) var(--ease-out),
-      color var(--t-print),
-      border-color var(--t-print),
-      box-shadow var(--t-print);
-  }
-  @keyframes sweep {
-    from {
-      transform: translateX(-100%);
-      opacity: 1;
-    }
-    to {
-      transform: translateX(100%);
-      opacity: 0;
-    }
-  }
-  .total .sweep {
-    animation: sweep 700ms var(--ease-out) 120ms both;
-  }
-  @keyframes lift {
-    0% {
-      transform: scale(1);
-    }
-    50% {
-      transform: scale(1.03);
-    }
-    100% {
-      transform: scale(1);
-    }
-  }
-  /* Grey to green over 250ms as the price lands. */
-  .instrument .btn.book {
-    transition:
-      background-color 250ms var(--ease-out),
-      border-color 250ms var(--ease-out),
-      color 250ms var(--ease-out);
-  }
-  /* The lift waits 300ms so that on a phone, where the page first scrolls the price into view, it plays once the
-     button has arrived on screen; it still ends inside the count-up's 700ms. */
-  .ctas[data-live="true"] .btn.book {
-    animation: lift 320ms var(--ease-out) 300ms both;
-  }
-  /* The nudge: the waiting step's numeral (or the "ask us" card) rings twice, 1.2s in all — the same span the
-     orange highlight lasts. */
-  @keyframes ring {
-    from {
-      box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.55);
-    }
-    to {
-      box-shadow: 0 0 0 14px rgba(234, 88, 12, 0);
-    }
-  }
-  .step-head .n {
-    transition:
-      background-color var(--t-fast),
-      color var(--t-fast);
-  }
-  .step-head.nudge .n,
-  .total.idle.nudge {
-    animation: ring 600ms var(--ease-out) 2;
-  }
-  /* Wow 2 — a physical press on a tile or a weight button, and the tick fading in beside the step. */
-  .ctile,
-  .kg {
-    transition:
-      background-color var(--t-fast),
-      border-color var(--t-fast),
-      color var(--t-fast),
-      transform 180ms var(--ease-out);
-  }
-  .ctile:active,
-  .kg:active {
-    transform: scale(0.96);
-    transition-duration: var(--t-fast), var(--t-fast), var(--t-fast), 90ms;
-  }
-  @keyframes tick-in {
+  @keyframes bar-in {
     from {
       opacity: 0;
+      transform: translateY(100%);
     }
     to {
       opacity: 1;
-    }
-  }
-  .step-done {
-    animation: tick-in 200ms var(--ease-out) both;
-  }
-  /* Wow 3 — the flag arrives: the chosen tile's flag settles into place. */
-  @keyframes land {
-    from {
-      transform: scale(1.18);
-      opacity: 0.4;
-    }
-    to {
       transform: none;
+    }
+  }
+  @keyframes bar-fade {
+    from {
+      opacity: 0;
+    }
+    to {
       opacity: 1;
     }
   }
-  .ctile[aria-checked="true"] .flag {
-    animation: land 220ms var(--ease-out) both;
+  .pricebar {
+    animation: bar-in 120ms var(--ease-out) backwards;
   }
-  .segbtn,
-  .ubtn,
-  .opt,
-  .svc {
-    transition:
-      background-color var(--t-fast),
-      border-color var(--t-fast),
-      color var(--t-fast),
-      box-shadow var(--t-fast);
-  }
-  .opt input,
-  .addons input {
-    transition:
-      border-color var(--t-fast),
-      background-color var(--t-fast);
-  }
-  .addons input::before {
-    transition: transform var(--t-fast) var(--ease-out);
+  @media (min-width: 1024px) {
+    .pricebar {
+      animation: bar-fade 120ms var(--ease-out) backwards;
+    }
   }
 }

@@ -5,6 +5,8 @@
  * and a short form that turns into a WhatsApp message, so the customer can
  * still ask for a rate by hand. This component never receives a price —
  * the page that renders it does not pass the rate document at all.
+ * Behaviour unchanged since v2; v3 took the icons off the labels (the flag
+ * beside the chosen country is the one picture) and left-aligned the hint.
  */
 import { useState } from "react";
 import { UI } from "@/components/Icons";
@@ -46,18 +48,16 @@ export function HoldPanel({ companyName, whatsapp, message, destinations, maxKg 
   return (
     <div className="panel quick hold-panel">
       <h2 className="step-head">
-        <UI.clock />
         <span className="step-name">Prices are being updated</span>
       </h2>
       <p className="hold-msg">{message}</p>
       <label className="field">
         <span className="lab">
-          <UI.pin />
           Country
           {dest ? (
             <span className="step-done">
               <Flag code={flagCode(dest.name, dest.id)} name={dest.name} size={24} />
-              <UI.check />
+              {dest.name}
             </span>
           ) : null}
         </span>
@@ -73,10 +73,7 @@ export function HoldPanel({ companyName, whatsapp, message, destinations, maxKg 
         </select>
       </label>
       <label className="field">
-        <span className="lab">
-          <UI.scale />
-          Weight (kg)
-        </span>
+        <span className="lab">Weight (kg)</span>
         <input type="number" inputMode="decimal" min={0.1} step={0.1} max={10_000} placeholder={maxKg > 0 ? `1 to ${maxKg}, or more for cargo` : "e.g. 2.5"} value={kg} onChange={(e) => setKg(e.target.value)} />
         {!kgOk ? <span className="hint">Enter a weight above 0.</span> : null}
       </label>
@@ -84,11 +81,11 @@ export function HoldPanel({ companyName, whatsapp, message, destinations, maxKg 
         <span className="lab">What is inside (optional)</span>
         <input type="text" maxLength={120} placeholder="Clothes, documents, gifts…" value={contents} onChange={(e) => setContents(e.target.value.slice(0, 120))} />
       </label>
-      <a className={`btn wa giant${ready ? "" : " soft"}`} href={href} target="_blank" rel="noopener">
+      <a className="btn wa giant" href={href} target="_blank" rel="noopener">
         <UI.wa />
         Ask for today&apos;s rate on WhatsApp
       </a>
-      <p className="hint">We reply with a price by hand{ready ? "" : " — add the country and weight so we can quote straight away"}.</p>
+      <p className="hint">{ready ? "We reply with a price by hand." : "Add the country and weight so we can quote straight away."}</p>
     </div>
   );
 }
