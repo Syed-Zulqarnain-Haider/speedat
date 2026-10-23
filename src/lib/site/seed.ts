@@ -39,7 +39,7 @@ export const SEED: SiteData = {
     origin: "Pakistan",
     whatsapp: "923157667076",
     phone: "+92 315 766 7076",
-    email: "info@speedat.net",
+    email: "",
     includes: "Door-to-door delivery · Pickup on request · Tracking shared on WhatsApp",
     originCities: "Lahore, Faisalabad",
     notes: [

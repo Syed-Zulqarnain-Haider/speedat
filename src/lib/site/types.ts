@@ -86,6 +86,12 @@ export interface ImportProfile {
   cost: boolean;
   margin: number;
   mround: number;
+  /**
+   * 0-based header row the layout was mapped at. Optional: profiles saved
+   * before it existed load unchanged. Stored because a sheet whose title rows
+   * fool header detection would otherwise never match its corrected layout.
+   */
+  headerRow?: number;
 }
 
 export interface SiteData extends RateCard {

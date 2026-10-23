@@ -3,8 +3,9 @@
  * authorisation comes from the `admins` table — a valid Google account that
  * is not listed gets nothing. In development only, DEV_ADMIN_EMAIL lets the
  * admin be opened without Firebase, and even then the address must exist in
- * `admins`. NODE_ENV is "production" on every real build, so the bypass
- * cannot activate there.
+ * `admins`. NODE_ENV is "production" on every real build, and the bypass
+ * also refuses any host that looks deployed (see `devBypassAllowed`), so it
+ * cannot activate there even if a build were run in development mode.
  */
 import "server-only";
 import { eq } from "drizzle-orm";
@@ -32,9 +33,55 @@ export async function lookupAdmin(email: string): Promise<AdminUser | null> {
   return { email: row.email, name: row.name, role: row.role === "owner" ? "owner" : "editor" };
 }
 
-export function devBypassEmail(): string | null {
-  if (process.env.NODE_ENV !== "development") return null;
-  return process.env.DEV_ADMIN_EMAIL?.trim().toLowerCase() || null;
+/**
+ * Whether the DEV_ADMIN_EMAIL bypass may run in this environment. NODE_ENV
+ * alone is one misconfigured flag away from an open admin, so any sign of a
+ * real deployment vetoes it too: a Vercel preview or production runtime
+ * (VERCEL_ENV other than "development"), or an explicit APP_ENV/ENVIRONMENT
+ * naming production or staging. Pure, for tests.
+ */
+export function devBypassAllowed(env: Record<string, string | undefined> = process.env): boolean {
+  if (env.NODE_ENV !== "development") return false;
+  if (env.VERCEL_ENV && env.VERCEL_ENV !== "development") return false;
+  for (const name of [env.APP_ENV, env.ENVIRONMENT]) {
+    if (name && /^(prod|production|staging|preview)$/i.test(name.trim())) return false;
+  }
+  return true;
+}
+
+let warnedBypass = false;
+
+export function devBypassEmail(env: Record<string, string | undefined> = process.env): string | null {
+  const email = env.DEV_ADMIN_EMAIL?.trim().toLowerCase() || null;
+  if (!email) return null;
+  if (!devBypassAllowed(env)) {
+    if (!warnedBypass && env.NODE_ENV !== "test") {
+      warnedBypass = true;
+      console.warn("[auth] DEV_ADMIN_EMAIL is set but ignored: this is not a local development environment");
+    }
+    return null;
+  }
+  return email;
+}
+
+/**
+ * Sign the account out everywhere by revoking its Firebase refresh tokens;
+ * session cookies are verified with `checkRevoked`, so every cookie issued
+ * before now stops working (the caller's own included — Firebase revokes per
+ * user, not per session). Used when two-factor is turned on, so a session
+ * opened without a code does not outlive the change. Returns false, without
+ * throwing, when Firebase is not configured (the dev bypass) or the call fails.
+ */
+export async function revokeAllSessions(email: string): Promise<boolean> {
+  if (!firebaseConfigured()) return false;
+  try {
+    const user = await adminAuth().getUserByEmail(email);
+    await adminAuth().revokeRefreshTokens(user.uid);
+    return true;
+  } catch (err) {
+    console.error("[auth] could not revoke sessions", err);
+    return false;
+  }
 }
 
 /** The signed-in admin, or null. Never throws for a missing/expired cookie. */

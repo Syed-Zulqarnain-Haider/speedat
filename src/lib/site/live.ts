@@ -15,37 +15,36 @@ import type { PublishedVersion } from "./types";
 
 export const SITE_TAG = "site";
 
-const load = unstable_cache(
-  async (): Promise<PublishedVersion> => {
-    try {
-      const live = await getLatestVersion();
-      if (live) return live;
-    } catch (err) {
-      console.error("live site: falling back to sample data", err);
-    }
-    return { ...SEED, live: false, version: 0, publishedAt: new Date(0).toISOString() };
-  },
-  ["live-site"],
-  { tags: [SITE_TAG], revalidate: 300 },
-);
+/**
+ * Only real reads are cached. A database error propagates out of the cached
+ * function (a rejected call is not stored) and the fallback is built outside
+ * it, per request: caching the sample document or "hold off" for five minutes
+ * kept a blip on the database showing sample prices — or prices during a hold
+ * — long after the database came back. An empty database is a real answer
+ * (null) and is cached; the first publish expires it.
+ */
+const load = unstable_cache(async (): Promise<PublishedVersion | null> => getLatestVersion(), ["live-site"], { tags: [SITE_TAG], revalidate: 300 });
 
-const loadHold = unstable_cache(
-  async (): Promise<Hold> => {
-    try {
-      return await getHold();
-    } catch (err) {
-      console.error("live site: could not read the price hold, showing prices", err);
-      return NO_HOLD;
-    }
-  },
-  ["live-hold"],
-  { tags: [SITE_TAG], revalidate: 300 },
-);
+const loadHold = unstable_cache(async (): Promise<Hold> => getHold(), ["live-hold"], { tags: [SITE_TAG], revalidate: 300 });
 
-export function getLiveSite(): Promise<PublishedVersion> {
-  return load();
+function sample(): PublishedVersion {
+  return { ...SEED, live: false, version: 0, publishedAt: new Date(0).toISOString() };
 }
 
-export function getLiveHold(): Promise<Hold> {
-  return loadHold();
+export async function getLiveSite(): Promise<PublishedVersion> {
+  try {
+    return (await load()) ?? sample();
+  } catch (err) {
+    console.error("live site: falling back to sample data", err);
+    return sample();
+  }
+}
+
+export async function getLiveHold(): Promise<Hold> {
+  try {
+    return await loadHold();
+  } catch (err) {
+    console.error("live site: could not read the price hold, showing prices", err);
+    return NO_HOLD;
+  }
 }

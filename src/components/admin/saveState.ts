@@ -14,3 +14,13 @@ export type SaveState = "saved" | "dirty" | "saving" | "error";
 export function afterReplace(storedAt: string | undefined): { save: SaveState; savedAt?: string } {
   return storedAt == null ? { save: "dirty" } : { save: "saved", savedAt: storedAt };
 }
+
+/**
+ * Whether discard and restore must wait. An autosave already on the wire lands
+ * after them and writes the thrown-away edits back over the server's draft, so
+ * both buttons stay disabled until it returns. A pending (not yet sent) save is
+ * fine: replacing the draft cancels its timer.
+ */
+export function replaceBlocked(save: SaveState): boolean {
+  return save === "saving";
+}

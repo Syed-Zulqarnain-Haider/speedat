@@ -8,7 +8,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { discardDraftAction, publishAction, restoreVersionAction, saveDraftAction } from "@/app/admin/actions";
+import { discardDraftAction, publishAction, restoreVersionAction, saveDraftAction, type PublishResult } from "@/app/admin/actions";
 import { Toast, useToast } from "@/components/calculator/Toast";
 import type { AdminUser } from "@/lib/auth/session";
 import type { ImportSummary, IntakeSettings } from "@/lib/import/intake";
@@ -23,7 +23,7 @@ import { HoldBar } from "./HoldBar";
 import { ImportPanel } from "./ImportPanel";
 import { RatesTable } from "./RatesTable";
 import { scrollToClear } from "./reviewLanding";
-import { afterReplace, type SaveState } from "./saveState";
+import { afterReplace, replaceBlocked, type SaveState } from "./saveState";
 import { SECTIONS, sectionNo } from "./sections";
 import { SettingsForm } from "./SettingsForm";
 import { TestPrice } from "./TestPrice";
@@ -46,8 +46,30 @@ function daysAgo(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }
 
-export function AdminEditor({ live, draft: initial, versions, user, imports, intake, hold: initialHold, newLeads = 0, sheetsWaiting = 0 }: Props) {
+/** The server's hold wins unless ours was switched later (a refresh that left before our own switch landed). */
+function newerHold(server: Hold, mine: Hold): boolean {
+  return !mine.since || !server.since || server.since >= mine.since;
+}
+
+export function AdminEditor({ live: liveProp, draft: initial, versions, user, imports, intake, hold: initialHold, newLeads = 0, sheetsWaiting = 0 }: Props) {
   const router = useRouter();
+  // `live` and `hold` start from the server and are then also set here (a publish, the hold switch).
+  // router.refresh() hands down fresh props, but useState ignores a new initial value, so another
+  // admin's hold — or a version published elsewhere — never reached this page: publish sent
+  // resume:false and the "lift the hold" box was missing. Adopt the props whenever the server's
+  // copy is at least as new as ours (React's "adjust state while rendering" pattern, no effect).
+  const [live, setLive] = useState<PublishedVersion>(liveProp);
+  const [liveSeen, setLiveSeen] = useState(liveProp);
+  if (liveProp !== liveSeen) {
+    setLiveSeen(liveProp);
+    if (liveProp.version >= live.version) setLive(liveProp);
+  }
+  const [hold, setHold] = useState<Hold>(initialHold);
+  const [holdSeen, setHoldSeen] = useState(initialHold);
+  if (initialHold !== holdSeen) {
+    setHoldSeen(initialHold);
+    if (newerHold(initialHold, hold)) setHold(initialHold);
+  }
   const liveData: SiteData = useMemo(() => {
     const { version: _v, publishedAt: _p, ...rest } = live;
     void _v;
@@ -61,11 +83,17 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
   const [toast, showToast] = useToast();
   const [review, setReview] = useState<{ errors: string[]; diff: Diff; warnings: string[] } | null>(null);
   const [goLive, setGoLive] = useState(true);
-  const [hold, setHold] = useState<Hold>(initialHold);
   const [resume, setResume] = useState(true);
   const [pubMsg, setPubMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const readOnly = false;
+  /**
+   * Editing is locked while a publish is in flight: on success the editor adopts the document
+   * it SENT, so anything typed meanwhile would vanish from the screen and the server alike.
+   */
+  const [publishing, setPublishing] = useState(false);
+  const readOnly = publishing;
+  /** Discard and restore wait for an autosave in flight: landing after them, it would bring the thrown-away edits back. */
+  const saving = replaceBlocked(save);
   const canPublish = user.role === "owner";
 
   const changes = useMemo(() => diffSite(liveData, draft), [liveData, draft]);
@@ -100,7 +128,8 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
   // Debounced autosave: nothing runs until an edit marks the draft dirty. Each
   // edit re-arms the timer, so the callback always closes over the latest draft.
   useEffect(() => {
-    if (save !== "dirty") return;
+    // Not while publishing: the publish stores this same draft, and a save racing it could re-base the stored draft on the old version.
+    if (save !== "dirty" || publishing) return;
     const t = setTimeout(async () => {
       setSave("saving");
       const res = await saveDraftAction(draft);
@@ -114,7 +143,7 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
       }
     }, 800);
     return () => clearTimeout(t);
-  }, [save, draft, showToast]);
+  }, [save, draft, publishing, showToast]);
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
@@ -126,7 +155,7 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
 
   const showReview = () => {
     setPubMsg(null);
-    setReview({ errors: validateSite(draft), diff: diffSite(liveData, draft), warnings: warnSite(draft) });
+    setReview({ errors: validateSite(draft), diff: diffSite(liveData, draft), warnings: warnSite(draft, liveData) });
     // Next tick, once the card exists: land it between the sticky section tabs and the
     // fixed publish bar, measured as they are now. scrollIntoView("nearest") aligned the
     // card with the viewport's bottom edge, which put its Publish/Cancel row under the bar.
@@ -141,21 +170,39 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
   };
 
   const publish = async () => {
+    const sent: SiteData = { ...draft, live: live.live || goLive };
     setBusy(true);
+    setPublishing(true);
     setPubMsg("Publishing…");
-    const res = await publishAction({ data: draft, expectedBase: live.version, goLive: live.live || goLive, resume: hold.on && resume });
+    // `resume` is only an instruction when this page knows of a hold; otherwise the server lifts any hold it finds
+    // (switched on by someone else since this page loaded) and says so in the result.
+    const res = await publishAction({ data: draft, expectedBase: live.version, goLive: sent.live, resume: hold.on ? resume : undefined }).catch(
+      (): PublishResult => ({ ok: false, code: "network", message: "The publish could not be confirmed (connection lost). Reload to see whether it went out before trying again." }),
+    );
     setBusy(false);
+    setPublishing(false);
     if (!res.ok) {
       setPubMsg(res.message);
       if (res.errors?.length) setReview((r) => (r ? { ...r, errors: res.errors ?? [] } : r));
       return;
     }
-    // What we sent is now the live document; adopt it (with the live flag the server applied).
-    replace({ ...draft, live: live.live || goLive }, res.publishedAt);
-    if (res.resumed) setHold((h) => ({ ...h, on: false, by: user.email, since: new Date().toISOString() }));
-    const held = hold.on && !res.resumed;
-    setPubMsg(held ? `Published version ${res.version}. Prices stay on hold until you resume them.` : `Published version ${res.version}. Customers see the new prices now.`);
-    showToast(`Version ${res.version} is live`);
+    // What we sent is now the live document; adopt it (with the live flag the server applied). Editing was locked,
+    // so `sent` is still what is on screen.
+    replace(sent, res.publishedAt);
+    // The props catch up on router.refresh(); until then a second publish must already expect this version.
+    setLive({ ...sent, version: res.version, publishedAt: res.publishedAt });
+    if (res.hold) setHold(res.hold);
+    const knewOfHold = hold.on;
+    const held = res.hold ? res.hold.on : hold.on && !res.resumed;
+    const msg = res.resumed
+      ? knewOfHold
+        ? `Published version ${res.version} and lifted the hold. Customers see the new prices now.`
+        : `Published version ${res.version}. Prices had been put on hold since this page loaded; this publish lifted the hold, so customers see the new prices now.`
+      : held
+        ? `Published version ${res.version}. Prices stay on hold until you resume them.`
+        : `Published version ${res.version}. Customers see the new prices now.`;
+    setPubMsg(res.warning ? `${msg} ${res.warning}` : msg);
+    showToast(res.warning ?? `Version ${res.version} is live`);
     router.refresh();
   };
 
@@ -261,7 +308,15 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
         refresh={() => router.refresh()}
       />
 
-      <BulkAdjust draft={draft} readOnly={readOnly} update={update} toast={showToast} />
+      <BulkAdjust
+        draft={draft}
+        readOnly={readOnly}
+        update={(fn) => {
+          update(fn);
+          setEpoch((e) => e + 1); // the price boxes are uncontrolled: remount them to show the adjusted prices
+        }}
+        toast={showToast}
+      />
       <TestPrice draft={draft} />
       <SettingsForm draft={draft} readOnly={readOnly} update={update} epoch={epoch} />
       <ContentForm draft={draft} readOnly={readOnly} update={update} epoch={epoch} />
@@ -280,7 +335,7 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
                   {v.summary} · {v.publishedBy}
                 </span>
                 {v.version !== live.version ? (
-                  <button className="btn small outline" type="button" disabled={busy} onClick={() => restore(v.version)}>
+                  <button className="btn small outline" type="button" disabled={busy || saving} onClick={() => restore(v.version)}>
                     Restore into editor
                   </button>
                 ) : (
@@ -373,7 +428,7 @@ export function AdminEditor({ live, draft: initial, versions, user, imports, int
             </span>
           </div>
           <div className="pub-actions">
-            <button className="btn outline" type="button" disabled={!changes.count || busy} onClick={discard}>
+            <button className="btn outline" type="button" disabled={!changes.count || busy || saving} onClick={discard}>
               Discard
             </button>
             <button className="btn book" type="button" disabled={!changes.count || busy} onClick={showReview}>

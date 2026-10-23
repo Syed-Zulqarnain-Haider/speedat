@@ -10,9 +10,11 @@
 import { NextResponse } from "next/server";
 import { alertOnce } from "@/lib/alerts";
 import { audit } from "@/lib/audit";
+import { bearerMatches } from "@/lib/auth/secret-compare";
 import { getIntakeSettings, latestSheetToday, listImports } from "@/lib/import/intake";
 import { getHold } from "@/lib/site/hold";
 import { getLatestVersion } from "@/lib/site/repo";
+import { businessDayKey, businessNow } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -20,21 +22,23 @@ const STALE_DAYS = Number(process.env.RATES_STALE_DAYS ?? 7);
 const HOLD_ALERT_HOURS = Number(process.env.HOLD_ALERT_HOURS ?? 12);
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!bearerMatches(req.headers.get("authorization"), process.env.CRON_SECRET)) {
     return NextResponse.json({ error: { code: "unauthorized", message: "Bad or missing cron secret" } }, { status: 401 });
   }
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const out: Record<string, unknown> = { ok: true };
   const settings = await getIntakeSettings();
   const now = new Date();
+  // The expected-by hour is the office's wall clock; `now.getHours()` would be
+  // UTC on Vercel and fire the alert five hours late.
+  const officeHour = businessNow(now).getHours();
 
   // 1. Missing sheet
-  if (settings.expectedByHour != null && now.getHours() >= settings.expectedByHour) {
+  if (settings.expectedByHour != null && officeHour >= settings.expectedByHour) {
     const today = await latestSheetToday();
     out.sheetMissing = !today;
     if (!today) {
-      await audit("cron", "intake_missing", { expectedByHour: settings.expectedByHour, date: now.toISOString().slice(0, 10) });
+      await audit("cron", "intake_missing", { expectedByHour: settings.expectedByHour, date: businessDayKey(now) });
       out.sheetAlert = await alertOnce(
         "sheet-missing",
         `No rate sheet received today by ${settings.expectedByHour}:00`,

@@ -71,13 +71,14 @@ export function fromPrice(site: SiteData, destId: string): FromPrice | null {
 
 /**
  * The flat document price for one service (an envelope at the document
- * limit, or the first slab when no limit is set), plus the on-by-default
- * add-ons. Null unless the engine actually applied the document rate.
+ * limit), plus the on-by-default add-ons. Null unless the engine actually
+ * applied the document rate; a limit of 0 means no document rate at all
+ * (the engine charges every document like a package), so null then too.
  */
 export function docPrice(site: SiteData, destId: string, serviceId: string): number | null {
   const s = site.settings;
-  const kg = s.docMaxKg > 0 ? s.docMaxKg : s.firstKg;
-  const r = priceAll(site, { destId, type: "doc", rows: [{ kg, qty: 1 }] });
+  if (!(s.docMaxKg > 0)) return null;
+  const r = priceAll(site, { destId, type: "doc", rows: [{ kg: s.docMaxKg, qty: 1 }] });
   if (!r.ok) return null;
   const p = r.prices[serviceId];
   if (!p || !p.docRate) return null;
@@ -133,7 +134,11 @@ export function heroSubAuto(site: SiteData, holdOn: boolean): string {
   return `${first}${when}`;
 }
 
-/** True when any active destination carries a document rate on any service (so the board shows a Documents column). */
+/**
+ * True when any active destination carries a document rate on any service (so the board shows a Documents
+ * column and the calculator says "Up to N kg gets the document rate"). A limit of 0 means no document rate,
+ * the same rule the engine applies.
+ */
 export function hasDocRate(site: SiteData): boolean {
   if (!(site.settings.docMaxKg > 0)) return false;
   return activeDestinations(site).some((d) => site.services.some((svc) => isNum(d.rates[svc.id]?.doc) && (d.rates[svc.id]?.doc ?? 0) > 0));

@@ -73,38 +73,81 @@ export interface PublishInput {
   data: unknown;
   expectedBase: number;
   goLive: boolean;
-  /** Lift the price hold with this publish (ignored when no hold is on). */
+  /**
+   * Leave the price hold on with this publish when exactly `false`. Anything
+   * else lifts it if it is on — the server reads the real hold, so a hold
+   * another admin switched on after this page loaded is lifted too, and the
+   * result says so.
+   */
   resume?: boolean;
 }
 
-export async function publishAction(input: PublishInput): Promise<ActionResult<{ version: number; publishedAt: string; resumed: boolean }>> {
+export type PublishResult = ActionResult<{
+  version: number;
+  publishedAt: string;
+  /** This publish lifted the hold. */
+  resumed: boolean;
+  /** The hold after the publish, as stored. */
+  hold: Hold | null;
+  /** A follow-up step failed after the version was committed; the publish itself stands. */
+  warning?: string;
+}>;
+
+export async function publishAction(input: PublishInput): Promise<PublishResult> {
+  let user: Awaited<ReturnType<typeof requireAdmin>>;
+  let doc: SiteData;
+  let v: Awaited<ReturnType<typeof publishVersion>>;
+  let summary: string;
+  let diff: ReturnType<typeof diffSite> | null;
   try {
-    const user = await requireAdmin("owner");
-    const doc = parse(input.data);
+    user = await requireAdmin("owner");
+    doc = parse(input.data);
     if (input.goLive) doc.live = true;
     const errors = validateSite(doc);
     if (errors.length) return fail("invalid", "Fix these before publishing", errors);
     const live = await getLatestVersion();
-    const diff = live ? diffSite(live, doc) : null;
+    diff = live ? diffSite(live, doc) : null;
     if (diff && diff.count === 0) return fail("nochange", "There is nothing to publish.");
-    const summary = diff ? summarise(diff) : "First publish";
-    const v = await publishVersion({ data: doc, by: user.email, source: "admin", summary, changeCount: diff?.count ?? 0, expectedBase: input.expectedBase });
-    // Every sheet applied to the draft went out in this version; the Recent sheets list says so.
-    const imports = await markImportsPublished(v.version);
-    let resumed = false;
-    if (input.resume === true && (await getHold()).on) {
-      await setHold(false, user.email);
-      resumed = true;
-    }
-    updateTag(SITE_TAG); // immediate expiry: the next request anywhere reads the new state, no stale-while-revalidate
-    await audit(user.email, "publish", { version: v.version, summary, resumedPrices: resumed, imports, changes: diff?.lines.slice(0, 200) ?? [] });
-    if (resumed) await audit(user.email, "hold_off", { version: v.version, viaPublish: true });
-    return { ok: true, version: v.version, publishedAt: v.publishedAt, resumed };
+    summary = diff ? summarise(diff) : "First publish";
+    // The hold is read and lifted inside the publish transaction, so it comes off with the new prices or not at all.
+    v = await publishVersion({ data: doc, by: user.email, source: "admin", summary, changeCount: diff?.count ?? 0, expectedBase: input.expectedBase, liftHold: input.resume !== false });
   } catch (err) {
     const bad = invalid(err);
     if (bad) return bad;
     return onError(err);
   }
+  // The version is committed: customers get it whatever happens below. Telling the owner it failed would make
+  // him publish it again (a conflict) or worse, assume the old prices are still up. Every follow-up step is
+  // therefore best-effort, the cache is expired no matter what, and a failure comes back as a warning.
+  const resumed = v.hold?.lifted === true;
+  const missed: string[] = [];
+  const attempt = async (what: string, step: () => Promise<unknown>) => {
+    try {
+      return await step();
+    } catch (err) {
+      console.error(`publish v${v.version}: ${what} failed`, err);
+      missed.push(what);
+      return undefined;
+    }
+  };
+  try {
+    // Every sheet applied to the draft went out in this version; the Recent sheets list says so.
+    const imports = await attempt("marking imported sheets as published", () => markImportsPublished(v.version, doc));
+    await attempt("writing the audit log", async () => {
+      await audit(user.email, "publish", { version: v.version, summary, resumedPrices: resumed, imports, changes: diff?.lines.slice(0, 200) ?? [] });
+      if (resumed) await audit(user.email, "hold_off", { version: v.version, viaPublish: true });
+    });
+  } finally {
+    try {
+      updateTag(SITE_TAG); // immediate expiry: the next request anywhere reads the new state, no stale-while-revalidate
+    } catch (err) {
+      console.error(`publish v${v.version}: cache expiry failed`, err);
+      missed.push("refreshing the website cache (it catches up within 5 minutes)");
+    }
+  }
+  const warning = missed.length ? `Version ${v.version} is published, but ${missed.join(" and ")} did not complete.` : undefined;
+  const hold: Hold | null = v.hold ? { on: v.hold.on, message: v.hold.message, by: v.hold.by, since: v.hold.since } : null;
+  return { ok: true, version: v.version, publishedAt: v.publishedAt, resumed, hold, warning };
 }
 
 /** Copy an older version's rates, settings and text into the draft (not published until reviewed). */

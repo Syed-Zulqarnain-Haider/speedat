@@ -6,6 +6,7 @@
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { errInfo, log } from "@/lib/log";
 import { getLatestVersion } from "@/lib/site/repo";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,9 @@ export async function GET() {
       ratesLive: live?.live ?? false,
     });
   } catch (err) {
-    return NextResponse.json({ status: "degraded", version, db: "error", error: err instanceof Error ? err.message : "unknown" }, { status: 503 });
+    // This endpoint is public: raw driver errors can name the host, user or
+    // database, so the detail goes to the logs and callers get a fixed string.
+    log.error("health_db_failed", errInfo(err));
+    return NextResponse.json({ status: "degraded", version, db: "error", error: "database unavailable" }, { status: 503 });
   }
 }

@@ -5,6 +5,7 @@
  */
 import { and, eq, gte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { bearerMatches } from "@/lib/auth/secret-compare";
 import { db, schema } from "@/lib/db";
 import { getHold } from "@/lib/site/hold";
 import { getLatestVersion } from "@/lib/site/repo";
@@ -15,7 +16,7 @@ const count = async (q: Promise<{ n: number }[]>) => (await q)[0]?.n ?? 0;
 
 export async function GET(req: Request) {
   const token = process.env.METRICS_TOKEN || process.env.CRON_SECRET;
-  if (!token || req.headers.get("authorization") !== `Bearer ${token}`) return NextResponse.json({ error: { code: "unauthorized", message: "Bad or missing token" } }, { status: 401 });
+  if (!bearerMatches(req.headers.get("authorization"), token)) return NextResponse.json({ error: { code: "unauthorized", message: "Bad or missing token" } }, { status: 401 });
   const since = new Date(Date.now() - 86_400_000);
   const n = sql<number>`count(*)::int`;
   const [quotes24h, booked24h, leadsNew, shipmentsOpen, shipmentsException, importsFailed24h, importsHeld, notifyFailed24h, live, hold] = await Promise.all([

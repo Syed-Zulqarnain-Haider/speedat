@@ -24,8 +24,9 @@ export const kgToG = (kg: number): number => Math.round(Number(kg) * 1000);
 /** Grams → kg as a short string ("2.5", "12"). */
 export const gToKg = (g: number): string => String(Math.round((g / 1000) * 100) / 100);
 
+/** Nearest multiple of `r`. A zero, negative or non-numeric `r` means "no rounding" (nearest 1), never a sign flip or NaN. */
 export function roundTo(n: number, r: number): number {
-  const step = Number(r) || 1;
+  const step = Number(r) > 0 ? Number(r) : 1;
   return Math.round(n / step) * step;
 }
 
@@ -55,10 +56,68 @@ export function gridPrice(grid: Record<string, number> | undefined, kg: number, 
 export const effectiveSteps = (settings: Pick<Settings, "pricingMode" | "firstKg" | "stepKg">): { firstKg: number; stepKg: number } =>
   isGrid(settings) ? { firstKg: 1, stepKg: 1 } : { firstKg: settings.firstKg, stepKg: settings.stepKg };
 
-export function computeWeights(settings: Settings, rows: PieceInput[]): Weights {
+/**
+ * Grams billed for `chargeG` chargeable grams: the first slab, plus whole steps counted from the end of it.
+ * Steps are counted from `firstKg`, never from zero, so the billed weight is always one the price formula
+ * (`first + steps × addl`) describes: with a 0.5 kg first slab and 1 kg steps a 1.2 kg parcel is billed as
+ * 1.5 kg (first + 1 step), not 2 kg (which `priceService` would have charged as first + 2 steps). When `firstKg`
+ * is a multiple of `stepKg` (the usual card) this equals rounding up to the next step.
+ */
+export function billableFor(settings: Pick<Settings, "pricingMode" | "firstKg" | "stepKg">, chargeG: number): number {
   const eff = effectiveSteps(settings);
-  const stepG = kgToG(eff.stepKg);
   const firstG = kgToG(eff.firstKg);
+  const stepG = kgToG(eff.stepKg);
+  if (!(chargeG > firstG) || !(stepG > 0)) return firstG;
+  return firstG + Math.ceil((chargeG - firstG) / stepG) * stepG;
+}
+
+/**
+ * True when `g` is a weight the engine can bill: the first slab or the first slab plus whole steps (slab mode),
+ * or a whole kilogram (grid mode, which may also bill the next priced kilogram up — see `chargedG`). The quote
+ * log uses it to refuse a billed weight no calculator could have produced.
+ */
+export function isBillableG(settings: Pick<Settings, "pricingMode" | "firstKg" | "stepKg">, g: number): boolean {
+  if (!Number.isInteger(g) || g <= 0) return false;
+  if (isGrid(settings)) return g % 1000 === 0;
+  const firstG = kgToG(settings.firstKg);
+  const stepG = kgToG(settings.stepKg);
+  if (g === firstG) return true;
+  return g > firstG && stepG > 0 && (g - firstG) % stepG === 0;
+}
+
+/**
+ * The cargo threshold in kg the site actually enforces; 0 = none. `maxKg` when set. In grid mode without
+ * `maxKg` the grid itself is the limit: past its heaviest priced kilogram no service can price a parcel, so
+ * that kilogram is the threshold and heavier shipments get the cargo message instead of an empty result.
+ * Judged over every active destination so the "Over N kg" wording is one number for the whole site.
+ */
+export function cargoLimitKg(card: Pick<RateCard, "settings" | "destinations">): number {
+  const s = card.settings;
+  if (s.maxKg > 0) return s.maxKg;
+  if (!isGrid(s)) return 0;
+  let top = 0;
+  for (const d of card.destinations) {
+    if (!d.active) continue;
+    for (const r of Object.values(d.rates)) {
+      for (const [k, v] of Object.entries(r?.grid ?? {})) {
+        const kg = Number(k);
+        if (isNum(v) && v > 0 && Number.isInteger(kg) && kg > top && kg <= 200) top = kg;
+      }
+    }
+  }
+  return top;
+}
+
+/**
+ * Grams a service actually charged for: the billed weight, or in grid mode the heavier kilogram whose price was
+ * used when the billed one has none (a 3 kg parcel on a grid priced at 1, 2 and 5 kg pays the 5 kg price, so it
+ * is charged on 5 kg — the quote, the WhatsApp text and the log must say so).
+ */
+export function chargedG(price: Pick<ServicePrice, "gridKg" | "docRate">, weights: Pick<Weights, "billableG">): number {
+  return !price.docRate && price.gridKg != null ? Math.max(weights.billableG, price.gridKg * 1000) : weights.billableG;
+}
+
+export function computeWeights(settings: Settings, rows: PieceInput[]): Weights {
   let pieces = 0;
   let actualG = 0;
   let volG = 0;
@@ -80,7 +139,7 @@ export function computeWeights(settings: Settings, rows: PieceInput[]): Weights 
     chargeG += c * qty;
     lines.push({ qty, kg, L: dims[0], W: dims[1], H: dims[2], actualG: a, volG: v, pieceG: c, volumetricWins: v > a });
   }
-  const billableG = Math.max(firstG, Math.ceil(chargeG / stepG) * stepG);
+  const billableG = billableFor(settings, chargeG);
   return { pieces, actualG, volG, chargeG, billableG, volumetricWins: chargeG > actualG, lines };
 }
 
@@ -102,8 +161,10 @@ export function priceService(
   let steps = 0;
   let docRate = false;
   let gridKg: number | undefined;
-  const docLimitG = kgToG(settings.docMaxKg > 0 ? settings.docMaxKg : eff.firstKg);
-  if (type === "doc" && isNum(r.doc) && r.doc > 0 && Math.min(chargeG, billableG) <= docLimitG) {
+  // A document limit of 0 means "no document rate": every document is charged like a package. (It used to
+  // fall back to the first slab, while the site said "up to 0 kg gets the document rate".)
+  const docLimitG = settings.docMaxKg > 0 ? kgToG(settings.docMaxKg) : 0;
+  if (type === "doc" && docLimitG > 0 && isNum(r.doc) && r.doc > 0 && Math.min(chargeG, billableG) <= docLimitG) {
     base = r.doc;
     docRate = true;
   } else if (isGrid(settings)) {
@@ -137,7 +198,7 @@ export function priceAll(card: RateCard, input: PriceInput): PriceResult {
   const rows = input.rows.filter((r) => Number(r.kg) > 0);
   if (!rows.length) return { ok: false, reason: "weight" };
   const weights = computeWeights(card.settings, rows);
-  const maxG = card.settings.maxKg > 0 ? kgToG(card.settings.maxKg) : 0;
+  const maxG = kgToG(cargoLimitKg(card));
   if (maxG && weights.billableG > maxG) return { ok: false, reason: "overmax", dest, weights };
   const type: ShipmentType = input.type ?? "pkg";
   const prices: Partial<Record<string, ServicePrice | null>> = {};
@@ -192,11 +253,16 @@ export function slabToGrid(settings: Settings, rate: { first?: number | null; ad
   if (isNum(rate.first) && isNum(rate.addl)) {
     const firstG = kgToG(settings.firstKg);
     const stepG = kgToG(settings.stepKg);
+    // A grid box holds the price before tax, and the engine taxes and rounds it again. Rounding the box too
+    // only reproduces the slab total when there is no tax (rounding is then idempotent); with tax it rounded
+    // twice (4,560 → 4,600 + 10% → 5,100 instead of 5,016 → 5,000), so the box keeps the exact slab base then.
+    const taxed = (Number(settings.taxPct) || 0) !== 0;
     for (const kg of gridWeights(settings)) {
       if (isNum(out[String(kg)])) continue;
       const g = kg * 1000;
       const steps = g <= firstG ? 0 : Math.ceil((g - firstG) / stepG);
-      out[String(kg)] = roundTo(rate.first + steps * rate.addl, settings.roundTo);
+      const base = rate.first + steps * rate.addl;
+      out[String(kg)] = taxed ? base : roundTo(base, settings.roundTo);
     }
   }
   return Object.keys(out).length ? out : undefined;

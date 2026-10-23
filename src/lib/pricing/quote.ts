@@ -57,14 +57,32 @@ export function piecesText(w: Weights, units: Units): string {
  * engine did (`effectiveSteps`): grid mode bills whole kilograms whatever the slab step says, and a
  * weight under the first slab is billed as that slab, not "rounded up to the next step".
  */
-export function weightSentence(w: Weights, settings: Pick<Settings, "pricingMode" | "firstKg" | "stepKg">): string {
-  let txt = `Charged on ${gToKg(w.billableG)} kg${w.pieces > 1 ? ` for ${w.pieces} pieces` : ""}`;
-  if (w.volumetricWins) txt += ` — volumetric weight (${gToKg(w.chargeG)} kg) is higher than actual (${gToKg(w.actualG)} kg).`;
+export function weightSentence(
+  w: Weights,
+  settings: Pick<Settings, "pricingMode" | "firstKg" | "stepKg">,
+  /**
+   * Grams the chosen service actually charged (`chargedG`). In grid mode a weight without a price is charged at
+   * the next priced kilogram up; the sentence then names that weight, never the one that had no price.
+   */
+  charged: number = w.billableG,
+): string {
+  const on = Math.max(charged, w.billableG);
+  let txt = `Charged on ${gToKg(on)} kg${w.pieces > 1 ? ` for ${w.pieces} pieces` : ""}`;
+  if (on > w.billableG) return `${txt}, the next weight we have a price for (${gToKg(w.billableG)} kg has none).`;
+  // `chargeG` is the volumetric weight only when every piece is charged by volume (Σ max(a, v) = Σ v); with a
+  // mix it is part actual, part volumetric, and calling it "volumetric weight" misstates both numbers.
+  if (w.volumetricWins && w.chargeG === w.volG) txt += ` — volumetric weight (${gToKg(w.chargeG)} kg) is higher than actual (${gToKg(w.actualG)} kg).`;
+  else if (w.volumetricWins) txt += ` — chargeable weight ${gToKg(w.chargeG)} kg counts the volumetric weight of the large pieces (actual ${gToKg(w.actualG)} kg).`;
   else if (w.billableG !== w.chargeG) {
     const eff = effectiveSteps(settings);
     const stepG = kgToG(eff.stepKg);
-    const byMinimum = Math.ceil(w.chargeG / stepG) * stepG < kgToG(eff.firstKg);
-    txt += ` (${gToKg(w.actualG)} kg, ${byMinimum ? `minimum ${eff.firstKg} kg` : `rounded up to the next ${eff.stepKg} kg`}).`;
+    const firstG = kgToG(eff.firstKg);
+    // Steps are counted from the end of the first slab (`billableFor`). When the first slab is not a whole number
+    // of steps, the billed weight is not a multiple of the step, so "rounded up to the next N kg" would be wrong.
+    const aligned = stepG > 0 && firstG % stepG === 0;
+    const byMinimum = aligned ? Math.ceil(w.chargeG / stepG) * stepG < firstG : w.chargeG <= firstG;
+    const how = byMinimum ? `minimum ${eff.firstKg} kg` : aligned ? `rounded up to the next ${eff.stepKg} kg` : `first ${eff.firstKg} kg, then ${eff.stepKg} kg steps`;
+    txt += ` (${gToKg(w.actualG)} kg, ${how}).`;
   } else txt += ".";
   return txt;
 }

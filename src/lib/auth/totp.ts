@@ -5,7 +5,7 @@
  */
 import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import * as OTPAuth from "otpauth";
 import QRCode from "qrcode";
 import { db, schema } from "@/lib/db";
@@ -65,7 +65,12 @@ export async function beginEnrolment(email: string): Promise<{ uri: string; qrDa
   return { uri, qrDataUrl, secret };
 }
 
-/** Verify a code against the stored secret; on success, remember the time step so it cannot be replayed. */
+/**
+ * Verify a code against the stored secret; on success, remember the time step
+ * so it cannot be replayed. Claiming the step is a single conditional UPDATE
+ * (only when it moves forward), so two requests racing with the same code
+ * cannot both pass the check before either writes: exactly one gets a row back.
+ */
 export async function verifyCode(email: string, code: string): Promise<boolean> {
   const [row] = await db.select().from(schema.admins).where(eq(schema.admins.email, email)).limit(1);
   if (!row?.totpSecret) return false;
@@ -75,9 +80,12 @@ export async function verifyCode(email: string, code: string): Promise<boolean> 
   const delta = totp.validate({ token, window: 1 });
   if (delta == null) return false;
   const step = Math.floor(Date.now() / 1000 / 30) + delta;
-  if (row.totpLastStep != null && step <= row.totpLastStep) return false;
-  await db.update(schema.admins).set({ totpLastStep: step }).where(eq(schema.admins.email, email));
-  return true;
+  const claimed = await db
+    .update(schema.admins)
+    .set({ totpLastStep: step })
+    .where(and(eq(schema.admins.email, email), or(isNull(schema.admins.totpLastStep), lt(schema.admins.totpLastStep, step))))
+    .returning({ email: schema.admins.email });
+  return claimed.length > 0;
 }
 
 export async function enableTotp(email: string): Promise<void> {

@@ -103,6 +103,15 @@ describe("docPrice", () => {
     expect(docPrice(site, gb.id, "express")).toBeNull();
     expect(docPrice(site, "nowhere", "express")).toBeNull();
   });
+
+  it("is null everywhere when the document limit is 0 (no document rate), in step with hasDocRate and the engine", () => {
+    for (const site of [structuredClone(SEED), gridSeed()]) {
+      site.settings.docMaxKg = 0;
+      const gb = site.destinations[0];
+      expect(docPrice(site, gb.id, "express")).toBeNull();
+      expect(hasDocRate(site)).toBe(false);
+    }
+  });
 });
 
 describe("daySpan and hasDocRate", () => {

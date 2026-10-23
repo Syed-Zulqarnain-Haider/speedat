@@ -4,6 +4,7 @@
  */
 import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { cleanHoldMessage, type Hold } from "./hold-shared";
 import { migrate } from "./migrate";
 import { SiteDataSchema } from "./schema";
 import type { PublishedVersion, SiteData } from "./types";
@@ -130,7 +131,21 @@ export interface PublishArgs {
   changeCount: number;
   /** The version the caller believes is live; publishing on top of a newer one is refused. */
   expectedBase?: number;
+  /**
+   * The price hold, decided inside the publish transaction so it can never
+   * disagree with the version that went out: `true` lifts it when it is on,
+   * `false` leaves it on. Omitted, the hold is not read at all (seed, scripts).
+   */
+  liftHold?: boolean;
 }
+
+/** A committed publish, with the hold as it stands after it (null when the caller did not ask about the hold). */
+export interface Published extends PublishedVersion {
+  hold: (Hold & { lifted: boolean }) | null;
+}
+
+/** The hold key in `app_settings`; `hold.ts` owns the switch, the publish only flips it off. */
+const HOLD_KEY = "hold";
 
 export class PublishConflict extends Error {
   constructor(public readonly live: number) {
@@ -144,7 +159,7 @@ export class PublishConflict extends Error {
  * here, so the document is checked against the schema once more: a version
  * the admin's own save would reject must never become the live one.
  */
-export async function publishVersion(args: PublishArgs): Promise<PublishedVersion> {
+export async function publishVersion(args: PublishArgs): Promise<Published> {
   const check = SiteDataSchema.safeParse(args.data);
   if (!check.success) {
     const first = check.error.issues[0];
@@ -166,6 +181,19 @@ export async function publishVersion(args: PublishArgs): Promise<PublishedVersio
       .values({ id: DRAFT_ID, baseVersion: version, data: args.data, updatedBy: args.by })
       .onConflictDoUpdate({ target: schema.draft.id, set: { baseVersion: version, data: args.data, updatedAt: new Date(), updatedBy: args.by } });
     if (!row) throw new Error("publish failed");
-    return toPublished(row);
+    let hold: Published["hold"] = null;
+    if (args.liftHold !== undefined) {
+      // Read and lift in the same transaction as the version insert: the hold comes off exactly when
+      // the new prices go live, or not at all — never a committed version behind a hold the publisher lifted.
+      const [h] = await tx.select().from(schema.appSettings).where(eq(schema.appSettings.key, HOLD_KEY)).limit(1).for("update");
+      const v = (h?.value ?? {}) as Partial<Hold>;
+      const was: Hold = { on: v.on === true, message: cleanHoldMessage(v.message), by: typeof v.by === "string" ? v.by : "", since: typeof v.since === "string" ? v.since : null };
+      if (was.on && args.liftHold) {
+        const next: Hold = { ...was, on: false, by: args.by, since: new Date().toISOString() };
+        await tx.update(schema.appSettings).set({ value: next, updatedAt: new Date(), updatedBy: args.by }).where(eq(schema.appSettings.key, HOLD_KEY));
+        hold = { ...next, lifted: true };
+      } else hold = { ...was, lifted: false };
+    }
+    return { ...toPublished(row), hold };
   });
 }

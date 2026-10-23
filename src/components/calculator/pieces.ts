@@ -12,7 +12,7 @@
  */
 import { toNumLoose } from "@/lib/pricing/engine";
 import { IN, LB, type Units } from "@/lib/pricing/quote";
-import type { PieceInput, ShipmentType } from "@/lib/pricing/types";
+import type { PieceInput } from "@/lib/pricing/types";
 
 /** A field as the customer typed it, with the unit system it was typed in. */
 export interface Entry {
@@ -69,13 +69,21 @@ export function shown(e: Entry, units: Units, field: Measure): string {
   return round2(units === "imperial" ? v / k : v * k);
 }
 
-/** The engine's rows: metric numbers, sizes dropped for documents. */
-export function toRows(pieces: PieceRow[], type: ShipmentType): PieceInput[] {
+/** True when the row carries a size: then it is priced by volume, whatever the shipment type says. */
+export const hasDims = (pc: PieceRow): boolean => [pc.L, pc.W, pc.H].some((e) => (num(e.v) ?? 0) > 0);
+
+/**
+ * The engine's rows: metric numbers. Sizes are kept for documents too. Dropping them let a 5 kg
+ * 60×60×60 cm box ticked "Documents" bill 5 kg instead of 43.2 kg and slip under the cargo limit;
+ * the engine gives the document rate only to what is within the document limit, so an envelope
+ * with a size still gets it, and anything heavier is priced exactly like a package.
+ */
+export function toRows(pieces: PieceRow[]): PieceInput[] {
   return pieces.map((pc) => ({
     kg: metricValue(pc.kg, "kg"),
     qty: num(pc.qty) ?? 1,
-    L: type === "doc" ? null : metricValue(pc.L, "L"),
-    W: type === "doc" ? null : metricValue(pc.W, "W"),
-    H: type === "doc" ? null : metricValue(pc.H, "H"),
+    L: metricValue(pc.L, "L"),
+    W: metricValue(pc.W, "W"),
+    H: metricValue(pc.H, "H"),
   }));
 }

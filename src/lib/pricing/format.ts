@@ -1,4 +1,5 @@
 /** Display formatting shared by the site, the WhatsApp message and the admin. */
+import { businessNow } from "@/lib/time";
 import type { DeliveryEstimate } from "./dates";
 
 export const fmtNum = (n: number): string => new Intl.NumberFormat("en-US").format(Math.round(n));
@@ -52,11 +53,27 @@ export function localDateFromInput(v: string | null | undefined): Date | null {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
 }
 
-/** Quote reference such as SP-260920-K7QX: date-stamped, short enough to read out on the phone. */
-export function quoteId(now: Date = new Date(), rand: () => number = Math.random): string {
+/** Characters in a quote id's random tail. Four (36^4 ≈ 1.7 M a day) collided often enough to overwrite another customer's logged quote; eight is 36^8 ≈ 2.8 × 10^12. */
+export const QUOTE_TAIL = 8;
+
+/** Every quote id the log accepts: today's eight-character tail, and the four-character one tabs opened before the change still send. */
+export const QUOTE_ID_RE = /^SP-\d{6}-(?:[A-Z0-9]{4}|[A-Z0-9]{8})$/;
+
+const date6 = (now: Date): string => {
   const p = (n: number) => String(n).padStart(2, "0");
-  const tail = rand().toString(36).slice(2, 6).toUpperCase().padEnd(4, "0");
-  return `SP-${String(now.getFullYear()).slice(2)}${p(now.getMonth() + 1)}${p(now.getDate())}-${tail}`;
+  return `${String(now.getFullYear()).slice(2)}${p(now.getMonth() + 1)}${p(now.getDate())}`;
+};
+
+/** A random tail of `QUOTE_TAIL` base-36 characters, from two draws so it never runs short of digits. */
+function randomTail(rand: () => number): string {
+  const a = Math.floor(rand() * 36 ** 4).toString(36).padStart(4, "0");
+  const b = Math.floor(rand() * 36 ** 4).toString(36).padStart(4, "0");
+  return (a + b).toUpperCase().slice(0, QUOTE_TAIL);
+}
+
+/** Quote reference such as SP-260920-K7QX2M9A: dated by the office's calendar, short enough to read out on the phone. */
+export function quoteId(now: Date = businessNow(), rand: () => number = Math.random): string {
+  return `SP-${date6(now)}-${randomTail(rand)}`;
 }
 
 /**
@@ -64,14 +81,18 @@ export function quoteId(now: Date = new Date(), rand: () => number = Math.random
  * destination, weight and service): the same combination shows the same id
  * across re-renders without any state, while different tabs get different ids.
  */
-export function quoteIdFor(seed: string, now: Date = new Date()): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  const tail = (h % 1679616).toString(36).toUpperCase().padStart(4, "0"); // 36^4 combinations
-  return quoteId(now, () => 0).slice(0, -4) + tail;
+export function quoteIdFor(seed: string, now: Date = businessNow()): string {
+  // Two independent 32-bit FNV-1a hashes (different offset bases), four base-36 characters from each.
+  const fnv = (basis: number): number => {
+    let h = basis;
+    for (let i = 0; i < seed.length; i++) {
+      h ^= seed.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h;
+  };
+  const four = (h: number) => (h % 36 ** 4).toString(36).padStart(4, "0");
+  return `SP-${date6(now)}-${(four(fnv(0x811c9dc5)) + four(fnv(0x050c5d1f))).toUpperCase()}`;
 }
 
 /** Lower-case, accent-free key used to match destination names across sheets ("Türkiye" ≡ "turkiye", "U.K." ≡ "u k"). */

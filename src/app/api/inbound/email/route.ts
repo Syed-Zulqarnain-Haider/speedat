@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
+import { safeEqual } from "@/lib/auth/secret-compare";
 import { getIntakeSettings, receiveSheet, senderAllowed } from "@/lib/import/intake";
 import { fileKind } from "@/lib/import/workbook";
 
@@ -31,25 +32,18 @@ function authorised(req: Request): boolean {
   const secret = process.env.INBOUND_EMAIL_SECRET;
   if (!secret) return false;
   const header = req.headers.get("x-inbound-secret");
-  if (header && timingSafeEqual(header, secret)) return true;
+  if (header && safeEqual(header, secret)) return true;
   const basic = req.headers.get("authorization");
   if (basic?.startsWith("Basic ")) {
     try {
       const decoded = Buffer.from(basic.slice(6), "base64").toString("utf8");
       const pass = decoded.slice(decoded.indexOf(":") + 1);
-      return timingSafeEqual(pass, secret);
+      return safeEqual(pass, secret);
     } catch {
       return false;
     }
   }
   return false;
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
 }
 
 export async function POST(req: Request) {

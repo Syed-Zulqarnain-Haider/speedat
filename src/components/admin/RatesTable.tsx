@@ -6,7 +6,7 @@ import { gridWeights, isGrid, isNum } from "@/lib/pricing/engine";
 import { fmtNum, nameKey, slug } from "@/lib/pricing/format";
 import type { Destination } from "@/lib/pricing/types";
 import type { SiteData } from "@/lib/site/types";
-import { numOrNull } from "./fields";
+import { NumBox, numOrNull } from "./fields";
 import { sectionNo } from "./sections";
 
 interface Props {
@@ -103,9 +103,9 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
     };
   }, [epoch]);
 
-  const setRate = (id: string, svc: string, field: "first" | "addl" | "doc", raw: string) => {
-    const v = numOrNull(raw);
-    if (v === undefined) return;
+  // Both setters take a parsed value: `NumBox` never reports text that is not a number, so an
+  // unreadable entry keeps the stored price instead of arriving here as "" and deleting it.
+  const setRate = (id: string, svc: string, field: "first" | "addl" | "doc", v: number | null) => {
     update((d) => {
       const x = d.destinations.find((y) => y.id === id);
       if (!x) return;
@@ -126,9 +126,7 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
       x.rates[svc] = r;
       tidy(x, svc);
     });
-  const setGridPrice = (id: string, svc: string, kg: number, raw: string) => {
-    const v = numOrNull(raw);
-    if (v === undefined) return;
+  const setGridPrice = (id: string, svc: string, kg: number, v: number | null) => {
     update((d) => {
       const x = d.destinations.find((y) => y.id === id);
       if (!x) return;
@@ -286,17 +284,13 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
                       const r = x.rates[sv.id] ?? {};
                       const cell = (field: "doc" | "first" | "addl", label: string) => (
                         <td key={field}>
-                          <input
+                          <NumBox
                             className="num"
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            step="any"
-                            defaultValue={isNum(r[field]) ? r[field] : ""}
+                            value={isNum(r[field]) ? r[field] : null}
                             placeholder="—"
                             aria-label={`${x.name} ${sv.name} ${label}`}
                             disabled={readOnly}
-                            onChange={(e) => setRate(x.id, sv.id, field, e.target.value)}
+                            onValue={(v) => setRate(x.id, sv.id, field, v)}
                           />
                         </td>
                       );
@@ -380,7 +374,7 @@ export function RatesTable({ draft, live, changed, readOnly, update, epoch, toas
                   {grid && isOpen && !hidden ? (
                     <tr className="grid-row">
                       <td colSpan={2 + s.services.length * 2 + 2}>
-                        <GridEditor dest={x} services={s.services} kgs={kgs} readOnly={readOnly} onChange={(svc, kg, raw) => setGridPrice(x.id, svc, kg, raw)} update={update} />
+                        <GridEditor dest={x} services={s.services} kgs={kgs} readOnly={readOnly} onChange={(svc, kg, v) => setGridPrice(x.id, svc, kg, v)} update={update} />
                       </td>
                     </tr>
                   ) : null}
@@ -404,7 +398,7 @@ interface GridEditorProps {
   services: SiteData["services"];
   kgs: number[];
   readOnly: boolean;
-  onChange: (svc: string, kg: number, raw: string) => void;
+  onChange: (svc: string, kg: number, v: number | null) => void;
   update: (fn: (d: SiteData) => void) => void;
 }
 
@@ -415,9 +409,10 @@ function GridEditor({ dest, services, kgs, readOnly, onChange, update }: GridEdi
   const [gen, setGen] = useState(0);
   const apply = (svc: string, overwrite: boolean) => {
     const f = fill[svc] ?? { start: "", step: "" };
-    const start = Number(f.start);
-    const step = Number(f.step);
-    if (!Number.isFinite(start) || start <= 0 || !Number.isFinite(step) || step < 0) return;
+    // Read like the price boxes ("4,500" is 4500); a blank step means a flat price.
+    const start = numOrNull(f.start);
+    const step = numOrNull(f.step) ?? 0;
+    if (start == null || start <= 0 || step === undefined || step < 0) return;
     update((d) => {
       const x = d.destinations.find((y) => y.id === dest.id);
       if (!x) return;
@@ -441,9 +436,9 @@ function GridEditor({ dest, services, kgs, readOnly, onChange, update }: GridEdi
             <div className="grid-head">
               <strong className={`tag grp ${sv.id}`}>{sv.name}</strong>
               <span className="hint">Quick fill:</span>
-              <input type="number" className="num" placeholder="1 kg price" value={f.start} onChange={(e) => setFill((m) => ({ ...m, [sv.id]: { ...f, start: e.target.value } }))} disabled={readOnly} aria-label={`${sv.name} quick fill start`} />
+              <input type="text" inputMode="decimal" className="num" placeholder="1 kg price" value={f.start} onChange={(e) => setFill((m) => ({ ...m, [sv.id]: { ...f, start: e.target.value } }))} disabled={readOnly} aria-label={`${sv.name} quick fill start`} />
               <span className="hint">+ per kg</span>
-              <input type="number" className="num" placeholder="per kg" value={f.step} onChange={(e) => setFill((m) => ({ ...m, [sv.id]: { ...f, step: e.target.value } }))} disabled={readOnly} aria-label={`${sv.name} quick fill step`} />
+              <input type="text" inputMode="decimal" className="num" placeholder="per kg" value={f.step} onChange={(e) => setFill((m) => ({ ...m, [sv.id]: { ...f, step: e.target.value } }))} disabled={readOnly} aria-label={`${sv.name} quick fill step`} />
               <button className="btn small outline" type="button" disabled={readOnly} onClick={() => apply(sv.id, false)}>
                 Fill blanks
               </button>
@@ -455,16 +450,12 @@ function GridEditor({ dest, services, kgs, readOnly, onChange, update }: GridEdi
               {kgs.map((kg) => (
                 <label key={kg} className="grid-box">
                   <span>{kg} kg</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="any"
-                    defaultValue={isNum(g[String(kg)]) ? g[String(kg)] : ""}
+                  <NumBox
+                    value={isNum(g[String(kg)]) ? g[String(kg)] : null}
                     placeholder="—"
                     aria-label={`${dest.name} ${sv.name} ${kg} kg price`}
                     disabled={readOnly}
-                    onChange={(e) => onChange(sv.id, kg, e.target.value)}
+                    onValue={(v) => onChange(sv.id, kg, v)}
                   />
                 </label>
               ))}

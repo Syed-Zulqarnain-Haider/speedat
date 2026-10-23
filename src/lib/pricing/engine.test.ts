@@ -205,7 +205,7 @@ describe("formatting", () => {
   });
 
   it("makes date-stamped quote ids and safe slugs", () => {
-    expect(quoteId(new Date(2026, 8, 20), () => 0.123456)).toMatch(/^SP-260920-[A-Z0-9]{4}$/);
+    expect(quoteId(new Date(2026, 8, 20), () => 0.123456)).toMatch(/^SP-260920-[A-Z0-9]{8}$/);
     expect(slug("Türkiye")).toBe("turkiye");
     expect(slug("United Arab Emirates")).toBe("united-arab-emirates");
     expect(slug("!!!")).toBe("dest");

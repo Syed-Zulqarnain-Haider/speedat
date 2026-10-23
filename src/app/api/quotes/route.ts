@@ -8,18 +8,29 @@
  * what the client sent. The stored `total` is the one number the
  * customer booked — shipping plus the add-ons that were on, the "Total" of
  * their WhatsApp message — with the parts itemised in `detail`.
+ *
+ * The billed weight is checked, not trusted: it must be one the engine can
+ * bill (`isBillableG`) and within the cargo threshold (`cargoLimitKg`), or the
+ * quote is refused — a forged 0.5 kg "billable" for a 40 kg box would
+ * otherwise be logged and booked at the 0.5 kg price. An id is logged once:
+ * a later POST with the same id may update the booked flag, add-ons and
+ * total of that same quote, but never its destination, service, type or
+ * weight, so a reused or colliding id cannot rewrite another customer's.
  */
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { upsertQuoteLead } from "@/lib/leads";
 import { clientIp, rateLimit } from "@/lib/limits";
-import { priceService } from "@/lib/pricing/engine";
+import { cargoLimitKg, isBillableG, kgToG, priceService } from "@/lib/pricing/engine";
+import { QUOTE_ID_RE } from "@/lib/pricing/format";
 import { bookedTotal, leadSummary, resolveAddons } from "@/lib/pricing/quote";
 import { getLiveHold, getLiveSite } from "@/lib/site/live";
 
 const Body = z.object({
-  id: z.string().regex(/^SP-\d{6}-[A-Z0-9]{4}$/),
+  /** SP-YYMMDD- and an 8-character tail; the 4-character tail of tabs opened before the change is still accepted. */
+  id: z.string().regex(QUOTE_ID_RE),
   destId: z.string().max(60),
   serviceId: z.string().max(40),
   type: z.enum(["pkg", "doc"]),
@@ -62,6 +73,13 @@ export async function POST(req: Request) {
   const service = site.services.find((s) => s.id === parsed.serviceId);
   if (!dest || !service) return NextResponse.json({ error: { code: "not_found", message: "Unknown destination or service" } }, { status: 404 });
   const { id, destId, serviceId, type, billableG, chargeG: clientChargeG, total: clientTotal, version, booked, addons: addonLabels, ...rest } = parsed;
+  if (!isBillableG(site.settings, billableG)) {
+    return NextResponse.json({ error: { code: "bad_weight", message: "Not a weight the rate card bills" } }, { status: 422 });
+  }
+  const limitG = kgToG(cargoLimitKg(site));
+  if (limitG && billableG > limitG) {
+    return NextResponse.json({ error: { code: "overmax", message: "Over the cargo threshold; priced on WhatsApp" } }, { status: 422 });
+  }
   // The chargeable weight never exceeds the billed one (the billed weight is the chargeable one rounded up).
   const chargeG = Math.min(clientChargeG ?? billableG, billableG);
   const price = priceService(site.settings, dest, serviceId, billableG, type, chargeG);
@@ -70,11 +88,20 @@ export async function POST(req: Request) {
   const total = bookedTotal(price.total, addons);
   const detail: Record<string, unknown> = { ...rest, chargeG, shipping: price.total, docRate: price.docRate, addons: addons.map((a) => ({ label: a.label, amount: a.amount })) };
   if (Math.round(clientTotal) !== total) detail.clientTotal = clientTotal;
+  const q = schema.quotes;
   try {
-    await db
-      .insert(schema.quotes)
+    const saved = await db
+      .insert(q)
       .values({ id, destId, serviceId, type, billableG, total, version, booked: !!booked, detail })
-      .onConflictDoUpdate({ target: schema.quotes.id, set: { booked: !!booked, total, detail } });
+      .onConflictDoUpdate({
+        target: q.id,
+        set: { booked: !!booked, total, detail },
+        // Only the same quote is updated (add-ons ticked, Book tapped); an id already logged for another
+        // destination, service, type or weight is left alone and the request refused.
+        setWhere: and(eq(q.destId, destId), eq(q.serviceId, serviceId), eq(q.type, type), eq(q.billableG, billableG)),
+      })
+      .returning({ id: q.id });
+    if (!saved.length) return NextResponse.json({ error: { code: "conflict", message: "Quote id already used" } }, { status: 409 });
   } catch (err) {
     console.error("quote log failed", err);
     return NextResponse.json({ error: { code: "unavailable", message: "Could not save the quote" } }, { status: 503 });

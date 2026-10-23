@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterReplace } from "./saveState";
+import { afterReplace, replaceBlocked } from "./saveState";
 
 describe("afterReplace", () => {
   it("marks a server-stored replacement (discard / restore / import / publish) saved as of the server's time", () => {
@@ -10,5 +10,15 @@ describe("afterReplace", () => {
 
   it("marks a local replacement (pasted rows) dirty so it autosaves, keeping the last save time until then", () => {
     expect(afterReplace(undefined)).toEqual({ save: "dirty" });
+  });
+});
+
+describe("replaceBlocked", () => {
+  it("holds discard and restore only while an autosave is on the wire", () => {
+    // A save landing after a discard used to resurrect the discarded edits on the server.
+    expect(replaceBlocked("saving")).toBe(true);
+    expect(replaceBlocked("dirty")).toBe(false);
+    expect(replaceBlocked("saved")).toBe(false);
+    expect(replaceBlocked("error")).toBe(false);
   });
 });

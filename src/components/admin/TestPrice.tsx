@@ -8,6 +8,7 @@ import { weightSentence } from "@/lib/pricing/quote";
 import type { ShipmentType } from "@/lib/pricing/types";
 import { useMounted } from "@/lib/client/session";
 import type { SiteData } from "@/lib/site/types";
+import { businessNow } from "@/lib/time";
 import { sectionNo } from "./sections";
 
 const num = (s: string): number | null => {
@@ -87,7 +88,7 @@ export function TestPrice({ draft }: { draft: SiteData }) {
             <div className="test-out">
               {draft.services.map((sv) => {
                 const p = res.prices[sv.id];
-                const est = mounted && p && draft.settings.showEta && p.days ? estimateDelivery(p.days, draft.settings, null, new Date()) : null;
+                const est = mounted && p && draft.settings.showEta && p.days ? estimateDelivery(p.days, draft.settings, null, businessNow()) : null;
                 return (
                   <div key={sv.id} className={`test-card${p ? "" : " dim"}`}>
                     <div className="eyebrow">

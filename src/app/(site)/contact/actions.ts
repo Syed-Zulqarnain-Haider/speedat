@@ -3,12 +3,15 @@
 /** The contact form's server action: validate, throttle, store the lead, tell the office. */
 import { z } from "zod";
 import { audit } from "@/lib/audit";
-import { checkFormToken } from "@/lib/form-token";
+import { checkFormToken, formTokenId } from "@/lib/form-token";
 import { createMessageLead } from "@/lib/leads";
 import { clientIp, ipHash, rateLimit } from "@/lib/limits";
 import { notifyOffice } from "@/lib/notify";
 import { getLiveSite } from "@/lib/site/live";
 import type { ContactState } from "./state";
+
+/** Successful-looking submissions allowed per rendered form. */
+const FORM_TOKEN_USES = 3;
 
 const Fields = z.object({
   name: z.string().trim().min(2, "Please tell us your name").max(120, "That name is too long"),
@@ -44,6 +47,12 @@ export async function contactAction(_prev: ContactState, form: FormData): Promis
     }
     return fail(errors);
   }
+  // A token is valid for a day, so without a cap one fetched page could be
+  // replayed by a script all day long. Counted only for valid submissions, so
+  // a person correcting a typo is not penalised. Daily windows are aligned to
+  // the epoch, so a token spanning two windows gets at most twice the cap.
+  const used = await rateLimit("form", formTokenId(String(form.get("t") ?? "")) ?? "none", FORM_TOKEN_USES, 24 * 3600);
+  if (!used.ok) return fail({ _: "This form has already been sent. Reload the page to send another message." });
   const ip = await clientIp();
   const limit = await rateLimit("contact", ip, 5, 15 * 60);
   if (!limit.ok) return fail({ _: `Too many messages from this connection. Try again in ${Math.ceil(limit.retryAfter / 60)} minutes or WhatsApp us.` });

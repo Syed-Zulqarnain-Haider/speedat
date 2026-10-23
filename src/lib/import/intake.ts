@@ -3,18 +3,21 @@
  * lands in the draft automatically — when its layout is already known — or
  * waits for an admin to map its columns once. Publishing is a separate step
  * unless the operator has set an auto-publish tolerance and the sheet moves
- * no price by more than that.
+ * no price by more than that; only the unattended email path ever publishes.
  */
 import "server-only";
-import { desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, or, type SQL } from "drizzle-orm";
 import { revalidateTag } from "next/cache";
 import { alertNow } from "@/lib/alerts";
 import { audit } from "@/lib/audit";
 import { db, schema } from "@/lib/db";
 import { diffSite, summarise, validateSite } from "@/lib/site/diff";
+import { getHold } from "@/lib/site/hold";
 import { SITE_TAG } from "@/lib/site/live";
-import { getDraft, getLatestVersion, publishVersion, saveDraft } from "@/lib/site/repo";
-import { applyImport, autoMap, buildImport, detectHeaderRow, findProfile, headerNames, headerSignature, largestMove } from "./parse";
+import { PublishConflict, getDraft, getLatestVersion, publishVersion, saveDraft } from "@/lib/site/repo";
+import type { SiteData } from "@/lib/site/types";
+import { businessDayKey } from "@/lib/time";
+import { applyImport, buildImport, describeMove, importReflected, largestMove, suggestLayout, type Move } from "./parse";
 import type { ImportOptions, ImportResult } from "./types";
 import { WorkbookError, largestSheet, readWorkbook, type Workbook } from "./workbook";
 
@@ -25,7 +28,7 @@ export interface IntakeSettings {
   autoPublishPct: number;
   /** Lower-case emails or "@domain" suffixes allowed to send sheets; empty = anyone with the webhook secret. */
   allowedSenders: string[];
-  /** Hour (0–23, server local time) by which a sheet is expected each working day; null = no expectation. */
+  /** Hour (0–23, the office's wall clock — `businessNow`) by which a sheet is expected each working day; null = no expectation. */
   expectedByHour: number | null;
 }
 
@@ -93,11 +96,9 @@ export async function receiveSheet(args: ReceiveArgs): Promise<ReceiveResult> {
   }
   const sheet = largestSheet(wb);
   const rows = wb.sheets[sheet] ?? [];
-  const headerRow = detectHeaderRow(rows);
-  const headers = headerNames(rows[headerRow] ?? []);
   const draft = await getDraft();
-  const profile = findProfile(draft.data.importProfiles, headerSignature(headers));
-  const map = profile ? profile.map : autoMap(headers, draft.data.services, headerRow > 0 ? rows[headerRow - 1] : undefined);
+  // Tries the remembered header rows too, so a layout an admin corrected once matches the next copy.
+  const { headerRow, map, profile } = suggestLayout(rows, draft.data.importProfiles, draft.data.services);
   const [row] = await db
     .insert(schema.imports)
     .values({
@@ -124,7 +125,7 @@ export async function receiveSheet(args: ReceiveArgs): Promise<ReceiveResult> {
     return { importId, status: "needs_mapping", workbook: wb, sheet, headerRow, map, profileMatched: !!profile, result: null, publishedVersion: null, error: null };
   }
   const opts: ImportOptions = { addNew: true, hideMissing: false, cost: profile.cost, margin: profile.margin, mround: profile.mround };
-  const applied = await applyToDraft({ importId, sheet, headerRow, map, opts, actor: args.actor, fileName: args.fileName });
+  const applied = await applyToDraft({ importId, sheet, headerRow, map, opts, actor: args.actor, fileName: args.fileName, unattended: true });
   return { importId, status: applied.status, workbook: wb, sheet, headerRow, map, profileMatched: true, result: applied.result, publishedVersion: applied.publishedVersion, error: applied.error };
 }
 
@@ -136,18 +137,24 @@ export interface ApplyArgs {
   opts: ImportOptions;
   actor: string;
   fileName?: string;
+  /**
+   * Set only by `receiveSheet` for an emailed sheet with a known layout. It
+   * alone may auto-publish: the admin's "Apply to editor" is open to editors,
+   * who must never get an owner-only publish through a sheet.
+   */
+  unattended?: boolean;
 }
 
 export interface ApplyResult {
   status: ImportStatus;
   result: ImportResult | null;
   /** The draft after the import (for the admin to adopt). */
-  draft: import("@/lib/site/types").SiteData | null;
+  draft: SiteData | null;
   publishedVersion: number | null;
   error: string | null;
 }
 
-/** Recompute the import from the stored rows, apply it to the draft, save, and auto-publish when allowed. */
+/** Recompute the import from the stored rows, apply it to the draft, save, and — on the unattended email path only — auto-publish when allowed. */
 export async function applyToDraft(args: ApplyArgs): Promise<ApplyResult> {
   const [rec] = await db.select().from(schema.imports).where(eq(schema.imports.id, args.importId)).limit(1);
   if (!rec || !rec.rows) return { status: "failed", result: null, draft: null, publishedVersion: null, error: "Import not found" };
@@ -168,44 +175,152 @@ export async function applyToDraft(args: ApplyArgs): Promise<ApplyResult> {
     .where(eq(schema.imports.id, args.importId));
   await audit(args.actor, "import_applied", { importId: args.importId, rows: result.rows.length, errors: result.errors.length, warnings: result.warnings.length });
 
-  // Unattended path: publish only when every check passes and no price moved more than the tolerance.
-  if (rec.source === "email") {
-    const settings = await getIntakeSettings();
-    const worst = largestMove(draft.data, result);
-    const errors = validateSite(next);
-    if (settings.autoPublishPct > 0 && !result.errors.length && !errors.length && (!worst || worst.pct <= settings.autoPublishPct)) {
-      const live = await getLatestVersion();
-      const diff = live ? diffSite(live, next) : null;
-      if (diff && diff.count > 0) {
-        const v = await publishVersion({ data: next, by: args.actor, source: `email:${rec.fromEmail ?? "unknown"}`, summary: `${summarise(diff)} (auto from ${rec.fileName})`, changeCount: diff.count });
-        revalidateTag(SITE_TAG, "max");
-        // The published document is the whole draft, so any sheet held in it earlier goes live now too.
-        const imports = await markImportsPublished(v.version);
-        await audit(args.actor, "publish", { version: v.version, auto: true, importId: args.importId, imports, largestMovePct: worst?.pct ?? 0 });
-        return { status: "published", result, draft: next, publishedVersion: v.version, error: null };
-      }
-    } else {
-      const reason = errors[0] ?? (worst ? `${worst.label} moved ${worst.pct.toFixed(1)}%` : "auto-publish is off");
-      await audit(args.actor, "import_held", { importId: args.importId, reason });
-      void alertNow(
-        `Rate sheet ${rec.fileName} is waiting for your review`,
-        `The sheet from ${rec.fromEmail ?? "an unknown sender"} was read and applied to the editor (${result.rows.length} destinations) but not published: ${reason}.
-
-Review and publish at ${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/admin.`,
-      );
-    }
+  if (args.unattended && rec.source === "email") {
+    const auto = await autoPublish({ importId: args.importId, rec, rows, args, result, draftNext: next });
+    if (auto) return { status: "published", result, draft: next, publishedVersion: auto, error: null };
   }
   return { status: "applied", result, draft: next, publishedVersion: null, error: null };
 }
 
+/** The live document without its version stamp, as the base an import is measured and published against. */
+function liveData(live: NonNullable<Awaited<ReturnType<typeof getLatestVersion>>>): SiteData {
+  const { version: _v, publishedAt: _p, ...data } = live;
+  void _v;
+  void _p;
+  return data;
+}
+
+/** Why an unattended sheet was not published, in the words the alert uses. */
+export function holdReason(a: { autoPublishPct: number; rowErrors: number; validation: string[]; worst: Move | null }): string | null {
+  if (a.autoPublishPct <= 0) return "auto-publish is off";
+  if (a.rowErrors) return `${a.rowErrors} row${a.rowErrors === 1 ? "" : "s"} could not be read`;
+  if (a.validation[0]) return a.validation[0];
+  if (a.worst && a.worst.pct > a.autoPublishPct) return describeMove(a.worst);
+  return null;
+}
+
+const HOLD_NOTE = "Prices remain on hold: customers still see the hold message, not these rates. Press Resume in the admin when you are ready to show prices again.";
+
 /**
- * A publish takes every sheet that was applied to the draft live: mark them
- * `published` with the version they went out in, so the list stops saying
- * "publish to go live". Returns the ids that changed. Every publish path
- * (admin, email auto-publish) calls this after `publishVersion`.
+ * The unattended publish. It is measured against, and publishes, the LIVE
+ * version plus this sheet — never the draft, which may hold an admin's
+ * unreviewed edits. The draft keeps its edits and the sheet (the caller saved
+ * it); `publishVersion` re-bases the draft onto what it published, so the
+ * draft is written back afterwards. `expectedBase` makes a publish that raced
+ * an admin's fail instead of overwriting it. A price hold is never lifted
+ * here: lifting is a person's call, so the alert says the hold is still on.
+ * Returns the published version, or null when the sheet waits for review.
  */
-export async function markImportsPublished(version: number): Promise<number[]> {
-  const rows = await db.update(schema.imports).set({ status: "published", appliedVersion: version }).where(eq(schema.imports.status, "applied")).returning({ id: schema.imports.id });
+async function autoPublish(a: {
+  importId: number;
+  rec: typeof schema.imports.$inferSelect;
+  rows: string[][];
+  args: ApplyArgs;
+  result: ImportResult;
+  draftNext: SiteData;
+}): Promise<number | null> {
+  const { rec, args } = a;
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  const settings = await getIntakeSettings();
+  const hold = await getHold();
+  const holdLine = hold.on ? `\n\n${HOLD_NOTE}` : "";
+  const latest = await getLatestVersion();
+  const held = async (reason: string) => {
+    await audit(args.actor, "import_held", { importId: a.importId, reason, holdOn: hold.on });
+    void alertNow(
+      `Rate sheet ${rec.fileName} is waiting for your review`,
+      `The sheet from ${rec.fromEmail ?? "an unknown sender"} was read and applied to the editor (${a.result.rows.length} destinations) but not published: ${reason}.${holdLine}
+
+Review and publish at ${site}/admin.`,
+    );
+    return null;
+  };
+  if (!latest) return held("nothing has been published yet");
+  const live = liveData(latest);
+  const im = buildImport({ rows: a.rows, headerRow: args.headerRow, map: args.map, opts: args.opts, draft: live, fileName: args.fileName ?? rec.fileName });
+  const next = applyImport(live, im);
+  const diff = diffSite(live, next);
+  if (!diff.lines.some((l) => l.kind !== "profile")) {
+    // The live site already quotes these prices: say so, rather than leave the sheet "in the editor" silently.
+    await db.update(schema.imports).set({ status: "published", appliedVersion: latest.version }).where(eq(schema.imports.id, a.importId));
+    await audit(args.actor, "import_unchanged", { importId: a.importId, version: latest.version });
+    void alertNow(
+      `Rate sheet ${rec.fileName} changed nothing`,
+      `The sheet from ${rec.fromEmail ?? "an unknown sender"} has the same prices as the live site (version ${latest.version}), so nothing was published.${holdLine}`,
+    );
+    return null;
+  }
+  const worst = largestMove(live, im);
+  const reason = holdReason({ autoPublishPct: settings.autoPublishPct, rowErrors: im.errors.length, validation: validateSite(next), worst });
+  if (reason) return held(reason);
+  let v: Awaited<ReturnType<typeof publishVersion>>;
+  try {
+    v = await publishVersion({
+      data: next,
+      by: args.actor,
+      source: `email:${rec.fromEmail ?? "unknown"}`,
+      summary: `${summarise(diff)} (auto from ${rec.fileName})`,
+      changeCount: diff.count,
+      expectedBase: latest.version,
+      // Read the hold inside the publish transaction but never lift it: that is a person's call.
+      liftHold: false,
+    });
+  } catch (err) {
+    if (err instanceof PublishConflict) return held(`version ${err.live} was published while the sheet was being read`);
+    throw err;
+  }
+  // publishVersion re-based the draft onto `next`; put back the admin's draft (with this sheet in it).
+  await saveDraft(a.draftNext, args.actor);
+  // Outside a server action updateTag is not allowed; { expire: 0 } is its route-handler equivalent (no stale serve).
+  revalidateTag(SITE_TAG, { expire: 0 });
+  // Only this sheet went live; others applied to the draft are still only in the draft.
+  await db.update(schema.imports).set({ status: "published", appliedVersion: v.version }).where(eq(schema.imports.id, a.importId));
+  // The hold as the publish transaction saw it wins over the earlier read.
+  const holdOn = v.hold?.on ?? hold.on;
+  const holdAfter = holdOn ? `\n\n${HOLD_NOTE}` : "";
+  await audit(args.actor, "publish", { version: v.version, auto: true, importId: a.importId, imports: [a.importId], largestMovePct: worst?.pct ?? 0, holdOn });
+  void alertNow(
+    `Rate sheet ${rec.fileName} was published automatically`,
+    `The sheet from ${rec.fromEmail ?? "an unknown sender"} went live as version ${v.version}: ${summarise(diff)}. ${worst ? `Largest change: ${describeMove(worst)}.` : ""}${holdAfter}
+
+Check it at ${site}/admin.`,
+  );
+  return v.version;
+}
+
+/**
+ * An admin's publish takes the sheets applied to the draft live: mark them
+ * `published` with the version they went out in, so the list stops saying
+ * "publish to go live". Returns the ids marked published.
+ *
+ * With `publishedData` (what was actually published), only sheets whose
+ * prices it still carries are marked (`importReflected`); a sheet whose rows
+ * the admin edited away or deleted before publishing did not go live, so it
+ * goes back to waiting instead, like after a discard. Without it, every
+ * applied sheet is marked (the old behaviour, for callers that cannot say).
+ * The email auto-publish marks its own sheet and does not call this.
+ */
+export async function markImportsPublished(version: number, publishedData?: SiteData): Promise<number[]> {
+  if (!publishedData) {
+    const rows = await db.update(schema.imports).set({ status: "published", appliedVersion: version }).where(eq(schema.imports.status, "applied")).returning({ id: schema.imports.id });
+    return rows.map((r) => r.id);
+  }
+  const open = await db.select({ id: schema.imports.id, result: schema.imports.result }).from(schema.imports).where(eq(schema.imports.status, "applied"));
+  const live: number[] = [];
+  const back: number[] = [];
+  for (const r of open) (!r.result || importReflected(r.result, publishedData) ? live : back).push(r.id);
+  if (back.length) {
+    await db
+      .update(schema.imports)
+      .set({ status: "needs_mapping", decidedBy: null, decidedAt: null })
+      .where(and(inArray(schema.imports.id, back), eq(schema.imports.status, "applied")));
+  }
+  if (!live.length) return [];
+  const rows = await db
+    .update(schema.imports)
+    .set({ status: "published", appliedVersion: version })
+    .where(and(inArray(schema.imports.id, live), eq(schema.imports.status, "applied")))
+    .returning({ id: schema.imports.id });
   return rows.map((r) => r.id);
 }
 
@@ -259,7 +374,17 @@ export const OPEN_IMPORT_STATUSES: readonly ImportStatus[] = ["needs_mapping", "
  */
 export async function listImports(limit = 15): Promise<ImportSummary[]> {
   const recent = db.select({ id: schema.imports.id }).from(schema.imports).orderBy(desc(schema.imports.receivedAt), desc(schema.imports.id)).limit(limit);
-  const rows = await db
+  return summaries(or(inArray(schema.imports.id, recent), inArray(schema.imports.status, [...OPEN_IMPORT_STATUSES])));
+}
+
+async function summaries(where: SQL | undefined, limit?: number): Promise<ImportSummary[]> {
+  const q = summarySelect().where(where).orderBy(desc(schema.imports.receivedAt), desc(schema.imports.id));
+  const rows = await (limit ? q.limit(limit) : q);
+  return rows.map(toSummary);
+}
+
+function summarySelect() {
+  return db
     .select({
       id: schema.imports.id,
       receivedAt: schema.imports.receivedAt,
@@ -273,10 +398,11 @@ export async function listImports(limit = 15): Promise<ImportSummary[]> {
       versionSource: schema.versions.source,
     })
     .from(schema.imports)
-    .leftJoin(schema.versions, eq(schema.versions.version, schema.imports.appliedVersion))
-    .where(or(inArray(schema.imports.id, recent), inArray(schema.imports.status, [...OPEN_IMPORT_STATUSES])))
-    .orderBy(desc(schema.imports.receivedAt), desc(schema.imports.id));
-  return rows.map((r) => ({
+    .leftJoin(schema.versions, eq(schema.versions.version, schema.imports.appliedVersion));
+}
+
+function toSummary(r: Awaited<ReturnType<typeof summarySelect>>[number]): ImportSummary {
+  return {
     id: r.id,
     receivedAt: r.receivedAt.toISOString(),
     source: r.source,
@@ -289,14 +415,24 @@ export async function listImports(limit = 15): Promise<ImportSummary[]> {
     warnings: r.result?.warnings.length ?? 0,
     appliedVersion: r.appliedVersion,
     publishedAuto: r.status === "published" && isAutoPublished(r.versionSource),
-  }));
+  };
 }
 
-/** Has a sheet arrived today (local server date)? Used by the daily check. */
-export async function latestSheetToday(): Promise<ImportSummary | null> {
-  const [first] = await listImports(1);
-  if (!first) return null;
-  const d = new Date(first.receivedAt);
-  const now = new Date();
-  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate() ? first : null;
+/**
+ * Was `receivedAt` on the office's calendar day of `now`? Judged by
+ * `businessDayKey`, not the server clock: Vercel runs in UTC, so a sheet sent
+ * at 03:00 in Lahore used to count as yesterday's.
+ */
+export function receivedToday(receivedAt: Date | string, now: Date = new Date()): boolean {
+  return businessDayKey(new Date(receivedAt)) === businessDayKey(now);
+}
+
+/**
+ * The latest sheet that arrived today and could be read, or null. Used by the
+ * daily "no sheet by the expected hour" check: an unreadable attachment is
+ * not a rate sheet, so it must not silence that alert.
+ */
+export async function latestSheetToday(now: Date = new Date()): Promise<ImportSummary | null> {
+  const [last] = await summaries(ne(schema.imports.status, "failed"), 1);
+  return last && receivedToday(last.receivedAt, now) ? last : null;
 }

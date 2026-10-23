@@ -118,7 +118,7 @@ describe("grid sheets", () => {
     const map = autoMap(rows[1]!, SEED.services, rows[0]);
     expect(map["express.kg.1"]).toBe(1);
     expect(map["normal.kg.3"]).toBe(6);
-    const im = buildImport({ rows, headerRow: 1, map, opts: { addNew: true, hideMissing: false, cost: true, margin: 10, mround: 10 }, draft: SEED, fileName: "grid.xlsx" });
+    const im = buildImport({ rows, headerRow: 1, map, opts: { addNew: true, hideMissing: false, cost: true, margin: 10, mround: 10 }, draft: gridSite(), fileName: "grid.xlsx" });
     expect(im.errors).toEqual([]);
     expect(im.rows[0]!.rates.express).toMatchObject({ grid: { "1": 4400, "2": 6600, "3": 8800 }, costGrid: { "1": 4000, "2": 6000, "3": 8000 }, days: "3–5" });
     expect(im.rows[0]!.rates.normal!.grid).toEqual({ "1": 3300, "2": 4950, "3": 6600 });

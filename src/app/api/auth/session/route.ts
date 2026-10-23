@@ -48,6 +48,10 @@ export async function POST(req: Request) {
   const totp = await totpStatus(admin.email);
   if (totp.enabled) {
     if (!code) return NextResponse.json({ mfa: true, message: "Enter the code from your authenticator app" }, { status: 401 });
+    // Per account as well as per IP: a phished password from many addresses
+    // must not get unlimited guesses at the 6-digit code.
+    const perAccount = await rateLimit("login-code", admin.email, 10, 15 * 60);
+    if (!perAccount.ok) return NextResponse.json({ mfa: true, error: { code: "rate_limited", message: "Too many code attempts. Try again in 15 minutes." } }, { status: 429 });
     if (!(await verifyCode(admin.email, code))) {
       await audit(admin.email, "login_mfa_failed", {});
       return NextResponse.json({ mfa: true, error: { code: "bad_code", message: "That code did not match" } }, { status: 401 });

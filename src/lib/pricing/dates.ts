@@ -1,7 +1,11 @@
 /**
  * Transit-time parsing and delivery-date estimates. Pure; `now` is injected
- * so estimates are testable and so the server and browser agree.
+ * so estimates are testable and so the server and browser agree. `now` is a
+ * business-local Date (`businessNow()` from `@/lib/time`): its calendar
+ * fields read the office's wall clock, so the cutoff and holidays are the
+ * office's whatever zone the visitor's browser is in.
  */
+import { businessNow } from "@/lib/time";
 import type { Settings } from "./types";
 
 const DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
@@ -96,7 +100,8 @@ export function estimateDelivery(
   daysStr: string | null | undefined,
   settings: Pick<Settings, "workingDays" | "cutoffHour"> & Partial<Pick<Settings, "holidays">>,
   shipDate: Date | null,
-  now: Date,
+  /** The office's wall clock (`businessNow()`), never the browser's `new Date()`. */
+  now: Date = businessNow(),
 ): DeliveryEstimate | null {
   const range = parseDaysRange(daysStr);
   if (!range) return null;

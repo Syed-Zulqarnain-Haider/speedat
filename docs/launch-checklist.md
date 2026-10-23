@@ -14,7 +14,7 @@ unticked box.
 - [ ] Postmark: outbound server token (`POSTMARK_SERVER_TOKEN`), `NOTIFY_FROM` verified sender,
       `OFFICE_EMAIL`; inbound server webhook set to
       `https://user:<INBOUND_EMAIL_SECRET>@<domain>/api/inbound/email`.
-- [ ] `NEXT_PUBLIC_SITE_URL` = the public origin (https://speedat.net).
+- [ ] `NEXT_PUBLIC_SITE_URL` = the public origin (https://speedat.co).
 - [ ] Optional: `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN`.
 
 ## Content and rates

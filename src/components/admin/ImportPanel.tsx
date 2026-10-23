@@ -9,7 +9,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { applyImportAction, loadImportAction, rejectImportAction, saveIntakeAction, uploadSheetAction, type SheetPayload } from "@/app/admin/import-actions";
 import type { ImportSummary, IntakeSettings } from "@/lib/import/intake";
-import { applyImport, buildImport, buildPasteImport, findProfile, headerNames, headerSignature, mapFields } from "@/lib/import/parse";
+import { applyImport, buildImport, buildPasteImport, findProfile, headerNames, headerSignature, mapFields, mappedKgs, suggestLayout } from "@/lib/import/parse";
+import { gridWeights, isGrid } from "@/lib/pricing/engine";
 import type { ImportOptions, ImportResult } from "@/lib/import/types";
 import { fmtDate, fmtDateTime, fmtNum } from "@/lib/pricing/format";
 import type { SiteData } from "@/lib/site/types";
@@ -43,7 +44,12 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
   const rows = useMemo(() => (sheet ? (sheet.sheets[current] ?? []) : []), [sheet, current]);
   const headers = useMemo(() => headerNames(rows[headerRow] ?? []), [rows, headerRow]);
   const profile = useMemo(() => (sheet ? findProfile(draft.importProfiles, headerSignature(headers)) : undefined), [sheet, draft.importProfiles, headers]);
-  const fields = useMemo(() => mapFields(draft.services), [draft.services]);
+  // Weight fields: every kg the mapping mentions, plus the document's boxes when it prices per kilogram,
+  // so a weight column detected under the wrong service can be moved to the right one.
+  const kgs = useMemo(() => [...new Set([...mappedKgs(map), ...(isGrid(draft.settings) ? gridWeights(draft.settings) : [])])], [map, draft.settings]);
+  const allFields = useMemo(() => mapFields(draft.services, kgs), [draft.services, kgs]);
+  const fields = allFields.filter((f) => f.kg == null);
+  const kgFields = allFields.filter((f) => f.kg != null);
   const preview = useMemo<ImportResult | null>(
     () => (sheet && rows.length ? buildImport({ rows, headerRow, map, opts, draft, fileName: sheet.fileName }) : null),
     [sheet, rows, headerRow, map, opts, draft],
@@ -84,10 +90,27 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
     document.getElementById("sec-import")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  /**
+   * Re-derive header row and mapping whenever the rows they describe change:
+   * keeping the old sheet's map (or resetting the header row to 0 without
+   * re-mapping) made the preview read the wrong columns.
+   */
+  const relayout = (sheetRows: string[][], hdr?: number) => {
+    const l = suggestLayout(sheetRows, draft.importProfiles, draft.services, hdr);
+    setHeaderRow(l.headerRow);
+    setMap(l.map);
+    if (l.profile) {
+      const p = l.profile;
+      setOpts((o) => ({ ...o, cost: p.cost, margin: p.margin, mround: p.mround }));
+    }
+  };
+
   const changeSheet = (name: string) => {
     setCurrent(name);
-    setHeaderRow(0);
+    relayout(sheet?.sheets[name] ?? []);
   };
+
+  const changeHeaderRow = (n: number) => relayout(rows, Math.max(0, Math.min(rows.length - 1, n)));
 
   const apply = async () => {
     if (!sheet || !preview) return;
@@ -172,7 +195,7 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
             ) : null}
             <label className="field" style={{ maxWidth: 200 }}>
               <span>Header row number</span>
-              <input type="number" min={1} step={1} value={headerRow + 1} onChange={(e) => setHeaderRow(Math.max(0, Math.min(rows.length - 1, (Number(e.target.value) || 1) - 1)))} />
+              <input type="number" min={1} step={1} value={headerRow + 1} onChange={(e) => changeHeaderRow((Number(e.target.value) || 1) - 1)} />
             </label>
             <span className="meta">{sheet.fileName}</span>
           </div>
@@ -222,6 +245,27 @@ export function ImportPanel({ draft, imports, intake, isOwner, adopt, adoptLocal
               </label>
             ))}
           </div>
+          {kgFields.length ? (
+            <details className="fold" open={kgFields.some((f) => (map[f.key] ?? -1) >= 0)}>
+              <summary>Per-kilogram price columns</summary>
+              <p className="hint fold-hint">Check each service&apos;s weight columns, especially when the sheet has a title above the header row.</p>
+              <div className="map-grid">
+                {kgFields.map((f) => (
+                  <label className="field" key={f.key}>
+                    <span>{f.label}</span>
+                    <select value={String(map[f.key] ?? -1)} onChange={(e) => setMap((m) => ({ ...m, [f.key]: Number(e.target.value) }))}>
+                      <option value="-1">— not in file —</option>
+                      {headers.map((h, i) => (
+                        <option key={i} value={String(i)}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </details>
+          ) : null}
           <label className="chk">
             <input type="checkbox" checked={opts.addNew} onChange={(e) => setOpts((o) => ({ ...o, addNew: e.target.checked }))} /> Add destinations that are not in the list yet
           </label>

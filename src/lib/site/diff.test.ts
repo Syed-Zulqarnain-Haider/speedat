@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { diffSite, summarise, validateSite, warnSite } from "./diff";
 import { migrate } from "./migrate";
-import { SEED } from "./seed";
+import { gridSeed, SEED } from "./seed";
 import type { SiteData } from "./types";
 
 const clone = (): SiteData => structuredClone(SEED);
@@ -45,6 +45,73 @@ describe("diffSite", () => {
     const d = diffSite(SEED, b);
     expect(d.lines.map((l) => l.label)).toEqual(["taxPct", "Website text · heroTitle", "Rates are live", "Import layout remembered"]);
     expect(d.lines[1]).toMatchObject({ old: "", new: "New title" });
+  });
+});
+
+describe("diffSite by pricing mode", () => {
+  it("marks slab edits under grid pricing as inert, without a double-check flag", () => {
+    const a = gridSeed();
+    const b = structuredClone(a);
+    b.destinations[0]!.rates.express!.first = 99999; // huge move, but the grid site never reads it
+    const d = diffSite(a, b);
+    expect(d.count).toBe(1);
+    expect(d.inert).toBe(1);
+    expect(d.lines[0]).toMatchObject({ inert: true, flag: "not used — the site prices by kilogram grid" });
+  });
+
+  it("marks grid edits under slab pricing as inert, and counts slab edits as real", () => {
+    const b = clone();
+    b.destinations[0]!.rates.express!.grid = { "1": 100 };
+    b.destinations[0]!.rates.express!.first = 4600;
+    const d = diffSite(SEED, b);
+    expect(d.count).toBe(2);
+    expect(d.inert).toBe(1);
+    expect(d.lines.find((l) => l.label.endsWith("1 kg"))?.inert).toBe(true);
+    expect(d.lines.find((l) => l.label.endsWith("first slab"))?.inert).toBeUndefined();
+  });
+
+  it("warns when a publish would change nothing customers see", () => {
+    const a = gridSeed();
+    const b = structuredClone(a);
+    b.destinations[0]!.rates.express!.first = 99999;
+    expect(warnSite(b, a)[0]).toMatch(/^Every change here is to first-slab or per-step prices/);
+    b.destinations[0]!.rates.express!.grid!["1"] = 1;
+    expect(warnSite(b, a).some((w) => w.startsWith("1 change is to first-slab"))).toBe(true);
+    expect(warnSite(a, a)).toEqual(warnSite(a));
+  });
+});
+
+describe("diffSite services, order and settings keys", () => {
+  it("sees services added, removed, renamed and re-described", () => {
+    const b = clone();
+    b.services[0]!.name = "Express Plus";
+    b.services[1]!.note = "Cheaper air service";
+    b.services.push({ id: "cargo", name: "Cargo", note: "" });
+    const d = diffSite(SEED, b);
+    expect(d.lines.map((l) => l.label)).toEqual(["Service renamed", "Normal · description", "Service added"]);
+    expect(summarise(d)).toBe("3 changes: services");
+    const c = clone();
+    c.services = c.services.slice(0, 1);
+    expect(diffSite(SEED, c).lines[0]).toMatchObject({ kind: "service", label: "Service removed", old: "Normal" });
+  });
+
+  it("sees a restore that only changes services or order — not 'nothing to publish'", () => {
+    const b = clone();
+    b.destinations.reverse();
+    const d = diffSite(SEED, b);
+    expect(d.count).toBe(1);
+    expect(d.lines[0]!.kind).toBe("order");
+    const c = clone();
+    c.services.reverse();
+    expect(diffSite(SEED, c).lines.map((l) => l.kind)).toEqual(["order"]);
+  });
+
+  it("sees a settings key only one side has", () => {
+    const a = clone();
+    (a.settings as unknown as Record<string, unknown>).legacyFlag = "on";
+    const d = diffSite(a, clone());
+    expect(d.count).toBe(1);
+    expect(d.lines[0]).toMatchObject({ label: "legacyFlag", old: "on", new: "" });
   });
 });
 

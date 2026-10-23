@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { checkFormToken, issueFormToken } from "./form-token";
+import { checkFormToken, formTokenId, issueFormToken } from "./form-token";
 
 describe("form token", () => {
   beforeAll(() => {
@@ -18,5 +18,11 @@ describe("form token", () => {
     expect(checkFormToken(`${Number(ts) - 60_000}.${sig}`, 1_800_000_000_000 + 5000)).toBe("invalid");
     expect(checkFormToken("nope", Date.now())).toBe("invalid");
     expect(checkFormToken("", Date.now())).toBe("invalid");
+  });
+  it("ids a token by its signature", () => {
+    const tok = issueFormToken(1_800_000_000_000);
+    expect(formTokenId(tok)).toBe(tok.split(".")[1]);
+    expect(formTokenId("nope")).toBeNull();
+    expect(formTokenId(undefined)).toBeNull();
   });
 });

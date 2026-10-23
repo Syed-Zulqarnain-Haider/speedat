@@ -1,13 +1,13 @@
 "use server";
 
 /** Server actions behind the admin's "Import from Excel" section. */
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { Forbidden, requireAdmin } from "@/lib/auth/session";
 import { db, schema } from "@/lib/db";
 import { applyToDraft, getIntakeSettings, receiveSheet, setIntakeSettings, type ImportStatus, type IntakeSettings } from "@/lib/import/intake";
-import { autoMap, detectHeaderRow, findProfile, headerNames, headerSignature } from "@/lib/import/parse";
+import { suggestLayout } from "@/lib/import/parse";
 import type { ImportOptions, ImportResult } from "@/lib/import/types";
 import { getDraft } from "@/lib/site/repo";
 import type { SiteData } from "@/lib/site/types";
@@ -55,12 +55,11 @@ export async function loadImportAction(importId: number): Promise<ActionResult<S
     const names = Object.keys(rec.rows);
     const sheet = rec.sheetName && rec.rows[rec.sheetName] ? rec.sheetName : (names[0] ?? "");
     const rows = rec.rows[sheet] ?? [];
-    const headerRow = rec.result?.headerRow ?? detectHeaderRow(rows);
     const draft = await getDraft();
-    const headers = headerNames(rows[headerRow] ?? []);
-    const profile = findProfile(draft.data.importProfiles, headerSignature(headers));
-    const map = rec.result?.map ?? profile?.map ?? autoMap(headers, draft.data.services, headerRow > 0 ? rows[headerRow - 1] : undefined);
-    return { ok: true, importId, names, sheets: rec.rows, sheet, headerRow, map, profileMatched: !!profile, fileName: rec.fileName };
+    // A mapping tried earlier on this sheet wins; otherwise the remembered or guessed layout.
+    const layout = suggestLayout(rows, draft.data.importProfiles, draft.data.services, rec.result?.headerRow);
+    const map = rec.result?.map ?? layout.map;
+    return { ok: true, importId, names, sheets: rec.rows, sheet, headerRow: layout.headerRow, map, profileMatched: !!layout.profile, fileName: rec.fileName };
   } catch (err) {
     return onError(err);
   }
@@ -74,14 +73,20 @@ const ApplyInput = z.object({
   opts: z.object({ addNew: z.boolean(), hideMissing: z.boolean(), cost: z.boolean(), margin: z.number().finite(), mround: z.number().finite().min(1) }),
 });
 
+/**
+ * "Apply to editor". Open to every admin, editors included, so it never
+ * publishes — not even an emailed sheet under an auto-publish tolerance:
+ * publishing is owner-only, and only the unattended email intake
+ * (`receiveSheet`) may do it on the owner's standing instruction.
+ */
 export async function applyImportAction(input: unknown): Promise<ActionResult<{ draft: SiteData; result: ImportResult; status: ImportStatus; updatedAt: string }>> {
   try {
     const user = await requireAdmin();
     const parsed = ApplyInput.parse(input);
     const opts: ImportOptions = parsed.opts;
-    const r = await applyToDraft({ ...parsed, opts, actor: user.email });
+    const r = await applyToDraft({ ...parsed, opts, actor: user.email, unattended: false });
     if (!r.draft || !r.result) return { ok: false, code: r.status, message: r.error ?? "Nothing was applied." };
-    // A returned draft is one applyToDraft has just saved (and possibly auto-published).
+    // A returned draft is one applyToDraft has just saved (never published from here).
     return { ok: true, draft: r.draft, result: r.result, status: r.status, updatedAt: new Date().toISOString() };
   } catch (err) {
     if (err instanceof Error && err.name === "ZodError") return { ok: false, code: "invalid", message: "The mapping could not be read." };
@@ -89,10 +94,26 @@ export async function applyImportAction(input: unknown): Promise<ActionResult<{ 
   }
 }
 
+/** Statuses a sheet can be rejected from: it has changed nothing yet. */
+const REJECTABLE: ImportStatus[] = ["needs_mapping", "failed"];
+
+/**
+ * Reject a sheet that is still waiting. An applied sheet's prices are already
+ * in the draft; marking it rejected would leave them there to be published
+ * under a "rejected" label, so it is refused — the admin edits the prices or
+ * discards the draft instead (which puts the sheet back to waiting).
+ */
 export async function rejectImportAction(importId: number): Promise<ActionResult> {
   try {
     const user = await requireAdmin();
-    await db.update(schema.imports).set({ status: "rejected", decidedBy: user.email, decidedAt: new Date() }).where(eq(schema.imports.id, importId));
+    const done = await db
+      .update(schema.imports)
+      .set({ status: "rejected", decidedBy: user.email, decidedAt: new Date() })
+      .where(and(eq(schema.imports.id, importId), inArray(schema.imports.status, REJECTABLE)))
+      .returning({ id: schema.imports.id });
+    if (!done.length) {
+      return { ok: false, code: "not_waiting", message: "Only a sheet that is still waiting can be rejected. This one is already in the editor or published — change its prices there, or discard the draft." };
+    }
     await audit(user.email, "import_rejected", { importId });
     return { ok: true };
   } catch (err) {

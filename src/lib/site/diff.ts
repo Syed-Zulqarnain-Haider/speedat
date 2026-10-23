@@ -9,16 +9,20 @@ import { fmtMoney, nameKey } from "@/lib/pricing/format";
 import type { SiteData } from "./types";
 
 export interface DiffLine {
-  kind: "added" | "removed" | "renamed" | "visibility" | "rate" | "field" | "profile";
+  kind: "added" | "removed" | "renamed" | "visibility" | "rate" | "field" | "profile" | "service" | "order";
   label: string;
   old?: string;
   new?: string;
   /** e.g. "+40% — please double-check" for large rate moves. */
   flag?: string;
+  /** A price the new document's pricing mode does not read (slab prices under grid pricing, or the reverse): stored, never shown. */
+  inert?: true;
 }
 
 export interface Diff {
   count: number;
+  /** Of `count`, the changes customers will not see because the pricing mode ignores them. */
+  inert: number;
   /** Destination ids that changed in any way. */
   byDest: Record<string, true>;
   lines: DiffLine[];
@@ -84,29 +88,74 @@ export function fieldChange(a: unknown, b: unknown): { where?: string; old: stri
   return { where, old: o, new: nw };
 }
 
+/** What the pricing mode ignores, as a review note. */
+function inertNote(grid: boolean): string {
+  return grid ? "not used — the site prices by kilogram grid" : "not used — the site prices by first slab and step";
+}
+
+/** Ids in both lists, in the order each list has them; different = the shared items were reordered. */
+function sameOrder(a: readonly { id: string }[], b: readonly { id: string }[]): boolean {
+  const inB = new Set(b.map((x) => x.id));
+  const inA = new Set(a.map((x) => x.id));
+  const pa = a.filter((x) => inB.has(x.id)).map((x) => x.id);
+  const pb = b.filter((x) => inA.has(x.id)).map((x) => x.id);
+  return pa.join("\n") === pb.join("\n");
+}
+
+/**
+ * Every difference customers could see between live `a` and draft `b`, plus
+ * the stored-only ones marked `inert`. Rates are read the way `b`'s pricing
+ * mode prices them: under grid pricing a first-slab edit is real data but
+ * changes no price on the site, so it is listed with a note (and counted in
+ * `inert`) instead of a "+40% double-check" flag that implies it matters.
+ * Services, the order of destinations and services (the site lists them in
+ * that order), and settings keys only one side has are all compared — a
+ * restore of an older version that differs only there used to read "nothing
+ * to publish".
+ */
 export function diffSite(a: SiteData, b: SiteData): Diff {
-  const out: Diff = { count: 0, byDest: {}, lines: [] };
+  const out: Diff = { count: 0, inert: 0, byDest: {}, lines: [] };
   const cur = b.settings.currency;
+  const grid = b.settings.pricingMode === "grid";
+  /** Slab fields under grid pricing, grid boxes under slab pricing. Documents and days are read by both. */
+  const ignored = (f: "first" | "addl" | "grid") => (f === "grid" ? !grid : grid);
+  const push = (line: DiffLine) => {
+    out.count++;
+    if (line.inert) out.inert++;
+    out.lines.push(line);
+  };
+  const svA = new Map(a.services.map((x) => [x.id, x]));
+  const svB = new Map(b.services.map((x) => [x.id, x]));
+  for (const sv of b.services) {
+    const old = svA.get(sv.id);
+    if (!old) push({ kind: "service", label: "Service added", new: sv.name });
+    else {
+      if (old.name !== sv.name) push({ kind: "service", label: "Service renamed", old: old.name, new: sv.name });
+      if ((old.note ?? "") !== (sv.note ?? "")) {
+        const ch = fieldChange(old.note, sv.note);
+        push({ kind: "service", label: `${sv.name} · description`, old: ch.old, new: ch.new });
+      }
+    }
+  }
+  for (const sv of a.services) if (!svB.has(sv.id)) push({ kind: "service", label: "Service removed", old: sv.name });
+  if (!sameOrder(a.services, b.services)) push({ kind: "order", label: "Service order", old: a.services.map((x) => x.name).join(", "), new: b.services.map((x) => x.name).join(", ") });
   const am = new Map(a.destinations.map((x) => [x.id, x]));
   const bm = new Map(b.destinations.map((x) => [x.id, x]));
   const money = (v: unknown) => (v === "" || v == null ? "—" : fmtMoney(Number(v), cur));
   for (const [id, x] of bm) {
     const y = am.get(id);
     if (!y) {
-      out.count++;
       out.byDest[id] = true;
-      out.lines.push({ kind: "added", label: "Added", new: x.name + (x.active ? "" : " (hidden from site)") });
+      push({ kind: "added", label: "Added", new: x.name + (x.active ? "" : " (hidden from site)") });
       continue;
     }
     if (x.name !== y.name) {
-      out.count++;
       out.byDest[id] = true;
-      out.lines.push({ kind: "renamed", label: "Renamed", old: y.name, new: x.name });
+      push({ kind: "renamed", label: "Renamed", old: y.name, new: x.name });
     }
     if (!!x.active !== !!y.active) {
-      out.count++;
       out.byDest[id] = true;
-      out.lines.push({ kind: "visibility", label: `${x.name}: ${x.active ? "now shown on the site" : "hidden from the site"}` });
+      push({ kind: "visibility", label: `${x.name}: ${x.active ? "now shown on the site" : "hidden from the site"}` });
     }
     for (const sv of b.services) {
       const r1 = y.rates[sv.id] ?? {};
@@ -115,16 +164,17 @@ export function diffSite(a: SiteData, b: SiteData): Diff {
         const v1 = r1[f] ?? "";
         const v2 = r2[f] ?? "";
         if (String(v1) === String(v2)) continue;
-        out.count++;
         out.byDest[id] = true;
         const lab = f === "days" ? "days" : f === "first" ? "first slab" : f === "doc" ? "documents" : "per step";
+        const off = (f === "first" || f === "addl") && ignored(f);
         const pct = f !== "days" && isNum(v1) && isNum(v2) && v1 > 0 ? Math.round(((v2 - v1) / v1) * 100) : null;
-        out.lines.push({
+        push({
           kind: "rate",
           label: `${x.name} · ${sv.name} ${lab}`,
           old: f === "days" ? String(v1) : money(v1),
           new: f === "days" ? String(v2) : money(v2),
-          flag: pct !== null && Math.abs(pct) >= FLAG_PCT ? `${pct > 0 ? "+" : ""}${pct}% — please double-check` : undefined,
+          flag: off ? inertNote(grid) : pct !== null && Math.abs(pct) >= FLAG_PCT ? `${pct > 0 ? "+" : ""}${pct}% — please double-check` : undefined,
+          ...(off ? { inert: true as const } : {}),
         });
       }
       // Grid prices, one line per kilogram that changed.
@@ -135,46 +185,41 @@ export function diffSite(a: SiteData, b: SiteData): Diff {
         const v1 = g1[k];
         const v2 = g2[k];
         if ((v1 ?? "") === (v2 ?? "")) continue;
-        out.count++;
         out.byDest[id] = true;
+        const off = ignored("grid");
         const pct = isNum(v1) && isNum(v2) && v1 > 0 ? Math.round(((v2 - v1) / v1) * 100) : null;
-        out.lines.push({
+        push({
           kind: "rate",
           label: `${x.name} · ${sv.name} ${k} kg`,
           old: money(v1),
           new: money(v2),
-          flag: pct !== null && Math.abs(pct) >= FLAG_PCT ? `${pct > 0 ? "+" : ""}${pct}% — please double-check` : undefined,
+          flag: off ? inertNote(grid) : pct !== null && Math.abs(pct) >= FLAG_PCT ? `${pct > 0 ? "+" : ""}${pct}% — please double-check` : undefined,
+          ...(off ? { inert: true as const } : {}),
         });
       }
     }
   }
   for (const [id, y] of am) {
     if (bm.has(id)) continue;
-    out.count++;
     out.byDest[id] = true;
-    out.lines.push({ kind: "removed", label: "Removed", old: y.name });
+    push({ kind: "removed", label: "Removed", old: y.name });
   }
+  if (!sameOrder(a.destinations, b.destinations)) push({ kind: "order", label: "Destination order changed (the site lists them in this order)" });
   for (const g of ["company", "settings", "content"] as const) {
-    const ga = a[g] as unknown as Record<string, unknown>;
-    const gb = b[g] as unknown as Record<string, unknown>;
-    for (const k of Object.keys(gb)) {
+    const ga = (a[g] ?? {}) as unknown as Record<string, unknown>;
+    const gb = (b[g] ?? {}) as unknown as Record<string, unknown>;
+    // Both sides' keys: a key only the live document has (an older shape, a restored version) is a change too.
+    for (const k of new Set([...Object.keys(gb), ...Object.keys(ga)])) {
       if (String(ga[k] ?? "") === String(gb[k] ?? "")) continue;
-      out.count++;
       const ch = fieldChange(ga[k], gb[k]);
       const base = g === "content" ? `Website text · ${k}` : k;
-      out.lines.push({ kind: "field", label: ch.where ? `${base} (${ch.where})` : base, old: ch.old, new: ch.new });
+      push({ kind: "field", label: ch.where ? `${base} (${ch.where})` : base, old: ch.old, new: ch.new });
     }
   }
-  if (!!a.live !== !!b.live) {
-    out.count++;
-    out.lines.push({ kind: "field", label: "Rates are live", old: String(!!a.live), new: String(!!b.live) });
-  }
+  if (!!a.live !== !!b.live) push({ kind: "field", label: "Rates are live", old: String(!!a.live), new: String(!!b.live) });
   const ap = a.importProfiles.map((p) => p.signature).join("\n");
   const bp = b.importProfiles.map((p) => p.signature).join("\n");
-  if (ap !== bp) {
-    out.count++;
-    out.lines.push({ kind: "profile", label: "Import layout remembered", new: b.importProfiles.at(-1)?.name || "sheet" });
-  }
+  if (ap !== bp) push({ kind: "profile", label: "Import layout remembered", new: b.importProfiles.at(-1)?.name || "sheet" });
   return out;
 }
 
@@ -246,9 +291,26 @@ export function validateSite(s: SiteData): string[] {
   return errs;
 }
 
-/** Non-blocking oddities worth a second look before publishing. */
-export function warnSite(s: SiteData): string[] {
+/**
+ * Non-blocking oddities worth a second look before publishing. With `live`,
+ * also says when edited prices are ones the pricing mode ignores — a grid-mode
+ * publish of first-slab edits "succeeded" and changed nothing customers see.
+ */
+export function warnSite(s: SiteData, live?: SiteData): string[] {
   const w: string[] = [];
+  if (live) {
+    const d = diffSite(live, s);
+    if (d.inert) {
+      const grid = s.settings.pricingMode === "grid";
+      const what = grid ? "first-slab or per-step prices" : "kilogram grid prices";
+      const mode = grid ? "by kilogram grid" : "by first slab and step";
+      w.push(
+        d.inert === d.count
+          ? `Every change here is to ${what}, which the site does not use (it prices ${mode}) — customers will see no difference.`
+          : `${d.inert} change${d.inert === 1 ? " is" : "s are"} to ${what}, which the site does not use (it prices ${mode}); customers will not see ${d.inert === 1 ? "it" : "them"}.`,
+      );
+    }
+  }
   const cur = s.settings.currency;
   const [ex, no] = s.services;
   const grid = s.settings.pricingMode === "grid";
@@ -324,6 +386,8 @@ export function summarise(d: Diff): string {
   const fields = d.lines.filter((l) => l.kind === "field").length;
   const bits: string[] = [];
   if (dests) bits.push(`${dests} destination${dests === 1 ? "" : "s"}`);
+  if (d.lines.some((l) => l.kind === "service")) bits.push("services");
+  if (d.lines.some((l) => l.kind === "order")) bits.push("order");
   if (fields) bits.push("settings or text");
   if (d.lines.some((l) => l.kind === "profile")) bits.push("import layout");
   return `${d.count} change${d.count === 1 ? "" : "s"}${bits.length ? `: ${bits.join(", ")}` : ""}`;

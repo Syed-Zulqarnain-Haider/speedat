@@ -90,6 +90,7 @@ export const ImportProfileSchema = z.object({
   cost: z.boolean(),
   margin: num,
   mround: num,
+  headerRow: z.number().int().min(0).max(5000).optional(),
 });
 
 export const SiteDataSchema: z.ZodType<SiteData> = z.object({

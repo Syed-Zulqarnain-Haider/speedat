@@ -2,13 +2,24 @@
  * Signed timestamps for public forms: the page embeds one when rendered,
  * the submission returns it, and we refuse anything submitted faster than a
  * human could type or older than a working day. No third-party CAPTCHA.
+ * A token alone is reusable within that day, so callers also cap uses per
+ * token (`formTokenId` → a rate_limits bucket); see the contact action.
  */
 import "server-only";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { log } from "@/lib/log";
+
+let warnedDerived = false;
 
 function secret(): string {
   // APP_SECRET is the intended key; deriving from DATABASE_URL keeps the form
   // working (and stable across instances) on a deployment that forgot to set it.
+  // That ties the form key to a credential that gets rotated and shared for
+  // other reasons, so production says so (once per instance, not per request).
+  if (!process.env.APP_SECRET && process.env.DATABASE_URL && process.env.NODE_ENV === "production" && !warnedDerived) {
+    warnedDerived = true;
+    log.warn("form_token_derived_key", { message: "APP_SECRET is not set; form tokens are keyed from DATABASE_URL. Set APP_SECRET." });
+  }
   const s = process.env.APP_SECRET || process.env.DATABASE_URL;
   if (!s) throw new Error("APP_SECRET is not set");
   return createHash("sha256").update(`form:${s}`).digest("hex");
@@ -33,4 +44,13 @@ export function checkFormToken(token: string | null | undefined, now = Date.now(
   if (age < minMs) return "too_fast";
   if (age > maxMs) return "expired";
   return "ok";
+}
+
+/**
+ * A stable id for a well-formed token (its signature), used to count how many
+ * times one rendered form has been submitted. Only meaningful after
+ * `checkFormToken` returned "ok"; null for anything malformed.
+ */
+export function formTokenId(token: string | null | undefined): string | null {
+  return String(token ?? "").match(/^\d{10,16}\.([0-9a-f]{32})$/)?.[1] ?? null;
 }

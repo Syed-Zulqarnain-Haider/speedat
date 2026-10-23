@@ -2,7 +2,8 @@
 
 /**
  * The price hold switch. One button takes every price off the website
- * immediately; the owner puts them back here or by publishing new rates.
+ * immediately; the owner puts them back here, or a publish lifts it (unless
+ * the publisher unticks "Show prices again" in the review).
  * The draft is untouched either way — that is the whole point.
  */
 import { useState } from "react";
@@ -43,7 +44,7 @@ export function HoldBar({ hold, isOwner, onChange, toast }: Props) {
               <strong>Prices are on hold.</strong> Customers see your message and a WhatsApp form instead of prices
               {hold.since ? ` — since ${fmtDateTime(hold.since)}${hold.by ? ` by ${hold.by}` : ""}` : ""}.
               <div className="meta">“{hold.message}”</div>
-              <div className="meta">Key in the new rates below and publish them to show prices again, or resume with the old ones.</div>
+              <div className="meta">Key in the new rates below and publish: that lifts the hold (untick “Show prices again” in the review to keep it). Or resume now with the rates already live.</div>
             </div>
             {isOwner ? (
               <button className="btn primary" type="button" disabled={busy} onClick={() => apply(false)}>
@@ -64,7 +65,7 @@ export function HoldBar({ hold, isOwner, onChange, toast }: Props) {
         <div className="notice info hold" role="dialog" aria-label="Hold prices">
           <strong>Take every price off the website now?</strong>
           <p className="desc">
-            Nothing in the editor changes. Customers see the message below with a WhatsApp form until you publish new rates (or press Resume).
+            Nothing in the editor changes. Customers see the message below with a WhatsApp form until you press Resume or publish — a publish lifts the hold unless you untick “Show prices again” in its review.
           </p>
           <label className="field">
             <span>Message shown to customers</span>
@@ -83,7 +84,7 @@ export function HoldBar({ hold, isOwner, onChange, toast }: Props) {
           </div>
         </div>
       ) : (
-        <button className="btn small outline hold-btn" type="button" onClick={() => setOpen(true)} title="Hide every price from customers until new rates are published">
+        <button className="btn small outline hold-btn" type="button" onClick={() => setOpen(true)} title="Hide every price from customers until you resume them or publish">
           Hold prices
         </button>
       )}

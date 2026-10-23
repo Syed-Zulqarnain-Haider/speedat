@@ -14,23 +14,22 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { UI } from "@/components/Icons";
 import { setSession, useMounted, useSession } from "@/lib/client/session";
-import { addonsList, gToKg, gridWeights, isGrid, lines, priceAll } from "@/lib/pricing/engine";
+import { addonsList, cargoLimitKg, chargedG, gToKg, isGrid, lines, priceAll } from "@/lib/pricing/engine";
 import { estimateDelivery, type DeliveryEstimate } from "@/lib/pricing/dates";
 import { fmtDay, fmtHour, fmtMoney, fmtNum, fmtRange, inputDate, localDateFromInput, quoteId, quoteIdFor } from "@/lib/pricing/format";
 import { bookedTotal, cargoText, midSentence, piecesText, quoteText, waLink, weightSentence, type Quote, type Units } from "@/lib/pricing/quote";
 import type { Addon, PriceResult, ServicePrice, ShipmentType } from "@/lib/pricing/types";
 import type { PublishedVersion } from "@/lib/site/types";
-import { fromPrice } from "@/lib/site/copy";
+import { fromPrice, hasDocRate } from "@/lib/site/copy";
+import { businessNow } from "@/lib/time";
 import { flagCode } from "@/lib/site/countries";
 import { originCities } from "@/lib/site/text";
 import { Flag } from "@/components/site/Flag";
-import { entry, newRow, shown, toRows, type PieceRow } from "./pieces";
+import { entry, hasDims, newRow, shown, toRows, type PieceRow } from "./pieces";
+import { quickKgs } from "./quick";
 import { Toast, useToast } from "./Toast";
 
 type Mode = "quick" | "detail";
-
-/** The weight buttons on the quick view, in kilograms; only those the rate card can price are shown. */
-const KG_BUTTONS = [1, 2, 3, 5, 10, 15, 20, 25];
 
 /**
  * How many cells the country grid has. Up to this many destinations are all
@@ -38,18 +37,6 @@ const KG_BUTTONS = [1, 2, 3, 5, 10, 15, 20, 25];
  * grid keeps the same height (two rows beside the hero) whatever the count.
  */
 const TILE_MAX = 8;
-
-function weightOptions(sets: PublishedVersion["settings"]): number[] {
-  const maxKg = sets.maxKg;
-  // Grid pricing: exactly the whole kilograms that have a price box.
-  if (isGrid(sets)) return gridWeights(sets);
-  const out: number[] = [];
-  for (let k = 0.5; k <= 10; k += 0.5) out.push(k);
-  for (let k = 11; k <= 30; k += 1) out.push(k);
-  const top = maxKg > 0 ? Math.min(maxKg, 200) : 100;
-  for (let k = 35; k <= top; k += 5) out.push(k);
-  return out.filter((x) => !(maxKg > 0) || x <= maxKg);
-}
 
 /** `total` is the number the customer saw — shipping plus the add-ons that were on; the server recomputes both from the live document. */
 function logQuote(q: Quote, addons: Addon[], extra: Record<string, unknown>): void {
@@ -217,6 +204,8 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
   const [salt] = useState(() => Math.random().toString(36).slice(2));
 
   const dest = site.destinations.find((x) => x.id === destId && x.active);
+  // The cargo threshold the engine enforces: `maxKg`, or in grid mode without one the heaviest priced kilogram.
+  const cargoKg = useMemo(() => cargoLimitKg(site), [site]);
   const res: PriceResult | null =
     destId && kgv && kgv !== "more" && kgv !== "exact" ? priceAll(site, { destId, type: "pkg", rows: [{ kg: Number(kgv), qty: 1 }] }) : null;
   const available = res?.ok ? site.services.filter((s) => res.prices[s.id]).map((s) => s.id) : [];
@@ -245,7 +234,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
     note = "Now tap a weight";
   } else if (kgv === "more" || !res?.ok) {
     state = "cargo";
-    note = sets.maxKg > 0 ? `Over ${sets.maxKg} kg? We price it on WhatsApp` : "We price this on WhatsApp";
+    note = cargoKg > 0 ? `Over ${cargoKg} kg? We price it on WhatsApp` : "We price this on WhatsApp";
   } else if (!available.length) {
     state = "none";
     // A country the tile and the rates board price (its grid has boxes, just not one at or above this weight)
@@ -257,7 +246,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
   } else {
     state = "live";
     const sv = site.services.find((s) => s.id === chosen)!;
-    const est = sets.showEta && p?.days ? estimateDelivery(p.days, sets, null, new Date()) : null;
+    const est = sets.showEta && p?.days ? estimateDelivery(p.days, sets, null, businessNow()) : null;
     note = `${sv.name} · ${kgv} kg`;
     noteTo = dest?.name ?? "";
     when = est ? `Arrives ${fmtRange(est)}` : "";
@@ -272,7 +261,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
     // "Over N kg" is all the visitor has said, so the message says exactly that: the country and the weight, in
     // the same shape as the detailed view's cargo message — but no piece list (there are no pieces to list) and
     // no "about N kg" (it is more than N).
-    bookHref = waLink(site.company.whatsapp, `Hi ${site.company.name}, I need a cargo rate.\nTo: ${dest.name}\nWeight: over ${sets.maxKg} kg`);
+    bookHref = waLink(site.company.whatsapp, `Hi ${site.company.name}, I need a cargo rate.\nTo: ${dest.name}\nWeight: over ${cargoKg} kg`);
     bookLabel = "Ask for a cargo rate";
   } else if (state === "none" && dest) {
     // No price at this weight: the visitor has named the country and the weight, so the chat opens with both
@@ -280,7 +269,7 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
     bookHref = waLink(site.company.whatsapp, `Hi ${site.company.name}, I need a rate.\nTo: ${dest.name}\nWeight: ${kgv} kg`);
   } else if (p && res?.ok && dest) {
     const sv = site.services.find((s) => s.id === chosen)!;
-    const est = sets.showEta && p.days ? estimateDelivery(p.days, sets, null, new Date()) : null;
+    const est = sets.showEta && p.days ? estimateDelivery(p.days, sets, null, businessNow()) : null;
     quote = {
       id: quoteIdFor(`${salt}|${dest.id}|${kgv}|${chosen}`),
       from: "",
@@ -294,7 +283,8 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
       pickup: est ? fmtDay(est.pickup) : "",
       pieces: 1,
       piecesText: `1 × ${kgv} kg`,
-      billableG: res.weights.billableG,
+      // The weight whose price was charged: a grid gap is charged at the next priced kilogram, and says so.
+      billableG: chargedG(p, res.weights),
       chargeG: res.weights.chargeG,
       total: p.total,
       docRate: false,
@@ -319,8 +309,8 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
   const more = act.length > TILE_MAX;
   const tiles = more ? act.slice(0, TILE_MAX - 1) : act;
   const pickedId = destId && !tiles.some((d) => d.id === destId) ? destId : "";
-  const priced = weightOptions(sets);
-  const kgs = KG_BUTTONS.filter((k) => priced.includes(k));
+  // Only weights the engine prices for at least one service somewhere; a button never leads to "no price".
+  const kgs = useMemo(() => quickKgs(site), [site]);
 
   const waiting = state === "country" || state === "weight";
 
@@ -371,9 +361,9 @@ function QuickRate({ site, destId, setDestId, selectedAddons, addonsTotal, onExa
             <span>kg</span>
           </button>
         ))}
-        {sets.maxKg > 0 ? (
+        {cargoKg > 0 ? (
           <button type="button" className="kg more" aria-pressed={kgv === "more"} onClick={() => onKg("more")}>
-            Over {sets.maxKg} kg
+            Over {cargoKg} kg
           </button>
         ) : null}
         {/* The way out to the detailed view (documents, box sizes, many boxes). */}
@@ -497,13 +487,18 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
   const [chosen, setChosen] = useState<Chosen | null>(null);
   const [contents, setContents] = useState("");
 
-  const today = mounted ? inputDate(new Date()) : "";
+  // "Today", the cutoff and the holidays are the office's (src/lib/time), not the visitor's clock.
+  const today = mounted ? inputDate(businessNow()) : "";
+  const cargoKg = useMemo(() => cargoLimitKg(site), [site]);
+  // Documents carry no size field unless a size was typed (e.g. before switching from Packages): a size that
+  // prices the shipment is never hidden.
+  const docsNoSize = type === "doc" && !pieces.some(hasDims);
   const shipDate = shipDateInput || today;
   const shipDateObj = localDateFromInput(shipDate);
 
   // The engine prices what was typed, in the unit it was typed in; the units toggle only changes how the other
   // system's fields are shown (see ./pieces). It never rewrites a value, so it never moves a price.
-  const rows = useMemo(() => toRows(pieces, type), [pieces, type]);
+  const rows = useMemo(() => toRows(pieces), [pieces]);
   const res = priceAll(site, { destId, type, rows });
   const inputSig = JSON.stringify({ destId, type, units, pieces, shipDate, from });
   const active = chosen && chosen.sig === inputSig ? chosen : null;
@@ -526,7 +521,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
       statusClass = "status warn";
       status = (
         <>
-          Shipments over {sets.maxKg} kg get a cargo rate. {weightSentence(res.weights, sets)}{" "}
+          Shipments over {cargoKg} kg get a cargo rate. {weightSentence(res.weights, sets)}{" "}
           <a href={waLink(site.company.whatsapp, cargoText(site.company.name, from, res.dest.name, res.weights, units))} target="_blank" rel="noopener">
             Message us on WhatsApp
           </a>{" "}
@@ -538,15 +533,17 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
     // The engine judges the threshold on the whole shipment (every piece, times its quantity), never per piece:
     // 2 × 13 kg is a 26 kg shipment and gets the cargo message under a 25 kg threshold. The line says so, or a
     // visitor who reads "per piece" next to the Quantity field types two boxes that each fit and is refused.
-    else status = sets.maxKg > 0 ? `Up to ${sets.maxKg} kg per shipment, all pieces together. Heavier is priced on WhatsApp.` : "";
+    else status = cargoKg > 0 ? `Up to ${cargoKg} kg per shipment, all pieces together. Heavier is priced on WhatsApp.` : "";
   } else {
-    const bits = [weightSentence(res.weights, sets)];
+    // Once a service is chosen, the sentence names the weight that service charged (a grid gap charges the next priced kg).
+    const chosenPrice = active ? res.prices[active.serviceId] : null;
+    const bits = [weightSentence(res.weights, sets, chosenPrice ? chargedG(chosenPrice, res.weights) : res.weights.billableG)];
     if (site.services.some((sv) => res.prices[sv.id]?.docRate)) bits.push(`Document rate applied (up to ${sets.docMaxKg} kg).`);
     if (sets.showEta && mounted) {
       const first = site.services.map((sv) => res.prices[sv.id]).find((p) => p?.days);
-      const est = first ? estimateDelivery(first.days, sets, shipDateObj, new Date()) : null;
+      const now = businessNow();
+      const est = first ? estimateDelivery(first.days, sets, shipDateObj, now) : null;
       if (est?.moved) {
-        const now = new Date();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
         const afterCutoff = sets.cutoffHour != null && now.getHours() >= sets.cutoffHour && shipDateObj != null && shipDateObj.getTime() <= startOfToday;
         bits.push(`${afterCutoff ? `Booked after the ${fmtHour(sets.cutoffHour)} cutoff, so pickup is ` : "Pickup is "}${fmtDay(est.pickup)}.`);
@@ -565,7 +562,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
   if (res.ok && active && res.prices[active.serviceId]) {
     price = res.prices[active.serviceId]!;
     const sv = site.services.find((s) => s.id === active.serviceId)!;
-    est = sets.showEta && price.days ? estimateDelivery(price.days, sets, shipDateObj, new Date()) : null;
+    est = sets.showEta && price.days ? estimateDelivery(price.days, sets, shipDateObj, businessNow()) : null;
     quote = {
       id: active.quoteId,
       from,
@@ -579,7 +576,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
       pickup: est ? fmtDay(est.pickup) : shipDateObj ? fmtDay(shipDateObj) : "",
       pieces: res.weights.pieces,
       piecesText: piecesText(res.weights, units),
-      billableG: res.weights.billableG,
+      billableG: chargedG(price, res.weights),
       chargeG: res.weights.chargeG,
       total: price.total,
       docRate: price.docRate,
@@ -600,9 +597,12 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
       );
     }
     if (isGrid(sets)) how.push(`Chargeable weight ${gToKg(res.weights.chargeG)} kg, billed as ${gToKg(res.weights.billableG)} kg (rounded up to the next whole kilogram)`);
-    else how.push(`Chargeable weight ${gToKg(res.weights.chargeG)} kg, billed as ${gToKg(res.weights.billableG)} kg (${sets.stepKg} kg steps, minimum ${sets.firstKg} kg)`);
+    else how.push(`Chargeable weight ${gToKg(res.weights.chargeG)} kg, billed as ${gToKg(res.weights.billableG)} kg (first ${sets.firstKg} kg, then ${sets.stepKg} kg steps)`);
     if (price.docRate) how.push(`Document rate for up to ${sets.docMaxKg} kg: ${fmtMoney(price.base, cur)}`);
-    else if (isGrid(sets)) how.push(`${quote.service} price for ${price.gridKg ?? gToKg(res.weights.billableG)} kg: ${fmtMoney(price.base, cur)}`);
+    else if (isGrid(sets))
+      how.push(
+        `${quote.service} price for ${price.gridKg ?? gToKg(res.weights.billableG)} kg${price.gridKg != null && price.gridKg * 1000 > res.weights.billableG ? ` (no price for ${gToKg(res.weights.billableG)} kg, so the next weight up)` : ""}: ${fmtMoney(price.base, cur)}`,
+      );
     else
       how.push(
         `First ${sets.firstKg} kg ${fmtMoney(price.first ?? 0, cur)}${price.steps ? ` + ${price.steps} × ${sets.stepKg} kg at ${fmtMoney(price.addl ?? 0, cur)}` : ""} = ${fmtMoney(price.base, cur)}`,
@@ -682,7 +682,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
         </div>
         <p className="hint">
           {type === "doc"
-            ? `Paperwork only: contracts, certificates, passports, letters. Up to ${sets.docMaxKg} kg gets the document rate.`
+            ? `Paperwork only: contracts, certificates, passports, letters. ${hasDocRate(site) ? `Up to ${sets.docMaxKg} kg gets the document rate.` : "Charged like a package."}`
             : "Boxes, gifts, clothes, samples."}
         </p>
         <div className="units">
@@ -694,7 +694,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
             lb · in
           </button>
         </div>
-        <div className={`pieces${type === "doc" ? " docs" : ""}`}>
+        <div className={`pieces${docsNoSize ? " docs" : ""}`}>
           {pieces.map((pc, i) => (
             <div className="piece" key={pc.key}>
               <div className="ptitle" hidden={pieces.length === 1}>
@@ -756,7 +756,7 @@ function DetailedQuote({ site, cities, destId, setDestId, initialKg, rememberKg,
         <div className="svcs">
           {site.services.map((sv) => {
             const sp = res.ok ? res.prices[sv.id] : null;
-            const e = sp && sp.days && sets.showEta && mounted ? estimateDelivery(sp.days, sets, shipDateObj, new Date()) : null;
+            const e = sp && sp.days && sets.showEta && mounted ? estimateDelivery(sp.days, sets, shipDateObj, businessNow()) : null;
             const isChosen = active?.serviceId === sv.id;
             return (
               <button
