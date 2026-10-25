@@ -79,7 +79,7 @@ final class JsonLdTest extends TestCase
         $this->assertSame('PKR', $business['currenciesAccepted']);
         $this->assertStringContains('PKR', (string) $business['priceRange']);
         $this->assertSame('https://speedat.com.pk/assets/img/og-logo.png', $business['logo']['url']);
-        $this->assertSame('https://speedat.com.pk/assets/img/og-default.png', $business['image']);
+        $this->assertSame('https://speedat.com.pk/' . ShareCard::CARD_PNG, $business['image']);
     }
 
     public function testTheAddressIsSplitOutOfTheOwnersOneLineAddress(): void

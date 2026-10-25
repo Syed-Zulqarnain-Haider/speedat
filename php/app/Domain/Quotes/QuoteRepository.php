@@ -11,11 +11,19 @@ use Speedat\Core\Db;
  * Storing and reading the quote log. Port of the database half of
  * src/app/api/quotes/route.ts.
  *
- * UPSERT BY QUOTE ID. The browser fires the log with `keepalive` when Book is
- * tapped and never waits for the answer, so the same id can arrive twice: once
- * when the price was shown and again when the customer acted on it. The second
- * arrival must update the first row, not create a second one, or the same quote
- * would appear twice in the log with different booked flags.
+ * UPSERT BY QUOTE ID. The browser fires the log with `keepalive` and never
+ * waits for the answer, so the same id can arrive twice: once when the price
+ * has stayed on screen for a moment (booked = false) and again when the
+ * customer taps Book (booked = true). The second arrival must update the first
+ * row, not create a second one, or the same quote would appear twice in the
+ * log with different booked flags.
+ *
+ * BOOKED ONLY EVER GOES UP. Two keepalive requests are not ordered on the
+ * wire: a "shown" log that left a slow phone just before the Book tap can land
+ * after it. Rewriting `booked` with whatever arrived last would quietly turn a
+ * booking back into a mere view, so the update keeps the greater of the two -
+ * a quote once booked stays booked (audit B6, 2026-10-25). Everything else is
+ * still rewritten, for the reason below.
  *
  * ONE DELIBERATE DIFFERENCE FROM THE TYPESCRIPT. Drizzle's
  * `onConflictDoUpdate` there rewrote `booked`, `total` and `detail` but left
@@ -115,7 +123,7 @@ final class QuoteRepository
                       billable_g = :billable_g_u,
                       total      = :total_u,
                       detail     = :detail_u,
-                      booked     = :booked_u',
+                      booked     = GREATEST(booked, :booked_u)',
                 [
                     ':id'           => $id,
                     ':created_at'   => Clock::sql(),

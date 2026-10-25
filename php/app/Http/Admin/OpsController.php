@@ -69,11 +69,13 @@ final class OpsController
     /**
      * GET /api/cron - the scheduled job, for a plan that can only fetch a URL.
      *
-     * It does exactly what the hourly CLI job does (`Domain\Ops\Cron::run()`:
-     * the stale-rates and long-hold checks, the day's numbers, and the
-     * housekeeping), so a host with no shell still gets its maintenance. Every
-     * job inside it is wrapped: one that fails is recorded and the rest still
-     * run.
+     * It runs the same `Domain\Ops\Cron::run()` that `bin/cron.php` runs - the
+     * stale-rates and long-hold checks, the day's numbers, and the
+     * housekeeping, log pruning included - so a host with no shell still gets
+     * all of its maintenance. (Until 2026-10-25 this sentence said "exactly what
+     * the hourly CLI job does" while the CLI job ran a shorter list of its own;
+     * both doors now go through the one method.) Every job inside it is
+     * wrapped: one that fails is recorded and the rest still run.
      */
     public function cron(App $app): Response
     {

@@ -147,7 +147,17 @@ final class App
         // to read the CSP now gets the same answer a current one gets.
         $response->header('X-Frame-Options', 'DENY');
         $response->header('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $response->header('Cross-Origin-Opener-Policy', 'same-origin');
+        // same-origin-allow-popups, NOT same-origin. Google sign-in is
+        // Firebase's signInWithPopup (public/assets/js/firebase-signin.js),
+        // and under plain same-origin the cross-origin auth popup lands in a
+        // separate browsing context group: the opener reads popup.closed as
+        // true while the user is still in Google's window, Firebase rejects
+        // with popup-closed-by-user a few seconds later, and every retry fails
+        // the same way. The Next.js build sent allow-popups for exactly this
+        // reason. What we keep is the half that matters - a cross-origin page
+        // that opens THIS site still gets no handle on it. Same value in both
+        // .htaccess copies, because there they win (see below).
+        $response->header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
         // ONE value, spelled identically in public/.htaccess and
         // deploy/htaccess/public_html.htaccess. On Hostinger the .htaccess
         // `Header always set` runs after PHP and WINS - measured 2026-09-30,

@@ -109,10 +109,45 @@ final class LeadCard
         return Wa::href($this->phone);
     }
 
-    /** What the list filter matches on: everything the office would type to find this lead. */
+    /**
+     * What the list filter matches on: everything the office would type to find this lead.
+     *
+     * THE NUMBER IS IN IT THREE WAYS (fixed 2026-10-25). A lead stored as
+     * "+92 300 1234567" was not found by "03001234567", which is how a caller
+     * reads it out and how the office types it - the filter compares the key
+     * as written, and neither the spaces nor the 92 are in what was typed. So
+     * the key also carries the number as wa.me dials it (923001234567) and in
+     * the local 0-form (03001234567). admin.js filters on this same attribute,
+     * so the browser side matches too without a line of script changing.
+     */
     public function searchKey(): string
     {
-        return trim($this->name . ' ' . $this->phone . ' ' . $this->email . ' ' . $this->destination . ' ' . $this->quoteId);
+        return trim(implode(' ', array_filter([
+            $this->name,
+            $this->phone,
+            ...$this->phoneForms(),
+            $this->email,
+            $this->destination,
+            $this->quoteId,
+        ], static fn (string $part): bool => $part !== '')));
+    }
+
+    /**
+     * The number as bare digits, international and local: ["923001234567",
+     * "03001234567"]. A number outside Pakistan has no 0-form, and a number
+     * too short to dial has neither.
+     *
+     * @return list<string>
+     */
+    public function phoneForms(): array
+    {
+        $digits = Wa::digits($this->phone);
+
+        if ($digits === '') {
+            return [];
+        }
+
+        return str_starts_with($digits, '92') ? [$digits, '0' . substr($digits, 2)] : [$digits];
     }
 
     /** @return array<string,string> value => label, for the status select */

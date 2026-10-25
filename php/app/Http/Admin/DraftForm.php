@@ -10,6 +10,7 @@ use Speedat\Domain\SiteDoc\Migrate;
 use Speedat\Domain\SiteDoc\Schema;
 use Speedat\Domain\SiteDoc\SiteData;
 use Speedat\View\Admin\ContentFields;
+use Speedat\View\Admin\Csv;
 use Speedat\View\Admin\Field;
 use Speedat\View\Admin\SettingsFields;
 use Speedat\View\Admin\Site;
@@ -99,6 +100,9 @@ final class DraftForm
      *                                       `revision()`
      * @param int|null            $base      the published version the editor was OPENED at, or null
      *                                       when the form does not carry it - see `base()`
+     * @param int                 $unnamed   rows whose name box arrived empty; the stored name was kept.
+     *                                       NOT part of `kept`, which the screen reads as "a box that did
+     *                                       not hold a number" - see `destination()`
      */
     private function __construct(
         public readonly array $document,
@@ -107,6 +111,7 @@ final class DraftForm
         public readonly bool $truncated = false,
         public readonly ?string $revision = null,
         public readonly ?int $base = null,
+        public readonly int $unnamed = 0,
     ) {
     }
 
@@ -123,13 +128,15 @@ final class DraftForm
         $promo    = is_array($post['promo'] ?? null) ? $post['promo'] : null;
         $reviews  = is_array($post['reviews'] ?? null) ? $post['reviews'] : null;
 
-        $kept = 0;
+        $kept    = 0;
+        $unnamed = 0;
 
         if ($dest !== null) {
             $document['destinations'] = self::destinations(
                 is_array($document['destinations'] ?? null) ? $document['destinations'] : [],
                 $dest,
                 $kept,
+                $unnamed,
             );
         }
 
@@ -177,6 +184,7 @@ final class DraftForm
             truncated: self::wasTruncated($request),
             revision: self::revision($request),
             base: self::base($request),
+            unnamed: $unnamed,
         );
     }
 
@@ -200,8 +208,12 @@ final class DraftForm
      * form whose hidden field arrived empty must get the second. `$request->post()`
      * cannot tell them apart, because it answers "" for both, so the raw array
      * is asked instead.
+     *
+     * Public because Restore posts the same hidden field from its own small
+     * form and has to read it by exactly these rules - a second copy of them
+     * is the copy that drifts.
      */
-    private static function revision(Request $request): ?string
+    public static function revision(Request $request): ?string
     {
         if (!array_key_exists('revision', $request->post)) {
             return null;
@@ -374,7 +386,7 @@ final class DraftForm
      * @param  array<mixed,mixed>  $posted  `dest[<id>][...]`
      * @return list<array<string,mixed>>
      */
-    private static function destinations(array $current, array $posted, int &$kept): array
+    private static function destinations(array $current, array $posted, int &$kept, int &$unnamed): array
     {
         $rows = [];
 
@@ -387,7 +399,7 @@ final class DraftForm
             $entry = $id !== '' && is_array($posted[$id] ?? null) ? $posted[$id] : null;
 
             $rows[] = [
-                'row'      => $entry === null ? $row : self::destination($row, $entry, $kept),
+                'row'      => $entry === null ? $row : self::destination($row, $entry, $kept, $unnamed),
                 'position' => $entry === null || !isset($entry['position']) || !is_scalar($entry['position'])
                     ? $index
                     : (int) $entry['position'],
@@ -416,7 +428,7 @@ final class DraftForm
      * @param  array<mixed,mixed>  $entry
      * @return array<string,mixed>
      */
-    private static function destination(array $row, array $entry, int &$kept): array
+    private static function destination(array $row, array $entry, int &$kept, int &$unnamed): array
     {
         $name = isset($entry['name']) && is_scalar($entry['name'])
             ? Str::limit(Str::squish((string) $entry['name']), self::NAME_MAX)
@@ -425,7 +437,13 @@ final class DraftForm
         if ($name === '') {
             // A country with no name renders as a blank row on the website and
             // cannot be searched for. The stored name stays.
-            $kept++;
+            //
+            // COUNTED ON ITS OWN, NOT IN `kept`. It used to be `$kept++`, and
+            // `kept` is read out as "N boxes did not hold a number" - so the
+            // owner who added a country and keyed its prices before naming it
+            // was told on every save that a price had not saved, although all
+            // of them had, and re-keyed correct numbers (2026-10-25).
+            $unnamed++;
         } else {
             $row['name'] = $name;
         }
@@ -485,7 +503,9 @@ final class DraftForm
         }
 
         if (array_key_exists('days', $posted) && is_scalar($posted['days'])) {
-            $days = Str::limit(Str::squish((string) $posted['days']), self::DAYS_MAX);
+            // "7-10" is stored as "7" en dash "10": see `Csv::days()` - the
+            // hyphen is what turns a transit time into a date in Excel.
+            $days = Str::limit(Csv::days((string) $posted['days']), self::DAYS_MAX);
 
             if ($days === '') {
                 unset($rate['days']);

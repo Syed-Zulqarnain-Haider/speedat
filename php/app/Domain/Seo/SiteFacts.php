@@ -143,6 +143,29 @@ final class SiteFacts
     }
 
     /**
+     * "Express" / "Express and Normal" / "Express, Normal and Express Saver":
+     * every name, commas and one final "and".
+     *
+     * Not `countryList()`: that one folds a long list into "and N more
+     * countries", which is right for a headline and wrong for service names -
+     * the description has to name each service the board prices. It exists
+     * because the live card gained a third service and the description went
+     * out as "Express and Normal and Express Saver" (found 2026-10-25).
+     *
+     * @param list<string> $names
+     */
+    public static function plainList(array $names): string
+    {
+        $n = count($names);
+
+        if ($n <= 1) {
+            return $names[0] ?? '';
+        }
+
+        return implode(', ', array_slice($names, 0, -1)) . ' and ' . $names[$n - 1];
+    }
+
+    /**
      * The headline sentence: what the owner typed, or the generated
      * "Lahore to Australia, Canada, France and Germany." that `heroTitleAuto()`
      * in src/lib/site/copy.ts generates and the home page prints as its h1.
@@ -190,7 +213,7 @@ final class SiteFacts
         // customer searches; `originPlace()` is the first pickup city (Lahore),
         // falling back to the country only if no city is set.
         $where = trim($this->originPlace());
-        $lead  = $names !== [] ? implode(' and ', $names) . ' courier prices' : 'Courier prices';
+        $lead  = $names !== [] ? self::plainList($names) . ' courier prices' : 'Courier prices';
         $from  = $where !== '' ? ' from ' . $where : '';
 
         // The local pickup line carries the neighbourhood names a search is

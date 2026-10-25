@@ -181,7 +181,14 @@ final class EditorPage
             livePublishedBy: $publishedBy,
             liveAgeDays: self::ageDays($live),
             filter: $filter,
-            csv: Csv::render($draftSite),
+            // THE COPY BUTTON COPIES WHAT THE DOWNLOAD GIVES: the live
+            // version, under the same "# Speedat published rates - version N"
+            // row. It used to copy the DRAFT with no first line, so an owner
+            // who raised a price without publishing could paste it to a
+            // carrier as the rate, beside a download button that said
+            // otherwise. The draft is still exportable, at `?draft=1`, where
+            // it says so in the file. No BOM here - see `Csv::BOM`.
+            csv: Csv::document(Csv::liveComment($live->version, $live->publishedAt, Clock::utcNow()), $liveSite),
             review: $withReview ? self::review($app, $draft, $live, $diff, $hold->on) : null,
             publishedNotice: $noticeText,
             publishedNoticeKind: $noticeKind,
@@ -192,7 +199,7 @@ final class EditorPage
             // cannot describe the same row in two different ways.
             draftEditedBy: $draft->editedBy(),
             draftMoved: $draftMoved,
-            rollback: self::rollbackAsk($app, $hold->on),
+            rollback: self::rollbackAsk($app, $hold->on, $live->version, $diff->count),
         );
     }
 
@@ -216,8 +223,15 @@ final class EditorPage
      * live document's "rates are live" flag and remembered layouts - and
      * `Validate::errors()` reads neither of those two fields, so validating
      * the stored version here cannot disagree with it.
+     *
+     * TWO MORE FACTS GO ON THE CARD. `$liveVersion` is the version the
+     * question is being asked about undoing; the confirm form hands it back
+     * as `expectedLive`, so a version a colleague publishes while the owner
+     * is reading is not silently undone too. `$draftChanges` is the count of
+     * unpublished edits a roll-back will replace, so the question no longer
+     * promises "nothing is lost" over the top of them.
      */
-    private static function rollbackAsk(App $app, bool $holdOn): ?RollbackAsk
+    private static function rollbackAsk(App $app, bool $holdOn, int $liveVersion = 0, int $draftChanges = 0): ?RollbackAsk
     {
         $version = Notice::rollbackAsked($app);
 
@@ -229,10 +243,15 @@ final class EditorPage
 
         return new RollbackAsk(
             version: $version,
-            question: Notice::rollbackQuestion($app),
+            question: Notice::rollbackQuestion($app, $draftChanges),
             problems: $old === null ? [] : Validate::errors($old->data),
             holdOn: $holdOn,
             unknown: $old === null,
+            liveVersion: $liveVersion,
+            draftChanges: $draftChanges,
+            // Only true when the refusal is the one that redrew this card;
+            // the card says it in its own words, beside the button.
+            moved: $app->request->query('err', '', 24) === 'rollmoved',
         );
     }
 
@@ -338,6 +357,14 @@ final class EditorPage
 
         if ($kept !== '') {
             return ['warn', $kept];
+        }
+
+        // A country saved with no name is its own sentence, not one of the
+        // "boxes that did not hold a number" above - see `DraftForm::destination()`.
+        $noname = Notice::noname($app);
+
+        if ($noname !== '') {
+            return ['warn', $noname];
         }
 
         // The hold is handed in because a roll-back never lifts it, and the

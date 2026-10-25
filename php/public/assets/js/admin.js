@@ -123,6 +123,22 @@
   var savedAt = "";
   var conflicted = false;
   var resubmitting = false;
+  // THE PAGE'S FORM TOKEN IS DEAD. Set when a save came back signed out or
+  // with the token refused (403); the next save fetches a fresh one first -
+  // see refreshToken(). Without it "press Retry save" could never work: the
+  // token is signed with the session's own secret, so signing in again in
+  // another tab mints a new secret and the token already in this page is
+  // refused on every press, until a reload threw the typed prices away.
+  var tokenStale = false;
+  // THIS PAGE IS LEAVING BECAUSE IT WAS ASKED TO - a submit went through. The
+  // beforeunload guard warns about failed saves on tab close and link
+  // clicks; on Discard, Review and publish, Undo or Fill it put a second
+  // "Leave site?" behind a choice the owner had already made. See
+  // initSaving().
+  var leavingBySubmit = false;
+  // The words on the button whose submit is waiting for a save, so a failed
+  // save can say WHICH action it stopped ("Review and publish", "Discard").
+  var heldAction = "";
   var stateEl = null;
   var countEl = null;
   // The publish bar's two buttons and the two facts that decide whether they
@@ -154,6 +170,10 @@
 
     qsa("form[data-autosave]", root).forEach(function (form) {
       if (!savedAt) savedAt = form.getAttribute("data-saved-at") || "";
+        // `failed` is false, or WHY the last save failed: "refused" (the server
+      // read it and said no - toolong, toobig, badshape), "signedout" (the
+      // session or its CSRF token has gone), "busy" (429) or "network". The
+      // reason decides what a submit does next - see onSubmit().
       sheets.push({ form: form, dirty: false, saving: false, failed: false });
     });
 
@@ -188,12 +208,52 @@
     // anything is unsaved it is saved first and the submit is made again.
     document.addEventListener("submit", onSubmit, true);
 
+    // failing() TOO, not only pending(). send() clears `dirty` as the request
+    // leaves, so a save that then failed - an expired session, a dropped
+    // connection - left nothing "pending" and the tab closed without a word,
+    // taking typed prices with it. The edits are still in the boxes; leaving
+    // is the moment they are actually lost.
+    //
+    // EXCEPT a submit this page let through. A sheet the server refused is
+    // deliberately not retried by onSubmit(), so Discard - the way out of
+    // that state - went through and was then stopped by "Leave site?", after
+    // its own data-confirm had already asked. Bubble phase on window, so it
+    // sees whether any handler (data-confirm's first press, the filter's
+    // Enter) cancelled the submit; a cancelled one is not leaving. pending()
+    // still warns: onSubmit() never lets a submit past an unsaved edit, so
+    // pending here means something new arrived after it.
+    window.addEventListener("submit", function (e) {
+      if (e.defaultPrevented) return;
+      var form = e.target;
+      var btn = e.submitter || null;
+      var target = (btn && btn.getAttribute("formtarget")) || (form && form.getAttribute && form.getAttribute("target")) || "";
+      if (target && target !== "_self") return; // a new tab or a download frame: this page stays
+      markLeaving();
+    });
     window.addEventListener("beforeunload", function (e) {
-      if (conflicted || pending()) e.preventDefault();
+      var deliberate = leavingBySubmit;
+      leavingBySubmit = false;
+      if (conflicted || pending() || (failing() && !deliberate)) e.preventDefault();
     });
 
     paint();
     window.Speedat.adminSave = flushAll; // so Publish can flush first
+  }
+
+  /**
+   * A submit went through and the page is about to go. beforeunload fires as
+   * that navigation starts, well inside a second; the flag is dropped after
+   * one so a submit that never navigated (a 204, a download) does not leave
+   * the tab-close warning switched off for the rest of the session.
+   */
+  var leavingTimer = 0;
+  function markLeaving() {
+    leavingBySubmit = true;
+    if (leavingTimer) clearTimeout(leavingTimer);
+    leavingTimer = setTimeout(function () {
+      leavingBySubmit = false;
+      leavingTimer = 0;
+    }, 1000);
   }
 
   function sheetOf(form) {
@@ -264,7 +324,77 @@
     saveTimer = 0;
     if (inFlight || conflicted) return;
     var next = firstDirty();
-    if (next) send(next);
+    if (!next) return;
+    if (tokenStale) refreshToken(next);
+    else send(next);
+  }
+
+  /**
+   * A FRESH FORM TOKEN BEFORE A SAVE THAT WAS SIGNED OUT, then the save.
+   *
+   * Core\Csrf signs every token with the session row's own secret
+   * (Session::secret()). Signing in again in another tab starts a NEW row
+   * with a new secret, so the token printed into this page is refused for
+   * good and "Sign in, then press Retry save" failed on every press - the
+   * only way out was a reload, which loses exactly the typed prices the
+   * message promised were safe. The page is fetched again (a GET, which
+   * changes nothing) and its token is written into every form here, the
+   * way adoptRevision() does for the fingerprint, so Publish and Discard
+   * carry it too. If that GET lands on the sign-in page he is still signed
+   * out and the save stays failed, saying so.
+   */
+  function refreshToken(sheet) {
+    inFlight = true;
+    sheet.saving = true;
+    paint();
+
+    // dirty is cleared before failSave() so pending() lets go; the boxes
+    // still hold the edits and Retry save queues them again.
+    function stillOut(reason, message) {
+      sheet.dirty = false;
+      failSave(sheet, reason, message);
+    }
+
+    fetch(location.pathname + location.search, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "text/html" },
+    })
+      .then(function (r) {
+        var path = "";
+        try {
+          path = new URL(r.url, location.href).pathname;
+        } catch (err) {
+          path = "";
+        }
+        if ((r.redirected && /^\/admin\/login/.test(path)) || r.status === 401 || r.status === 403) return null;
+        if (!r.ok) throw new Error("status " + r.status);
+        return r.text();
+      })
+      .then(function (html) {
+        var found = null;
+        if (typeof html === "string") {
+          var doc = new DOMParser().parseFromString(html, "text/html");
+          found = doc.querySelector('input[name="_token"]');
+        }
+        if (!found || !found.value) {
+          stillOut(
+            "signedout",
+            "Still signed out, so this was not saved. Sign in in another tab, then press Retry save - your edits are still in the boxes.",
+          );
+          return;
+        }
+        qsa('input[name="_token"]').forEach(function (el) {
+          el.value = found.value;
+        });
+        tokenStale = false;
+        inFlight = false;
+        sheet.saving = false;
+        send(sheet);
+      })
+      .catch(function () {
+        stillOut("signedout", "Save failed - check the connection, then press Retry save.");
+      });
   }
 
   /** Save every dirty form, then call back. Used before a submit navigates away. */
@@ -282,6 +412,116 @@
     }
   }
   flushAll.then = null;
+
+  /**
+   * The body of one autosave: the form's fields, with every number box the
+   * browser could not read posted as "?".
+   *
+   * A type=number box holding "4500-", or "4,500" in Firefox and Safari,
+   * reports its value as "" (validity.badInput) - so FormData posted a BLANK,
+   * DraftForm read blank as "not offered" and deleted the stored 4,500, and
+   * the page said "Draft saved". In Settings the same typo saved 0% tax, or a
+   * cargo threshold of 0, which means no limit. "?" is not a number, so the
+   * server keeps what was stored and counts it in `kept`, and the existing
+   * "N boxes did not save" warning appears. The post still completes, which
+   * is what lets a held submit go ahead with everything else saved.
+   */
+  function bodyOf(form) {
+    var params = new URLSearchParams(new FormData(form));
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (el.type === "number" && el.name && el.validity && el.validity.badInput && !el.disabled) params.set(el.name, "?");
+    });
+    return params;
+  }
+
+  /**
+   * WHY A SAVE CAME BACK WITHOUT A SAVE IN IT, from the response itself.
+   *
+   * The autosave used to call r.json() on whatever arrived. Past the 8 h idle
+   * limit the POST is redirected to the sign-in page, and fetch follows the
+   * redirect and hands back HTML; a stale CSRF token or a 429 is an HTML error
+   * page too. r.json() threw on all of them and the toast said "check the
+   * connection" to a man whose connection was fine - and every retry failed
+   * the same way. The request now asks for JSON (so ErrorPage answers its
+   * envelope), and anything that is not this route's own answer is named here.
+   */
+  function refusalOf(r) {
+    var type = (r.headers && r.headers.get("content-type")) || "";
+    var path = "";
+    try {
+      path = new URL(r.url, location.href).pathname;
+    } catch (err) {
+      path = "";
+    }
+    // Both are "signedout" because both are cured the same way - Retry save
+    // fetches a fresh token first (refreshToken()) - but they are not worded
+    // the same. A 403 that is NOT a redirect to sign-in is
+    // HttpError::invalidToken inside a live session: the token passed its
+    // 12 h MAX_AGE on a page left open overnight. Telling him he was signed
+    // out, when he was not, sent him to sign in for nothing.
+    if ((r.redirected && /^\/admin\/login/.test(path)) || r.status === 401 || r.status === 419) {
+      return {
+        reason: "signedout",
+        message: "You were signed out, so this was not saved. Sign in in another tab, then press Retry save - your edits are still in the boxes.",
+      };
+    }
+    if (r.status === 403) {
+      return {
+        reason: "signedout",
+        message: "This page's form expired, so this was not saved. Press Retry save - your edits are still in the boxes.",
+      };
+    }
+    if (r.status === 429) {
+      var wait = Number(r.headers.get("retry-after")) || 0;
+      return {
+        reason: "busy",
+        message: wait
+          ? "Too many saves at once - not saved. Press Retry save in " + wait + " s; your edits are still in the boxes."
+          : "Too many saves at once - not saved. Press Retry save in a moment; your edits are still in the boxes.",
+      };
+    }
+    if (type.indexOf("application/json") === -1) {
+      return { reason: "network", message: "Save failed - check the connection, then press Retry save." };
+    }
+    return null;
+  }
+
+  /**
+   * A SAVE DID NOT LAND. The one place every failure ends, so all of them do
+   * the same three things - and before this, they did not.
+   *
+   * 1. A SUBMIT HELD FOR THIS SAVE IS DROPPED, not run. The catch path used to
+   *    call after(), which ran the held "Review and publish" because pending()
+   *    ignores failed sheets: the review was built without the price just
+   *    typed. The refusal path left the callback armed instead, so a Discard
+   *    the owner had decided against fired minutes later on the next good
+   *    save, through requestSubmit, which skips the click-based data-confirm.
+   *    The toast says the action was not done, so he presses it again.
+   * 2. THE QUEUE KEEPS DRAINING when the refusal was about this form alone;
+   *    the refusal path used to return without flushing the other countries.
+   *    Signed out or rate limited, the next form would fail the same way, so
+   *    those wait for Retry save instead.
+   * 3. The sheet is marked failed with its reason, for paint() and onSubmit().
+   */
+  function failSave(sheet, reason, message) {
+    inFlight = false;
+    sheet.saving = false;
+    sheet.failed = reason;
+    if (reason === "signedout") tokenStale = true;
+    var held = flushAll.then;
+    var action = heldAction;
+    flushAll.then = null;
+    heldAction = "";
+    paint();
+    toast(
+      held
+        ? "Not saved, so " + (action ? "\u201c" + action + "\u201d" : "that") + " was not done - press it again after the save succeeds. " + message
+        : message,
+    );
+    if (reason === "refused" || reason === "network") {
+      if (firstDirty()) flush();
+    }
+  }
 
   function send(sheet) {
     var form = sheet.form;
@@ -301,30 +541,48 @@
       // guard exists to catch, on the path the owner actually uses. The fields
       // and their names are identical either way, so the server reads one
       // shape from both the autosave and the plain submit.
-      body: new URLSearchParams(new FormData(form)),
+      body: bodyOf(form),
       credentials: "same-origin",
-      headers: { "X-Requested-With": "fetch" },
+      headers: { "X-Requested-With": "fetch", Accept: "application/json" },
     })
       .then(function (r) {
-        return r.json();
+        var refused = refusalOf(r);
+        if (refused) return { failure: refused };
+        return r.json().then(
+          function (res) {
+            return { res: res, status: r.status };
+          },
+          function () {
+            return { failure: { reason: "network", message: "Save failed - check the connection, then press Retry save." } };
+          },
+        );
       })
-      .then(function (res) {
-        inFlight = false;
-        sheet.saving = false;
+      .then(function (got) {
+        if (got.failure) {
+          failSave(sheet, got.failure.reason, got.failure.message);
+          return;
+        }
+        var res = got.res;
 
         if (res && res.conflict) {
+          inFlight = false;
+          sheet.saving = false;
+          flushAll.then = null; // nothing after a conflict may submit by itself
           showConflict(res.editedBy || "", res.message || "");
           return;
         }
         if (!res || !res.ok) {
           // The edits are still in the boxes and the form is left dirty-able:
           // the next keystroke tries again, and the message says what the
-          // server refused (a body past max_input_vars names the fix).
-          sheet.failed = true;
-          paint();
-          toast((res && res.message) || "Save failed");
+          // server refused (a body past max_input_vars names the fix). An
+          // ErrorPage envelope ({error:{message}}) is a refusal too.
+          var said = (res && (res.message || (res.error && res.error.message))) || "Save failed";
+          failSave(sheet, got.status >= 500 ? "network" : "refused", said);
           return;
         }
+
+        inFlight = false;
+        sheet.saving = false;
 
         savedAt = res.savedAt || savedAt;
         sheet.failed = false;
@@ -355,12 +613,7 @@
         after();
       })
       .catch(function () {
-        inFlight = false;
-        sheet.saving = false;
-        sheet.failed = true;
-        paint();
-        toast("Save failed - check the connection");
-        after();
+        failSave(sheet, "network", "Save failed - check the connection, then press Retry save.");
       });
   }
 
@@ -484,7 +737,7 @@
               ? idle
               : "Saved " + when;
 
-      btn.classList.toggle("danger", failed);
+      btn.classList.toggle("danger", !!failed);
       btn.classList.toggle("primary", !failed);
     });
   }
@@ -565,19 +818,56 @@
    * button matters, because "undo=gb" and "fill=all:gb:express" live in it.
    */
   function onSubmit(e) {
-    if (resubmitting || conflicted || !pending()) return;
+    if (resubmitting || conflicted) return;
+
+    // A FAILED SAVE IS RETRIED BEFORE THE PAGE IS LEFT, not stepped over. A
+    // country whose save failed is not pending (send() cleared `dirty`), so
+    // Review and publish used to go straight through and build the review
+    // without it. Its edits are queued again here; if the retry fails too,
+    // failSave() drops this submit and says so. A save the SERVER refused
+    // (too long, too big, a bad shape) is not retried: it would be refused
+    // again, and Discard - the way out of exactly that state - would never go
+    // through. Nor does beforeunload ask about them once this lets a submit
+    // go: the red Save button has said so, and the owner pressed Discard (or
+    // Review and publish) anyway. Closing the tab still asks.
+    var retry = [];
+    sheets.forEach(function (sheet) {
+      if (sheet.failed && sheet.failed !== "refused") retry.push(sheet);
+    });
+    if (!pending() && !retry.length) return;
 
     var form = e.target;
     if (!form || !form.tagName || form.tagName !== "FORM") return;
 
     var btn = e.submitter || null;
     e.preventDefault();
+    heldAction = btn ? (btn.getAttribute("data-confirm-idle") || btn.textContent || "").trim() : "";
+
+    retry.forEach(function (sheet) {
+      sheet.failed = false;
+      sheet.dirty = true;
+    });
+    paint();
 
     flushAll(function () {
+      // RESET IN finally, AND THAT IS THE POINT. The submit event fires
+      // synchronously inside requestSubmit, so the flag is only needed for
+      // that one call. Left set, a resubmit that another handler cancelled
+      // (Enter in Find a destination, which initFilter stops) kept it true
+      // for the rest of the session, and every later submit skipped the
+      // save-first step.
+      heldAction = "";
       resubmitting = true;
-      if (form.requestSubmit) form.requestSubmit(btn && btn.form === form ? btn : undefined);
-      else if (btn) btn.click();
-      else form.submit();
+      try {
+        if (form.requestSubmit) form.requestSubmit(btn && btn.form === form ? btn : undefined);
+        else if (btn) btn.click();
+        else {
+          markLeaving(); // form.submit() fires no submit event to say so
+          form.submit();
+        }
+      } finally {
+        resubmitting = false;
+      }
     });
   }
 
@@ -753,7 +1043,8 @@
    * View\Admin\DestinationRow ran on the server, so the marks on the page are
    * the same marks with the script off:
    *   low  - priced below the kilogram underneath (the ladder runs backwards)
-   *   gap  - blank between two priced kilograms (the next heavier price is charged)
+   *   gap  - blank between two priced kilograms (not offered at that weight:
+   *          a blank box is not a price, owner 2026-09-28)
    *   edited - differs from the version the website is serving
    */
   function markLadder(scope) {
@@ -767,10 +1058,14 @@
 
     boxes.forEach(function (box) {
       var text = String(box.value).trim();
+      // "4500-" or "4,500" in a number box reads as "" (validity.badInput):
+      // it is NOT a blank, and the autosave posts it as "?" so the stored
+      // price is kept - so it is marked as a box that is not a number.
+      var unread = !!(box.validity && box.validity.badInput);
       var n = text === "" ? null : Number(text);
-      var bad = text !== "" && !isFinite(n);
+      var bad = unread || (text !== "" && !isFinite(n));
       var low = !bad && n !== null && previous !== null && n < previous;
-      state.push({ box: box, kg: Number(box.getAttribute("data-kg")), blank: text === "", bad: bad, low: low, gap: text === "" && anyBelow });
+      state.push({ box: box, kg: Number(box.getAttribute("data-kg")), blank: text === "" && !unread, bad: bad, low: low, gap: text === "" && !unread && anyBelow });
       if (n !== null && isFinite(n)) {
         previous = n;
         anyBelow = true;
@@ -842,7 +1137,13 @@
     if (bad.length) parts.push(kgList(bad) + (bad.length === 1 ? " is" : " are") + " not a number, so the stored price is kept.");
     if (low.length)
       parts.push(kgList(low) + (low.length === 1 ? " is" : " are") + " priced below the kilogram underneath, so a heavier parcel costs less.");
-    if (gap.length) parts.push(kgList(gap) + (gap.length === 1 ? " is" : " are") + " blank, and charged at the next heavier price.");
+    // The same sentence DestinationRow::ladderNote() prints. It used to say
+    // "charged at the next heavier price", which stopped being true when a
+    // blank box stopped being a price - the customer is sent to WhatsApp.
+    if (gap.length)
+      parts.push(
+        kgList(gap) + (gap.length === 1 ? " is blank, so it is" : " are blank, so they are") + " not offered (customers are sent to WhatsApp).",
+      );
     note.textContent = parts.join(" ");
     note.className = "ladder-note " + (low.length || bad.length ? "warn" : parts.length ? "info" : "ok");
     note.hidden = !parts.length;
@@ -865,7 +1166,8 @@
    *
    * It prices the ladder as it stands with the customer's own engine, so it
    * also answers the question a blank box raises - a 7 kg parcel with 7 kg
-   * blank is charged at the 8 kg box, and the line says so.
+   * blank has no price (a blank box is not a price, owner 2026-09-28), and the
+   * line says so.
    */
   function runningCheck(scope, box) {
     var out = scope.querySelector("[data-ladder-running]");
@@ -1140,6 +1442,9 @@
    * bare ↑ or ↓ is a SPINNER, and a ladder where "move down one rung" silently
    * changes a price by 1 is worse than no keyboard at all.
    */
+  /** The ladder box that last had focus - which running check a settings edit repaints. */
+  var lastLadderBox = null;
+
   function initLadderKeys(scope) {
     var boxes = boxesOf(scope);
 
@@ -1147,6 +1452,7 @@
       box.addEventListener("focus", function () {
         // What Escape restores, and what the running check describes.
         box.setAttribute("data-was", box.value);
+        lastLadderBox = box;
         runningCheck(scope, box);
       });
       box.addEventListener("blur", function () {
@@ -1301,10 +1607,15 @@
 
     // A settings change (tax, rounding, a standing charge) moves every running
     // check, so the one on screen is repainted when the owner edits them.
+    // The box is the LAST ONE THAT HAD FOCUS, not document.activeElement:
+    // while tax is being typed the active element is the tax box, which is in
+    // no ladder, so the line never moved and stood stale until a price box was
+    // focused again.
     qsa('[name^="settings["]').forEach(function (el) {
       el.addEventListener("input", function () {
-        var box = document.activeElement;
-        var scope = box && box.closest ? box.closest("[data-ladder]") : null;
+        var box = lastLadderBox;
+        if (!box || !box.isConnected) return;
+        var scope = box.closest ? box.closest("[data-ladder]") : null;
         if (scope) runningCheck(scope, box);
       });
     });

@@ -32,6 +32,14 @@ final class LoginPage
         public readonly bool $googleReady = true,
         /** A warning about the deployment itself, shown in place of the form. */
         public readonly string $configWarning = '',
+        /**
+         * False when `auth.allow_password_login` is off. The password form is
+         * then not rendered at all: on the sample config's Google-only
+         * deployment it was a form that refused every submit, and the only thing
+         * on screen whenever Google's script failed to load. Defaults true so a
+         * caller that predates the flag keeps the page it had.
+         */
+        public readonly bool $passwordsEnabled = true,
     ) {
     }
 
@@ -49,6 +57,16 @@ final class LoginPage
     public function lede(): string
     {
         return 'Sign in with the account that was added as an admin.';
+    }
+
+    /**
+     * Google is the only way in. The page then needs words of its own for the
+     * moment Google's script has not loaded - with no password form beneath it,
+     * a hidden button leaves an empty card.
+     */
+    public function googleOnly(): bool
+    {
+        return $this->googleReady && !$this->passwordsEnabled;
     }
 
     /** The form is replaced by the warning when the deployment cannot sign anyone in. */

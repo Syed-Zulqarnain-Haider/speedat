@@ -27,6 +27,7 @@ use Speedat\Core\Session;
  *  - THE CACHE DIRECTORY. Hostinger counts inodes, not just bytes
  *    (docs/hostinger-constraints.md §4): 400,000 files on Premium, and a cache
  *    that never forgets reaches that long before it reaches the disk quota.
+ *  - THE LOGS. The same quota, in bytes: thirty days are kept, the rest go.
  *  - THE ENVIRONMENT LINE. §6 of the same document says CLI PHP may be a
  *    DIFFERENT VERSION from the site's PHP and that this is undocumented, so
  *    the first cron run of each day writes the version and the loaded
@@ -53,6 +54,9 @@ final class Housekeeping
 
     /** A cache entry older than this has not been asked for in a week. */
     private const DEFAULT_CACHE_DAYS = 7;
+
+    /** Thirty days of logs: long enough to answer "what happened last month". */
+    private const DEFAULT_LOG_DAYS = 30;
 
     /**
      * Files the sweep will not delete however old they are: they are deployed
@@ -116,6 +120,39 @@ final class Housekeeping
             }
 
             if (in_array(basename($file), self::KEEP, true)) {
+                continue;
+            }
+
+            $modified = @filemtime($file);
+            if ($modified !== false && $modified < $cutoff && @unlink($file)) {
+                $removed++;
+            }
+        }
+
+        return $removed;
+    }
+
+    /**
+     * Log files older than the configured age. Returns how many went.
+     *
+     * Shared hosting has a disk quota, and a disk that fills up takes the site
+     * down long before anyone reads the logs. This used to live in bin/cron.php
+     * alone, so an install on the URL cron - the only cron a shell-less plan
+     * has - never pruned a log at all (found 2026-10-25). It is here now so both
+     * doors run it, and it measures age against the run's clock like the cache
+     * sweep does, not against time().
+     *
+     * Only `app-YYYY-MM-DD.log` files: anything else in the directory was put
+     * there by a person, and a person can delete it.
+     */
+    public function logFiles(): int
+    {
+        $days    = max(1, Config::int('ops.log_days', self::DEFAULT_LOG_DAYS));
+        $cutoff  = $this->now->getTimestamp() - $days * 86400;
+        $removed = 0;
+
+        foreach (glob(Paths::logs() . '/app-*.log') ?: [] as $file) {
+            if (is_link($file)) {
                 continue;
             }
 

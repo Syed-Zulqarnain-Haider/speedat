@@ -54,13 +54,34 @@ declare(strict_types=1);
  *     public_html/        the contents of php/public - the ONLY web-served dir
  *                         including .htaccess AND .user.ini, because a host
  *                         reads one or the other and never announces which
- *     app/                application code
- *     bin/                cron.php, migrate.php, seed.php
- *     config/             config.sample.php only. NEVER config.php.
- *     db/migrations/      the schema
- *     storage/            cache logs tmp uploads - empty, guarded, writable
- *     var/                empty, guarded
+ *     speedat_main/php/   THE APPLICATION, exactly where public/index.php
+ *                         looks for it first:
+ *       app/                application code
+ *       bin/                cron.php, migrate.php, seed.php
+ *       config/             config.sample.php only. NEVER config.php.
+ *       db/migrations/      the schema
+ *       public/             a second copy of public_html (see below)
+ *       storage/            cache logs tmp uploads - empty, guarded, writable
+ *       var/                empty, guarded
  *     INSTALL.txt         the ten-line version of docs/deploy-hostinger.md
+ *
+ * WHY speedat_main/php AND NOT app/ BESIDE public_html. The live site runs from
+ * domains/<site>/speedat_main/php - that is the first place index.php looks,
+ * and the only place it looks when that folder exists. This archive used to put
+ * app/, config/ and the rest straight beside public_html. Extracting it
+ * replaced public_html and wrote a whole second application next to it that
+ * nothing ever ran: the new index.php found speedat_main/php and kept serving
+ * the OLD app/, routes and views, new CSS and JS were served against old HTML,
+ * a cron pointed at domains/<site>/bin/cron.php booted a tree with no config,
+ * and "roll back by extracting the previous zip" never touched the running code
+ * either (audit, 2026-10-23). One layout, the one the server actually reads.
+ *
+ * WHY public/ IS SHIPPED TWICE. Paths::publicDir() is speedat_main/php/public,
+ * and three things read it rather than the served web root: the inline icon
+ * sprite, the share-card existence check, and View's fallback when
+ * DOCUMENT_ROOT is unset (cron, CLI). Leaving it out of the release leaves that
+ * copy as old as the last hand-upload. It is the same bytes as public_html and
+ * sits outside the web root, so it costs zip size and nothing else.
  *
  * Extract it AT ~/domains/<site>/, not inside public_html. That single mistake
  * is what every deny-all .htaccess in the archive exists to survive.
@@ -73,6 +94,19 @@ declare(strict_types=1);
 
 const EXIT_OK     = 0;
 const EXIT_FAILED = 1;
+
+/**
+ * Where the application sits inside the archive, and so on the host.
+ *
+ * Everything below this line - the manifest, the deny list, the guards, the
+ * required list - speaks in the application's OWN paths (`app/...`,
+ * `config/...`, `public_html/...`), because those are the paths every rule was
+ * written and tested against. Only the writer and the final check translate,
+ * through archivePath() and keyOf(), so the prefix lives in one place and a rule
+ * scoped to `app/` or `db/migrations/` cannot silently stop matching because
+ * every entry now starts with `speedat_main/`.
+ */
+const APP_PREFIX = 'speedat_main/php';
 
 $root = str_replace('\\', '/', dirname(__DIR__));
 
@@ -745,6 +779,19 @@ foreach (['storage', 'storage/cache', 'storage/logs', 'storage/tmp', 'storage/up
     }
 }
 
+// --- the application's bundled public/ ---------------------------------------
+// The same files as public_html, again, at speedat_main/php/public - the folder
+// Paths::publicDir() names (see "WHY public/ IS SHIPPED TWICE" at the top).
+// Mirrored from what public_html ACCEPTED rather than walked a second time, so
+// the two copies cannot disagree and nothing the deny list refused for the web
+// root slips in under the other name. Done after the .htaccess fallback above,
+// so the copy carries whichever web-root .htaccess actually ships.
+foreach ($files as $entry => $absolute) {
+    if (str_starts_with($entry, 'public_html/')) {
+        $files['public/' . substr($entry, strlen('public_html/'))] = $absolute;
+    }
+}
+
 // --- INSTALL.txt -------------------------------------------------------------
 $generated['INSTALL.txt'] = installText($zipName, gmdate('Y-m-d H:i:s') . ' UTC', $testsRan);
 
@@ -764,6 +811,11 @@ $required = [
     'public_html/.user.ini',
     'app/Core/Bootstrap.php',
     'app/routes.php',
+    // The two files that make the mirror above real: the copy Paths::publicDir()
+    // reads, and the sprite that is inlined from it on every page.
+    'public/index.php',
+    'public/assets/img/icons.svg',
+    'bin/cron.php',
     'config/config.sample.php',
     'config/.htaccess',
     'db/migrations/0001_init.sql',
@@ -848,13 +900,14 @@ ksort($files);       // deterministic order: two builds of the same tree match
 ksort($generated);
 sort($emptyDirs);
 
+// The ONLY place the manifest's own paths become archive paths (APP_PREFIX).
 foreach ($emptyDirs as $directory) {
-    $zip->addEmptyDir($directory);
+    $zip->addEmptyDir(archivePath($directory));
 }
 
 $uncompressed = 0;
 foreach ($files as $entry => $absolute) {
-    if (!$zip->addFile($absolute, $entry)) {
+    if (!$zip->addFile($absolute, archivePath($entry))) {
         $zip->close();
         @unlink($zipPath);
         fwrite(STDERR, "Cannot add $entry\n");
@@ -864,7 +917,7 @@ foreach ($files as $entry => $absolute) {
 }
 
 foreach ($generated as $entry => $contents) {
-    if (!$zip->addFromString($entry, $contents)) {
+    if (!$zip->addFromString(archivePath($entry), $contents)) {
         $zip->close();
         @unlink($zipPath);
         fwrite(STDERR, "Cannot add generated $entry\n");
@@ -877,7 +930,7 @@ $zip->setArchiveComment(
     "Speedat release $zipName\n"
     . 'Built ' . gmdate('Y-m-d H:i:s') . " UTC by bin/build-release.php\n"
     . ($testsRan ? "Tests: PASSED at build time.\n" : "Tests: NOT RUN (--skip-tests). UNPROVEN TREE.\n")
-    . "Extract at ~/domains/<site>/ - NOT inside public_html.\n"
+    . "Extract at ~/domains/<site>/ - NOT inside public_html. The app lands in speedat_main/php/.\n"
 );
 
 if (!$zip->close()) {
@@ -916,6 +969,21 @@ for ($index = 0; $index < $check->numFiles; $index++) {
 
     $entry = $stat['name'];
 
+    // Back to the manifest's own path, so every rule below reads the name it
+    // was written against. An entry that maps to nothing is either one of the
+    // two parent folders of the prefix (ZipArchive may or may not write those)
+    // or something outside the layout - and the second is a refusal: an `app/`
+    // beside public_html is exactly the dead tree this layout exists to stop.
+    $key = keyOf($entry);
+    if ($key === null) {
+        if (in_array($entry, ['speedat_main/', APP_PREFIX . '/'], true)) {
+            $dirCount++;
+        } else {
+            $problems[] = "$entry sits outside public_html/ and " . APP_PREFIX . '/, where nothing on the host runs it';
+        }
+        continue;
+    }
+
     if (str_ends_with($entry, '/')) {
         $dirCount++;
     } else {
@@ -939,7 +1007,7 @@ for ($index = 0; $index < $check->numFiles; $index++) {
                 }
             }
 
-            if (str_starts_with($entry, 'db/migrations/') && str_ends_with(strtolower($entry), '.sql')) {
+            if (str_starts_with($key, 'db/migrations/') && str_ends_with(strtolower($key), '.sql')) {
                 $dump = looksLikeADataDump($body);
                 if ($dump !== null) {
                     $problems[] = "$entry $dump";
@@ -949,7 +1017,9 @@ for ($index = 0; $index < $check->numFiles; $index++) {
     }
 
     // THE deny-list check: on what is really in the archive, not on the plan.
-    $reason = refusalReason($entry);
+    // The bundled public/ copy is judged as the web root it mirrors, so the
+    // web-root-only rules (no .html harness, no dev router) hold for it too.
+    $reason = refusalReason(str_starts_with($key, 'public/') ? 'public_html/' . substr($key, 7) : $key);
     if ($reason !== null) {
         $problems[] = "$entry $reason";
     }
@@ -963,12 +1033,12 @@ for ($index = 0; $index < $check->numFiles; $index++) {
     // The bytes really are the bytes of the source. Comparing CRCs rather than
     // sizes catches a truncated or half-flushed write, which is the failure a
     // "the zip looks about right" eyeball never catches.
-    if (isset($files[$entry])) {
-        if (sprintf('%08x', (int) $stat['crc']) !== hash_file('crc32b', $files[$entry])) {
+    if (isset($files[$key])) {
+        if (sprintf('%08x', (int) $stat['crc']) !== hash_file('crc32b', $files[$key])) {
             $problems[] = "$entry does not match its source file (crc)";
         }
-    } elseif (isset($generated[$entry])) {
-        if (sprintf('%08x', (int) $stat['crc']) !== hash('crc32b', $generated[$entry])) {
+    } elseif (isset($generated[$key])) {
+        if (sprintf('%08x', (int) $stat['crc']) !== hash('crc32b', $generated[$key])) {
             $problems[] = "$entry does not match what was generated for it (crc)";
         }
     }
@@ -977,23 +1047,27 @@ for ($index = 0; $index < $check->numFiles; $index++) {
 // Read two entries back out, so "the archive is readable" is demonstrated and
 // not assumed.
 foreach (['INSTALL.txt', 'config/config.sample.php'] as $entry) {
-    $contents = $check->getFromName($entry);
+    $contents = $check->getFromName(archivePath($entry));
     if ($contents === false || $contents === '') {
-        $problems[] = "$entry cannot be read back out of the archive";
+        $problems[] = archivePath($entry) . ' cannot be read back out of the archive';
     }
 }
 
 foreach ($required as $entry) {
-    if ($check->locateName($entry) === false) {
-        $problems[] = "$entry is missing from the archive";
+    if ($check->locateName(archivePath($entry)) === false) {
+        $problems[] = archivePath($entry) . ' is missing from the archive';
     }
 }
 
 // The named things that must NOT be there, spelled out so the check is legible
 // in the output even when the generic deny list would already have caught them.
-foreach (['config/config.php', '.env', 'public_html/.env', 'public_html/router.php'] as $entry) {
-    if ($check->locateName($entry) !== false) {
-        $problems[] = "$entry IS IN THE ARCHIVE";
+// Both spellings of each: where it would land in this layout, and bare at the
+// archive root, where the old layout would have put it.
+foreach (['config/config.php', '.env', 'public_html/.env', 'public_html/router.php', 'public/router.php'] as $entry) {
+    foreach (array_unique([archivePath($entry), $entry]) as $spelling) {
+        if ($check->locateName($spelling) !== false) {
+            $problems[] = "$spelling IS IN THE ARCHIVE";
+        }
     }
 }
 
@@ -1021,11 +1095,13 @@ foreach (array_merge(array_keys($files), array_keys($generated)) as $entry) {
 ksort($byTop);
 
 if ($verbose) {
+    // The archive's own names, prefix included: this listing is what somebody
+    // compares against File Manager after an extract.
     foreach (array_keys($files) as $entry) {
-        echo "  $entry\n";
+        echo '  ' . archivePath($entry) . "\n";
     }
     foreach (array_keys($generated) as $entry) {
-        echo "  $entry  (generated)\n";
+        echo '  ' . archivePath($entry) . "  (generated)\n";
     }
     echo "\n";
 }
@@ -1088,6 +1164,42 @@ function kb(int $bytes): string
     return number_format($bytes / 1024 / 1024, 2) . ' MiB';
 }
 
+/**
+ * The manifest's own path -> the path inside the archive.
+ *
+ * public_html/ and INSTALL.txt sit at the top, beside each other; everything
+ * else is the application and goes under APP_PREFIX - `public/` included, which
+ * is the bundled copy, not the web root.
+ */
+function archivePath(string $key): string
+{
+    if ($key === 'INSTALL.txt' || $key === 'public_html' || str_starts_with($key, 'public_html/')) {
+        return $key;
+    }
+
+    return APP_PREFIX . '/' . $key;
+}
+
+/**
+ * The inverse of archivePath(): an archive entry -> the manifest's own path, or
+ * null when the entry is not inside the layout at all (or is one of the
+ * prefix's own parent folders, which the caller tells apart).
+ */
+function keyOf(string $entry): ?string
+{
+    if ($entry === 'INSTALL.txt' || str_starts_with($entry, 'public_html/')) {
+        return $entry;
+    }
+
+    if (str_starts_with($entry, APP_PREFIX . '/')) {
+        $rest = substr($entry, strlen(APP_PREFIX) + 1);
+
+        return $rest === '' ? null : $rest;
+    }
+
+    return null;
+}
+
 function installText(string $zipName, string $builtAt, bool $testsRan): string
 {
     // Stated in the archive, not only in the terminal. A zip outlives the shell
@@ -1134,24 +1246,34 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
         /home/uXXXXXXXX/domains/<your-domain>/
 
     NOT inside public_html. The archive already contains a public_html folder,
-    and app/, config/, storage/ and the rest are its SIBLINGS. That is the whole
+    and the application is its SIBLING, in speedat_main/php/. That is the whole
     security design: there is no URL that reaches the configuration, because the
     configuration is not under the web root.
 
     After extracting you should see:
 
         domains/<your-domain>/
-          public_html/      <- the website
-          app/              <- code
-          bin/              <- cron.php, seed.php, harden.php
-          config/           <- config.sample.php (you will copy it)
-          db/migrations/    <- the schema
-          storage/          <- writable: cache, logs, tmp, uploads
-          var/
-          INSTALL.txt       <- this file
+          public_html/          <- the website
+          speedat_main/php/     <- THE APPLICATION. The site runs from here.
+            app/                <- code
+            bin/                <- cron.php, seed.php, harden.php
+            config/             <- config.sample.php (you will copy it)
+            db/migrations/      <- the schema
+            public/             <- a copy of public_html the code reads from
+            storage/            <- writable: cache, logs, tmp, uploads
+            var/
+          INSTALL.txt           <- this file
 
-    If instead you see public_html/app/, you extracted one level too deep.
-    Delete what you extracted and do it again; do not drag folders around.
+    Every path below that is not public_html is under speedat_main/php/.
+
+    If instead you see public_html/speedat_main/, you extracted one level too
+    deep. Delete what you extracted and do it again; do not drag folders around.
+
+    If an OLDER release left app/, bin/, config/, db/, storage/ or var/
+    directly in domains/<your-domain>/ (beside public_html, not inside
+    speedat_main/php), nothing runs them - public_html/index.php uses
+    speedat_main/php whenever it exists. Leave them until this install is
+    proven, then delete them, so nobody edits a config.php the site never reads.
 
     THE TEN STEPS
     -------------
@@ -1169,7 +1291,8 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
        Upload this zip THERE (not inside public_html), check its size matches
        what the builder printed, right-click -> Extract -> here, then delete
        the zip from the server.
-       SEE: the eight entries listed above, side by side.
+       SEE: public_html/, speedat_main/ and INSTALL.txt side by side, and
+       inside speedat_main/php/ the seven folders listed above.
 
     3. SET THE PERMISSIONS. DO THIS NOW, AND AGAIN AFTER EVERY UPGRADE.
        The zip carries no permissions - File Manager writes every extracted
@@ -1178,15 +1301,17 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
        it. This step is not a tidy-up. It is what CREATES the permissions.
        In File Manager, select the extracted folders, right-click ->
        Permissions, tick "Apply to all subfolders and files", and set:
-         storage  and  var        700
-         config                   700
-         app, bin, db, public_html   755 folders / 644 files
+         speedat_main/php/storage and speedat_main/php/var   700
+         speedat_main/php/config                              700
+         public_html, and speedat_main/php/app, bin, db, public
+                                         755 folders / 644 files
        SEE: the modes in the File Manager listing.
        (Step 6 sets config.php itself to 600, once it exists.)
 
     4. IMPORT THE SCHEMA.
        hPanel -> Databases -> phpMyAdmin -> your database -> Import.
-       Import db/migrations/0001_init.sql, then EVERY later 00NN_*.sql in
+       Import speedat_main/php/db/migrations/0001_init.sql, then EVERY
+       later 00NN_*.sql in
        filename order. All of them are safe to import twice.
        SEE: "Import has been successfully finished", and then, under
        Structure, TWELVE tables:
@@ -1195,7 +1320,8 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
        Fewer than twelve means an import stopped early. Read the error.
 
     5. FILL IN THE CONFIGURATION.
-       File Manager -> config/. Right-click config.sample.php -> Copy into the
+       File Manager -> speedat_main/php/config/. Right-click
+       config.sample.php -> Copy into the
        same folder, then rename the copy to config.php. (Copy, not rename: the
        sample is what the next deploy diffs against.)
        Edit it and fill in app.key, app.url, app.env=production, db.name,
@@ -1213,7 +1339,7 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
        This release ships with BOTH sign-in methods off, so a correct install
        shows a login page with no form on it and the sentence "Sign-in is not
        configured on this deployment yet." That is the code being honest, not
-       a fault. Choose one, in config/config.php:
+       a fault. Choose one, in speedat_main/php/config/config.php:
          'firebase_project_id'  => 'your-firebase-project',   Google sign-in
          'allow_password_login' => true,                      password + TOTP
        For Google, also add your domain in the Firebase console under
@@ -1226,12 +1352,13 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
          INSERT INTO admins (email, name, role, added_by)
          VALUES ('owner@example.com', 'Owner name', 'owner', 'install');
        For password sign-in, use a ONE-OFF cron entry instead, because the
-       password must be hashed. File Manager -> config/ -> New File ->
+       password must be hashed. File Manager -> speedat_main/php/config/ ->
+       New File ->
        first-password.txt, type the password (12 characters or more), save.
        Then hPanel -> Advanced -> Cron Jobs -> Custom, "once a minute":
-         /usr/bin/php /home/uXXXXXXXX/domains/<your-domain>/bin/seed.php
+         /usr/bin/php /home/uXXXXXXXX/domains/<your-domain>/speedat_main/php/bin/seed.php
            --owner=owner@example.com
-           --password-file=/home/uXXXXXXXX/domains/<your-domain>/config/first-password.txt
+           --password-file=/home/uXXXXXXXX/domains/<your-domain>/speedat_main/php/config/first-password.txt
        (all on ONE line). Wait a minute, then DELETE THE CRON ENTRY.
        seed.php wipes and deletes first-password.txt itself; check in File
        Manager that it is gone.
@@ -1239,16 +1366,21 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
 
     9. ADD THE HOURLY CRON, AND RUN IT ONCE.
        hPanel -> Advanced -> Cron Jobs -> Custom, hourly (0 * * * *):
-         /usr/bin/php /home/uXXXXXXXX/domains/<your-domain>/bin/cron.php
+         /usr/bin/php /home/uXXXXXXXX/domains/<your-domain>/speedat_main/php/bin/cron.php
        Absolute path, nothing after it: the field rejects >, 2>&1 and
        /dev/null, and the job writes its own log. The cron clock is UTC.
-       SEE: storage/logs/app-<today>.log with a cron_environment line naming
+       A cron pointed at domains/<your-domain>/bin/cron.php (no
+       speedat_main/php) runs an old copy with no config, or nothing at all.
+       SEE: speedat_main/php/storage/logs/app-<today>.log with a
+       cron_environment line naming
        the PHP version and the extensions, then a cron_run line. If
        pdo_mysql is missing from that line the cron is pointed at a different
        PHP build and nothing below it means anything.
 
     10. WALK THE SITE.
          https://your-domain/health     -> {"ok":true}
+           (the detail - database up or down - needs the header
+            Authorization: Bearer <tokens.metrics>; ?token= is ignored)
          https://your-domain/           -> the calculator, with prices
          https://your-domain/admin      -> sign in
          publish a version              -> it appears in History
@@ -1264,6 +1396,7 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
 
     WHAT MUST NEVER BE WORLD-READABLE
     ---------------------------------
+    (all under speedat_main/php/)
       config/config.php   600.  The application key, the database password and
                                 the SMTP password. Everything else on this list
                                 is recoverable; this file is not.
@@ -1281,8 +1414,9 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
 
     IF SOMETHING IS WRONG
     ---------------------
-    "This site is not configured yet."   config/config.php is missing or a value
-                                         it needs is blank. The reason is in the
+    "This site is not configured yet."   speedat_main/php/config/config.php is
+                                         missing or a value it needs is
+                                         blank. The reason is in the
                                          host's error log (Files -> Error Log).
     "The database is unavailable."       db.name / db.user are missing the
                                          u123456789_ prefix, or the password is
@@ -1291,10 +1425,14 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
     A blank page or 500                  Host error log. display_errors is Off
                                          on purpose; the error is never shown to
                                          a visitor.
-    Your fix did not take effect         OPcache. It is on by default and hPanel's
-                                         Cache Manager does not clear it. Wait
-                                         out the revalidate window or call the
-                                         opcache reset endpoint.
+    Your fix did not take effect         FIRST check where it landed: the site
+                                         runs speedat_main/php/app, not an
+                                         app/ beside public_html. Then OPcache:
+                                         it is on by default and hPanel's Cache
+                                         Manager does not clear it. Wait out the
+                                         revalidate window or call the opcache
+                                         reset endpoint (header token, see
+                                         docs/runbook.md section 9).
     403 on an admin form only            ModSecurity. See docs/deploy-hostinger.md.
     The site serves PHP source as text   Stop. Rename public_html/index.php to
                                          take the site down, then re-read
@@ -1309,10 +1447,20 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
              same group-writable modes on every file it replaces. config.php
              is not in any release zip, so it survives untouched. Then reset
              OPcache or wait out the revalidate window.
+             Check the previous zip first: open it on your computer. Its top
+             level must hold speedat_main/ beside public_html/ (its comment
+             says "The app lands in speedat_main/php/"). An older zip with
+             app/ at the top level puts app/ BESIDE public_html, so extracting
+             it rolls back public_html and nothing else. Roll back with a zip
+             that passes that check, or not at all.
       Data:  phpMyAdmin -> Import the pre-import dump.
     Roll the code back first, and the data only if you must: newer schema
     usually tolerates older data, older code against newer data does not.
     To stop the bleeding in ten seconds without rolling back anything, turn the
     price hold on in the admin - the site stops quoting and shows a message.
+    Use the admin switch, not SQL: the switch clears the site cache at once.
+    A hold set by SQL in phpMyAdmin, or a data import, can take up to FIVE
+    MINUTES to show, unless you then delete
+    speedat_main/php/storage/cache/site/stamp in File Manager.
     TXT;
 }

@@ -60,16 +60,33 @@ final class Audit
      * Recent entries, newest first. Reading is the only other thing anyone
      * does with this table.
      *
+     * `$excludeActions` leaves named actions out. The Security page passes the
+     * scheduled job's own rows, which otherwise filled its forty-row list in
+     * under two days and pushed the sign-ins off it (2026-10-25). It is a
+     * filter on the ONE SELECT this file has, not a second query: the
+     * append-only check counts them.
+     *
+     * @param  list<string> $excludeActions
      * @return list<array<string,mixed>>
      */
-    public static function recent(int $limit = 100, int $offset = 0): array
+    public static function recent(int $limit = 100, int $offset = 0, array $excludeActions = []): array
     {
+        $exclude = array_values(array_unique(array_filter(
+            $excludeActions,
+            static fn (mixed $action): bool => is_string($action) && $action !== ''
+        )));
+
+        $where = $exclude === []
+            ? ''
+            : 'WHERE action NOT IN (' . implode(', ', array_fill(0, count($exclude), '?')) . ')';
+
         return Db::all(
             'SELECT id, at, actor, action, detail, ip_hash, user_agent
                FROM audit_log
+              ' . $where . '
               ORDER BY at DESC, id DESC
               LIMIT ? OFFSET ?',
-            [max(1, min(500, $limit)), max(0, $offset)]
+            [...$exclude, max(1, min(500, $limit)), max(0, $offset)]
         );
     }
 

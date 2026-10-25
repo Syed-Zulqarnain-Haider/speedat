@@ -221,8 +221,17 @@ final class Repo
      * publish is "undo it, now", the one-step version is `rollbackTo()`.
      *
      * Returns null when that version does not exist.
+     *
+     * IT REPLACES THE WHOLE DRAFT, so `$expectedRevision` is the fingerprint
+     * of the draft the editor was showing, exactly as `saveDraft()` takes it.
+     * It used to run with no revision at all, which meant a colleague's newer
+     * draft was overwritten by a press of "Restore into editor" with no word
+     * on either screen. Null keeps the old behaviour for a caller with no
+     * screen behind it.
+     *
+     * @throws DraftConflict when `$expectedRevision` is not what is stored
      */
-    public static function restore(int $version, string $by): ?Draft
+    public static function restore(int $version, string $by, ?string $expectedRevision = null): ?Draft
     {
         $old = self::getVersion($version);
         if ($old === null) {
@@ -231,7 +240,7 @@ final class Repo
 
         $current = self::getDraft();
 
-        return self::saveDraft(self::rebuild($old->data, $current->data), $by);
+        return self::saveDraft(self::rebuild($old->data, $current->data), $by, $expectedRevision);
     }
 
     /**
@@ -263,12 +272,21 @@ final class Repo
      * behalf without a word on the screen. Whether the prices are still held
      * is recorded in the audit line so the screen can say so.
      *
+     * WHICH LIVE VERSION IS BEING UNDONE is `$expectedLive`: the version the
+     * question card was drawn against. Without it the live version was read
+     * here, at confirm time, and handed to the publisher as `expectedBase` -
+     * which always agrees with itself. So if a colleague published a
+     * hand-corrected version while the owner was reading the card, the
+     * confirm undid that one too, silently, although the comment below said
+     * it refused. Null keeps the old "whatever is live now" for a caller with
+     * no card behind it (a script).
+     *
      * @throws RollbackRefused on any of the three above
-     * @throws PublishConflict if somebody published between the read and the
-     *                         write - the roll-back is then aimed at a version
+     * @throws PublishConflict if somebody published after the question was
+     *                         asked - the roll-back is then aimed at a version
      *                         that is no longer the one being undone
      */
-    public static function rollbackTo(int $version, string $by, ?Request $request = null): PublishedVersion
+    public static function rollbackTo(int $version, string $by, ?Request $request = null, ?int $expectedLive = null): PublishedVersion
     {
         $old = self::getVersion($version);
         if ($old === null) {
@@ -276,6 +294,14 @@ final class Repo
         }
 
         $live = self::getLatestVersion();
+
+        // Asked first, before the checks below: if the version the owner was
+        // asked about is no longer live, "it is already the live one" or "it
+        // changes nothing" would be answers about a different question.
+        // `publishVersion()` asks again under the lock.
+        if ($expectedLive !== null && ($live?->version ?? 0) !== $expectedLive) {
+            throw new PublishConflict($live?->version ?? 0);
+        }
 
         // `live` and the remembered import layouts are carried forward from
         // what is on the site now, exactly as restore() carries them: they
@@ -311,8 +337,9 @@ final class Repo
             changeCount: $diff?->count ?? 0,
             // The version being undone has to still be the live one. If
             // somebody published while the owner was deciding, this refuses
-            // rather than quietly undoing a publish nobody asked about.
-            expectedBase: $live?->version,
+            // rather than quietly undoing a publish nobody asked about - which
+            // it can only do when the caller says which version that was.
+            expectedBase: $expectedLive ?? $live?->version,
             liftHold: false,
         ));
 
@@ -409,6 +436,29 @@ final class Repo
                     throw new PublishConflict($liveVersion);
                 }
 
+                // THE DRAFT HAS TO STILL BE THE ONE THE REVIEW CARD LISTED.
+                // The caller compared the fingerprint before getting here, but
+                // a save can land between that comparison and this lock, so it
+                // is asked again with the row held - the same FOR UPDATE
+                // `saveDraft()` takes, so the two cannot both win. Thrown
+                // inside the transaction: nothing has been written.
+                if ($args->expectedRevision !== null) {
+                    $row = Db::one(
+                        'SELECT base_version, data, updated_at, updated_by FROM draft WHERE id = ? FOR UPDATE',
+                        [self::DRAFT_ID]
+                    );
+
+                    if ($row === null) {
+                        throw new \RuntimeException('The draft was discarded while it was being published.');
+                    }
+
+                    $current = self::toDraft($row);
+
+                    if (!hash_equals($current->revision, $args->expectedRevision)) {
+                        throw new DraftConflict($current);
+                    }
+                }
+
                 $version = $liveVersion + 1;
 
                 Db::exec(
@@ -425,6 +475,14 @@ final class Repo
                     ]
                 );
 
+                // THE DRAFT BECOMES THE PUBLISHED DOCUMENT, whatever it held.
+                // On an admin publish that is the same document; on a
+                // roll-back it is not, and any unpublished edits in the editor
+                // are replaced. That is still the right shape - a draft left
+                // holding the bad prices would put them back on the next
+                // publish - but it is not "nothing is lost", so the roll-back
+                // question counts those edits and says so before the owner
+                // confirms (`Http\Admin\Notice::rollbackQuestion()`).
                 Db::exec(
                     'INSERT INTO draft (id, base_version, data, updated_at, updated_by) VALUES (:id, :v, :d, :at, :by)'
                     . ' ON DUPLICATE KEY UPDATE base_version = :v2, data = :d2, updated_at = :at2, updated_by = :by2',

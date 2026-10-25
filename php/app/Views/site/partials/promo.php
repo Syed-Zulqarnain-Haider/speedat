@@ -22,7 +22,7 @@ declare(strict_types=1);
  * printed, because e() stops an attribute break-out but not a `javascript:` URL
  * that would still run on click. Only http(s), a root-relative path, mailto,
  * tel or a fragment is allowed; anything else drops the button rather than the
- * whole card.
+ * whole card. A bare domain (`wa.me/...`, `www.example.com`) is read as https.
  *
  * @var \Speedat\Core\View     $this
  * @var \Speedat\View\PageView $page
@@ -48,6 +48,17 @@ $rawHref = trim($promo->ctaHref);
 // written the offer yet.
 if ($title === '' && $message === '' && $cta === '') {
     return;
+}
+
+// A bare domain gets https:// in front before the allow-list sees it. The owner
+// types links the way people say them - `wa.me/92300...`, `www.example.com` -
+// and the allow-list alone dropped the button for those with no warning, so the
+// offer went live with nothing to tap (found in review, 2026-10-25). Only a
+// value that STARTS with a dotted host name is touched: no scheme can match it
+// (a scheme ends in ':', which the pattern does not allow), so this can widen
+// the allow-list to nothing but https.
+if (preg_match('~^[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/?#]|$)~i', $rawHref) === 1) {
+    $rawHref = 'https://' . $rawHref;
 }
 
 $safeHref = preg_match('~^(https?://|/|mailto:|tel:|#)~i', $rawHref) === 1 ? $rawHref : '';

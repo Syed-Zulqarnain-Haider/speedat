@@ -73,8 +73,7 @@ final class Request
         }
 
         $uri = is_string($server['REQUEST_URI'] ?? null) ? $server['REQUEST_URI'] : '/';
-        $raw = parse_url($uri, PHP_URL_PATH);
-        $path = is_string($raw) && $raw !== '' ? rawurldecode($raw) : '/';
+        $path = self::pathOf($uri);
 
         // A subdirectory install (a staging copy under /php/public) has a base
         // path; on Hostinger public_html is the document root and this is "".
@@ -93,12 +92,12 @@ final class Request
                 continue;
             }
             if (str_starts_with($k, 'HTTP_')) {
-                $headers[strtolower(str_replace('_', '-', substr($k, 5)))] = substr($v, 0, self::MAX_FIELD);
+                $headers[strtolower(str_replace('_', '-', substr($k, 5)))] = self::headerValue($v);
             }
         }
         foreach (['CONTENT_TYPE' => 'content-type', 'CONTENT_LENGTH' => 'content-length'] as $k => $name) {
             if (isset($server[$k]) && is_string($server[$k])) {
-                $headers[$name] = $server[$k];
+                $headers[$name] = self::headerValue($server[$k]);
             }
         }
 
@@ -106,7 +105,7 @@ final class Request
             $recovered = self::authorizationHeader($server);
 
             if ($recovered !== '') {
-                $headers['authorization'] = substr($recovered, 0, self::MAX_FIELD);
+                $headers['authorization'] = self::headerValue($recovered);
             }
         }
 
@@ -131,6 +130,62 @@ final class Request
         $files = $_FILES;
 
         return new self($method, $path, $basePath, $query, $post, $headers, $cookies, $files, $remote, $https);
+    }
+
+    /**
+     * The path part of REQUEST_URI, percent-decoded.
+     *
+     * NOT parse_url(), WHICH READS A DOUBLED SLASH AS A HOST. A REQUEST_URI is
+     * a path plus a query, never a whole URL, but parse_url() does not know that:
+     * `parse_url('//faq', PHP_URL_PATH)` takes `faq` for the host and returns
+     * null, so `https://speedat.co//faq` - one badly joined link away - served
+     * the HOME PAGE with a 200 and canonical "/", instead of reaching
+     * Http\Kernel::canonicalRedirect() and its promised 301 to `/faq`. Cutting at
+     * the first `?` or `#` is all the parsing a request target needs, and it is
+     * the same cut Seo\Url::normalise() makes.
+     *
+     * The one form that is a whole URL - an absolute-form target,
+     * `GET http://host/path`, which a server may pass through to a proxy-style
+     * request - does not start with a slash, and is the one place parse_url()
+     * is still the right tool.
+     */
+    private static function pathOf(string $uri): string
+    {
+        if ($uri !== '' && $uri[0] === '/') {
+            $raw = substr($uri, 0, strcspn($uri, '?#'));
+        } else {
+            $raw = parse_url($uri, PHP_URL_PATH);
+        }
+
+        return is_string($raw) && $raw !== '' ? rawurldecode($raw) : '/';
+    }
+
+    /**
+     * One header value: capped, then made well-formed UTF-8. In that order.
+     *
+     * WHY HEADERS NEED THE SAME SCRUB AS THE BODY. clean() has made every form
+     * field readable since audit round 1, finding 4; headers were only cut to
+     * length, and two of them go straight into utf8mb4 columns under
+     * STRICT_TRANS_TABLES: the User-Agent into sessions.user_agent and
+     * audit_log.user_agent. One raw Latin-1 byte (`User-Agent: caf\xE9`) was
+     * then a 1366 out of PDO on both writes. Core\Audit swallows its own failure
+     * by design, so `login_refused` and everything else that client did never
+     * reached the audit screen - a way to guess passwords, or use a stolen
+     * cookie, without leaving a line. Core\Session rethrows, so sign-in from
+     * that browser was a 500 every time.
+     *
+     * Capped FIRST, unlike clean(), because the cap here is a byte budget on
+     * work rather than a character count anybody sees: scrubbing 20,000 bytes
+     * is cheap, scrubbing whatever length a client chose is not. A cut through
+     * the middle of a multi-byte character leaves a broken tail, which the
+     * scrub then substitutes, so the order costs at most one `?`.
+     *
+     * Nothing here changes a well-formed header, so an Authorization token or a
+     * Content-Type arrives byte for byte as it was sent.
+     */
+    private static function headerValue(string $value): string
+    {
+        return mb_scrub(substr($value, 0, self::MAX_FIELD), 'UTF-8');
     }
 
     /**

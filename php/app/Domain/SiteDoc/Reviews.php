@@ -21,6 +21,19 @@ namespace Speedat\Domain\SiteDoc;
  */
 final class Reviews
 {
+    /**
+     * The author line every seeded placeholder carries ({@see Seed::reviews()}).
+     *
+     * A review by this "author" is never shown, switched on or not. The seed
+     * used to ship its three placeholders switched ON, so a fresh site, the
+     * seed fallback when the database is down, and any owner who never opened
+     * the reviews block printed three five-star "Sample review" cards and a
+     * 5/5 AggregateRating in the JSON-LD - invented reviews, the one thing
+     * the brief forbids (found 2026-10-25). The seed now ships them off; this
+     * is the backstop for every document already published with them on.
+     */
+    public const SAMPLE_AUTHOR = 'Sample review';
+
     /** @param list<Review> $items */
     public function __construct(
         public readonly array $items = [],
@@ -63,12 +76,22 @@ final class Reviews
 
     /**
      * Just the reviews the owner has left switched on, in document order - what
-     * the public site renders.
+     * the public site renders and the JSON-LD marks up. A seeded placeholder
+     * (`SAMPLE_AUTHOR`) is never among them: it is not a customer.
      *
      * @return list<Review>
      */
     public function shown(): array
     {
-        return array_values(array_filter($this->items, static fn (Review $r): bool => $r->show));
+        return array_values(array_filter(
+            $this->items,
+            static fn (Review $r): bool => $r->show && !self::isSample($r),
+        ));
+    }
+
+    /** Whether a review is one of the seed's placeholders rather than a real one. */
+    public static function isSample(Review $review): bool
+    {
+        return strcasecmp(trim($review->author), self::SAMPLE_AUTHOR) === 0;
     }
 }

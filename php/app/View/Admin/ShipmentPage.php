@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Speedat\View\Admin;
 
 use Speedat\Domain\Pricing\Format;
+use Speedat\Domain\Shipments\ShipmentStatus as Transitions;
 
 /**
  * One shipment's desk: the details that save when you leave them, the status
@@ -28,7 +29,41 @@ final class ShipmentPage
         public readonly string $companyName,
         /** A message from the last action, shown as a notice. */
         public readonly string $notice = '',
+        /**
+         * ok | err. A refusal used to share the green role=status box with
+         * "Update added", so it read as a success; an err is role=alert.
+         */
+        public readonly string $noticeKind = 'ok',
+        /** The update note as typed, put back after a refused update. */
+        public readonly string $note = '',
     ) {
+    }
+
+    public function noticeIsError(): bool
+    {
+        return $this->noticeKind === 'err';
+    }
+
+    /**
+     * The statuses the select offers: exactly the moves the transition table
+     * allows from where the shipment is now, staying put included, labelled
+     * as the admin reads them.
+     *
+     * Not all seven. The server refuses every other move (ShipmentRepository
+     * ::addEvent), so offering them was a dropdown of buttons that always
+     * fail - Delivered from Booked, picked, typed a note for, and refused.
+     * The table is the domain's, so the offer and the refusal cannot drift.
+     *
+     * @return array<string,string> value => label
+     */
+    public function statusOptions(): array
+    {
+        $out = [];
+        foreach (Transitions::nextFrom($this->currentStatus()) as $status) {
+            $out[$status] = ShipmentStatus::label($status);
+        }
+
+        return $out;
     }
 
     public function id(): string

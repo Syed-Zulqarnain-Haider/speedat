@@ -14,6 +14,10 @@ use Speedat\Domain\SiteDoc\Review;
  *   every page  LocalBusiness - name, telephone, email, address, opening
  *               hours, areaServed from the live destinations, the logo, the
  *               WhatsApp number as a contactPoint, priceRange.
+ *   /           the same LocalBusiness plus aggregateRating and Review, from
+ *               the reviews the owner switched on - the home page is the only
+ *               page that prints them, so it is the only page that marks
+ *               them up.
  *   inner pages BreadcrumbList - Home, then this page.
  *   /faq        FAQPage, built from `content.faq` through the same
  *               `SiteFacts::faqItems()` the page renders from.
@@ -62,7 +66,17 @@ final class JsonLd
      */
     public function graph(Route $route): array
     {
-        $nodes = [$this->localBusiness()];
+        $business = $this->localBusiness();
+
+        // Reviews in markup must be visible on the page that carries them, and
+        // only home.php renders the reviews strip. /faq and /services used to
+        // emit the rating and the Review nodes too, describing reviews a
+        // visitor to those pages cannot see (found 2026-10-25).
+        if ($route->isHome()) {
+            $business = $this->withReviews($business);
+        }
+
+        $nodes = [$business];
 
         if (!$route->isHome()) {
             $nodes[] = $this->breadcrumbs($route);
@@ -188,19 +202,35 @@ final class JsonLd
             $node['makesOffer'] = $offers;
         }
 
-        // The customer reviews, and nothing else. Google requires that reviews
-        // and an aggregate rating in markup be GENUINE and VISIBLE on the page,
-        // so these are built only from the reviews the owner has switched on -
-        // the exact list the home-page strip renders - and a site with none
-        // switched on emits neither node rather than an empty or invented one.
-        $shown = $this->facts->site->reviews->shown();
-        if ($shown !== []) {
-            $node['aggregateRating'] = $this->aggregateRating($shown);
+        return $node;
+    }
 
-            $reviews = $this->reviewNodes($shown);
-            if ($reviews !== []) {
-                $node['review'] = $reviews;
-            }
+    /**
+     * The LocalBusiness node with the customer reviews added - for the home
+     * page only, see `graph()`.
+     *
+     * The customer reviews, and nothing else. Google requires that reviews
+     * and an aggregate rating in markup be GENUINE and VISIBLE on the page,
+     * so these are built only from the reviews the owner has switched on -
+     * the exact list the home-page strip renders (`Reviews::shown()`, which
+     * also drops the seed's placeholders) - and a site with none switched on
+     * emits neither node rather than an empty or invented one.
+     *
+     * @param  array<string,mixed> $node
+     * @return array<string,mixed>
+     */
+    public function withReviews(array $node): array
+    {
+        $shown = $this->facts->site->reviews->shown();
+        if ($shown === []) {
+            return $node;
+        }
+
+        $node['aggregateRating'] = $this->aggregateRating($shown);
+
+        $reviews = $this->reviewNodes($shown);
+        if ($reviews !== []) {
+            $node['review'] = $reviews;
         }
 
         return $node;
@@ -466,6 +496,15 @@ final class JsonLd
      * One `Service` per line of `content.services` - Express, Normal,
      * Documents, Cargo and whatever else the owner has listed there.
      *
+     * No `areaServed` on these. The lines are free text and include local
+     * ones - "Pickup: we collect from your door in our pickup cities" - so
+     * stamping the destination countries on every entry claimed a Lahore
+     * doorstep pickup in the UK, the US and Canada (found 2026-10-25). Which
+     * line is local is not something the text says reliably, and the
+     * LocalBusiness every Service points at through `provider` already
+     * carries both halves of the service area, so leaving it off says
+     * nothing false and loses nothing.
+     *
      * @return list<array<string,mixed>>
      */
     public function services(Route $route): array
@@ -483,14 +522,7 @@ final class JsonLd
                 'provider'    => ['@id' => $this->businessId()],
             ];
 
-            $node = self::put($node, 'description', $item['description']);
-
-            $areas = $this->areaServed();
-            if ($areas !== []) {
-                $node['areaServed'] = $areas;
-            }
-
-            $out[] = $node;
+            $out[] = self::put($node, 'description', $item['description']);
         }
 
         return $out;

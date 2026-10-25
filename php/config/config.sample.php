@@ -218,6 +218,7 @@ return [
          */
         'csp_script'  => '',
         'csp_connect' => '',
+        'csp_frame'   => '',
     ],
 
     /**

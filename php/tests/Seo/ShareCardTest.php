@@ -43,6 +43,23 @@ final class ShareCardTest extends TestCase
         $this->assertSame('image/png', $size['mime']);
     }
 
+    /**
+     * The first shipped card was drawn from the sample document and printed
+     * the old domain, so every share of speedat.co advertised speedat.com.pk
+     * (found 2026-10-25). The PNG cannot be read back here, but the SVG drawn
+     * from the same plan can: it must exist and must not name the old host.
+     */
+    public function testTheShippedVectorCardIsThereAndNamesTheLiveDomain(): void
+    {
+        $file = Paths::publicDir() . '/' . ShareCard::CARD_SVG;
+
+        $this->assertTrue(is_file($file), 'missing ' . ShareCard::CARD_SVG . ' - regenerate it, see docs/seo.md');
+
+        $svg = (string) file_get_contents($file);
+        $this->assertStringNotContains('speedat.com.pk', $svg);
+        $this->assertStringContains('>speedat.co</text>', $svg);
+    }
+
     public function testTheLogoIsShippedAndSquare(): void
     {
         $file = Paths::publicDir() . '/' . ShareCard::LOGO_PNG;
@@ -67,7 +84,9 @@ final class ShareCardTest extends TestCase
 
     public function testItIsReferencedByAnAbsoluteUrl(): void
     {
-        $this->assertSame('https://speedat.com.pk/assets/img/og-default.png', $this->card->absoluteUrl());
+        // From the constant, not a literal: renaming the card to bust the
+        // scrapers' caches must not mean hunting filenames through the tests.
+        $this->assertSame('https://speedat.com.pk/' . ShareCard::CARD_PNG, $this->card->absoluteUrl());
         $this->assertSame('https://speedat.com.pk/assets/img/og-logo.png', $this->card->logoAbsoluteUrl());
     }
 

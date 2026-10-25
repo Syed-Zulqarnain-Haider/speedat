@@ -47,6 +47,26 @@ final class Engine
     /** Hard ceiling on the number of kilogram boxes, matching engine.ts. */
     private const MAX_TOP_KG = 200;
 
+    /**
+     * The heaviest shipment priced when the cargo threshold is 0 ("no limit"):
+     * one tonne, the same number QuoteInput::MAX_GRAMS refuses to log above.
+     * QuoteInput reads this constant, so the two cannot drift apart.
+     */
+    public const NO_LIMIT_MAX_G = 1_000_000;
+
+    /**
+     * The cargo threshold in effect, in kg: the owner's maxKg, or one tonne
+     * when it is 0. Anything that NAMES the threshold beside an overmax result
+     * must print this, not maxKg - before NO_LIMIT_MAX_G, overmax could not
+     * happen at maxKg 0, and once it could the admin test-price panel said
+     * "Over the cargo threshold (0 kg)" for a 3 x 400 kg shipment (review,
+     * 2026-10-25). pricing.js cargoLimitKg() is the same function.
+     */
+    public static function cargoLimitKg(Settings $settings): float
+    {
+        return $settings->maxKg > 0 ? $settings->maxKg : self::NO_LIMIT_MAX_G / 1000;
+    }
+
     /* ------------------------------------------------------------ weights */
 
     /**
@@ -157,7 +177,19 @@ final class Engine
             );
         }
 
-        $billableG = max($firstG, (int) ceil($chargeG / $stepG) * $stepG);
+        // The steps are counted FROM THE FIRST SLAB, which is how priceService()
+        // charges them. Rounding the whole weight to a multiple of the step
+        // instead (the TypeScript's `max(first, ceil(c / step) * step)`) only
+        // agrees with that when the first slab is itself a multiple of the step:
+        // with a 0.5 kg first slab and 1 kg steps it billed a 0.5 kg parcel as
+        // 1 kg - one step on top of the first slab, 5,000 instead of 4,000 - and
+        // 1.2 kg as 2 kg with two steps, so the breakdown contradicted itself.
+        // Every card the TypeScript was checked against has a first slab that
+        // is a multiple of its step (and grid is 1 / 1), so no vector moved;
+        // tests/vectors/owner-decisions.json pins 0.5 / 1 and 1.5 / 1.
+        $billableG = $chargeG <= $firstG
+            ? $firstG
+            : $firstG + (int) ceil(($chargeG - $firstG) / $stepG) * $stepG;
 
         return new Weights(
             pieces: $pieces,
@@ -304,8 +336,15 @@ final class Engine
 
         $weights = self::computeWeights($card->settings, $weighed);
 
-        $maxG = $card->settings->maxKg > 0 ? Money::kgToG($card->settings->maxKg) : 0;
-        if ($maxG > 0 && $weights->billableG > $maxG) {
+        // A cargo threshold of 0 means "no limit" to the owner, but not to the
+        // quote log: QuoteInput::MAX_GRAMS refuses anything over a tonne, so a
+        // 3 x 400 kg shipment used to be priced on the page, offered a Book
+        // link, and then have its POST rejected - no quote row, no lead. With no
+        // threshold, a tonne is the threshold, and the customer gets the cargo
+        // enquiry instead of a price nobody will record.
+        // Callers that print the limit use cargoLimitKg(), which agrees with this.
+        $maxG = $card->settings->maxKg > 0 ? Money::kgToG($card->settings->maxKg) : self::NO_LIMIT_MAX_G;
+        if ($weights->billableG > $maxG) {
             return PriceResult::overMax($dest, $weights);
         }
 
@@ -337,7 +376,7 @@ final class Engine
     {
         $out = [];
         foreach (preg_split('/\r?\n/', (string) $text) ?: [] as $line) {
-            $trimmed = trim($line);
+            $trimmed = self::jsTrim($line);
             if ($trimmed !== '') {
                 $out[] = $trimmed;
             }
@@ -353,7 +392,7 @@ final class Engine
      */
     public static function parts(string $line, int $n): array
     {
-        $out = array_map('trim', explode('|', $line));
+        $out = array_map(self::jsTrim(...), explode('|', $line));
         while (count($out) < $n) {
             $out[] = '';
         }
@@ -385,7 +424,7 @@ final class Engine
             return NAN;
         }
 
-        $s = trim(is_scalar($v) ? (string) $v : '');
+        $s = self::jsTrim(is_scalar($v) ? (string) $v : '');
 
         if ($s === '' || preg_match('/^[-\x{2013}\x{2014}]$/u', $s) === 1 || preg_match('/^n\/?a$/i', $s) === 1) {
             return null;
@@ -463,6 +502,27 @@ final class Engine
         $ordered = Num::jsKeyOrder($out);
 
         return $ordered === [] ? null : $ordered;
+    }
+
+    /**
+     * JavaScript's String.prototype.trim(), which is not PHP's trim().
+     *
+     * PHP strips " \t\n\r\0\x0B"; JavaScript strips ASCII whitespace including
+     * the form feed, the no-break space U+00A0, the BOM and every Unicode space
+     * separator - and not NUL. The difference was live: an add-on line pasted
+     * from a spreadsheet as "Delivery | 1000 | on" plus a trailing U+00A0 read
+     * as ON in the browser and OFF here, so the calculator added PKR 1,000 that
+     * the server-rendered tiles, the rates board and SiteFacts left out, and
+     * resolveAddons() could not match the label the browser posted.
+     *
+     * Settings text arrives through json_decode and is valid UTF-8; if it ever
+     * is not, the /u pattern fails and the old byte trim is the fallback.
+     */
+    public static function jsTrim(string $s): string
+    {
+        $ws = '[\t\n\x{0B}\f\r \x{00A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]';
+
+        return preg_replace('/^' . $ws . '+|' . $ws . '+$/u', '', $s) ?? trim($s);
     }
 
     /* ------------------------------------------------------------ internals */

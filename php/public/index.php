@@ -47,6 +47,19 @@ use Speedat\Http\Kernel;
  * index.php` and the application is simply its parent, `php/`. That layout is
  * the fallback, taken only when there is no `speedat_main` sibling, so the
  * server never depends on it.
+ *
+ * THE RELEASE ZIP FILLS EXACTLY THIS FOLDER. bin/build-release.php writes the
+ * application under `speedat_main/php/` (its APP_PREFIX, which
+ * tests/Core/B1ReleaseLayoutTest.php holds equal to the path below). It used to
+ * write app/ and config/ straight beside public_html, and because this file
+ * prefers `speedat_main/php` whenever it exists, every code fix in that zip was
+ * uploaded and never ran (audit, 2026-10-23). If the two ever disagree again,
+ * the symptom is "my fix did not take effect", which looks exactly like OPcache
+ * and is not.
+ *
+ * No per-request log of which root was chosen: the staging box runs the
+ * fallback on every request by design, and a line per page view would bury the
+ * log it was meant to help read.
  */
 $root = dirname(__DIR__) . '/speedat_main/php';
 

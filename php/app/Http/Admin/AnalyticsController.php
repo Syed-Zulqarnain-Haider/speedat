@@ -74,6 +74,13 @@ final class AnalyticsController
     /** Countries in the ranking. Twenty is a screenful; the tail is a long tail. */
     private const TOP_COUNTRIES = 20;
 
+    /**
+     * Referring sites in the ranking. Ten, because past Google, Facebook,
+     * Instagram and the direct row the list is one-off forum links, and the
+     * shares are of every landing either way (AnalyticsPage::referrersRanked()).
+     */
+    private const TOP_REFERRERS = 10;
+
     public function __construct(
         private readonly PageViews $views = new PageViews(),
         private readonly QuoteStats $quotes = new QuoteStats(),
@@ -100,6 +107,12 @@ final class AnalyticsController
             firstCountedDay: $this->firstCountedDay(),
             countingFrom: self::COUNTING_FROM,
             rangeNotice: $notice,
+            // Stored on every landing since the counter shipped and, until
+            // 2026-10-25, shown nowhere: where people came from, on what kind
+            // of screen, and which page they arrived on.
+            referrers: $this->views->byReferrer($from, $to, self::TOP_REFERRERS),
+            devices: $this->views->byDevice($from, $to),
+            pages: $this->views->byPath($from, $to),
         );
 
         return $app->page('admin/analytics', [

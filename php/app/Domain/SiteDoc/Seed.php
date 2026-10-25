@@ -56,31 +56,37 @@ final class Seed
      * the reviews he picks from his Google Business profile. The file never
      * invents a real name, a real count or a star total it has not been given.
      *
+     * They ship SWITCHED OFF. Shipped on, they were printed on a fresh site and
+     * by the seed fallback as customer reviews and marked up as a 5/5
+     * AggregateRating (found 2026-10-25). `Reviews::shown()` also refuses any
+     * review by `Reviews::SAMPLE_AUTHOR`, so switching one on in the admin
+     * still shows nothing until the owner replaces it with a real one.
+     *
      * @return list<array<string,mixed>>
      */
     public static function reviews(): array
     {
         return [
             [
-                'author' => 'Sample review',
+                'author' => Reviews::SAMPLE_AUTHOR,
                 'rating' => 5,
                 'text'   => 'Fast and smooth - parcel reached London in 4 days and the pickup was on time.',
                 'date'   => 'March 2026',
-                'show'   => true,
+                'show'   => false,
             ],
             [
-                'author' => 'Sample review',
+                'author' => Reviews::SAMPLE_AUTHOR,
                 'rating' => 5,
                 'text'   => 'Clear price before booking and no surprises at pickup. Tracking came through on WhatsApp.',
                 'date'   => 'February 2026',
-                'show'   => true,
+                'show'   => false,
             ],
             [
-                'author' => 'Sample review',
+                'author' => Reviews::SAMPLE_AUTHOR,
                 'rating' => 5,
                 'text'   => 'Sent documents to Dubai and they arrived quickly. Helpful staff on the phone.',
                 'date'   => 'January 2026',
-                'show'   => true,
+                'show'   => false,
             ],
         ];
     }
@@ -180,8 +186,10 @@ final class Seed
             'services' => implode("\n", [
                 'plane | Express | Priority air. The faster of the two on every route; the days are in the table.',
                 'globe | Normal | Economy air. Same handling, a few days longer, the lower price.',
-                'doc | Documents | Passports, certificates, contracts. Priced by weight like any parcel, '
-                    . 'and light enough that it is usually the cheapest row in the table.',
+                // There is no documents row since the document rate went on
+                // 2026-09-27, so this may not send a customer looking for one.
+                'doc | Documents | Passports, certificates, contracts. Priced by weight like any parcel; '
+                    . 'most documents weigh under 0.5 kg, so they cost the lowest weight on the price list.',
                 "box | Cargo | Above the calculator's top weight, commercial goods or many boxes: "
                     . 'send the details on WhatsApp and we quote within the hour.',
                 'truck | Pickup | We collect from your door in our pickup cities; book before the cutoff and we come the same day.',

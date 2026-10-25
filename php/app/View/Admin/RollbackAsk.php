@@ -38,7 +38,38 @@ final class RollbackAsk
         public readonly bool $holdOn = false,
         /** No such version was ever published. */
         public readonly bool $unknown = false,
+        /**
+         * The live version the question was drawn against, which the confirm
+         * form hands back as `expectedLive`. Without it the confirm re-read
+         * "what is live now", which always agrees with itself - so a version
+         * a colleague published while the owner was reading this card was
+         * undone too, silently. 0 when unknown: the field is then left out
+         * and the server falls back to the old behaviour.
+         */
+        public readonly int $liveVersion = 0,
+        /**
+         * Unpublished edits in the editor that a roll-back will replace. The
+         * sentence that says so is in `question` (`Notice::rollbackQuestion()`);
+         * this is the count, for anything that has to know.
+         */
+        public readonly int $draftChanges = 0,
+        /** The card was redrawn because the live version moved under the last confirm. */
+        public readonly bool $moved = false,
     ) {
+    }
+
+    /**
+     * Why the card is on the screen a second time, or "".
+     *
+     * The refusal sentence itself is `Notice`'s and prints where every other
+     * refusal does; this is the short version beside the button, so the
+     * owner reads it at the moment he is about to press again.
+     */
+    public function movedNote(): string
+    {
+        return $this->moved && $this->liveVersion > 0
+            ? 'Version ' . $this->liveVersion . ' is live now, so this question is about undoing that one. Nothing was rolled back yet.'
+            : '';
     }
 
     /** May the button be offered at all? */

@@ -62,9 +62,11 @@ final class ShipmentsController
         $status = $this->listStatus($app->request->query('status', ShipmentRepository::OPEN, 24));
         $filter = $app->request->query('q', '', 80);
 
-        $rows   = $this->shipments->list($status, self::PAGE);
-        $names  = new NameLookup();
-        $needle = Str::nameKey($filter);
+        // The search runs in SQL, before the page limit - see
+        // ShipmentRepository::list(). Filtering the first 200 rows here, as this
+        // used to, could not find a parcel delivered three months ago.
+        $rows  = $this->shipments->list($status, self::PAGE, $filter, $this->destinationsNamed($filter));
+        $names = new NameLookup();
 
         $table = [];
         foreach ($rows as $shipment) {
@@ -80,12 +82,6 @@ final class ShipmentsController
                 'status'        => $shipment->status,
                 'updatedAt'     => $shipment->updatedAt->format('c'),
             ];
-
-            $key = Str::nameKey($row['id'] . ' ' . $row['customerName'] . ' ' . $row['destination'] . ' ' . $row['trackingNo'] . ' ' . $row['carrier']);
-
-            if ($needle !== '' && !str_contains($key, $needle)) {
-                continue;
-            }
 
             $table[] = $row;
         }
@@ -190,7 +186,26 @@ final class ShipmentsController
     /** GET /admin/shipments/{id} - the desk. */
     public function desk(App $app, AdminUser $admin, string $id): Response
     {
-        $shipment = $this->findOr404($id);
+        [$kind, $notice] = $this->deskNotice($app);
+
+        return $this->renderDesk($app, $admin, $this->findOr404($id), $notice, $kind);
+    }
+
+    /**
+     * The desk, after a GET or re-drawn in answer to a refused update.
+     *
+     * @param string $noticeKind ok | err
+     * @param string $note       what the office typed into the update box, kept after a refusal
+     */
+    private function renderDesk(
+        App $app,
+        AdminUser $admin,
+        Shipment $shipment,
+        string $notice = '',
+        string $noticeKind = 'ok',
+        string $note = '',
+        int $statusCode = 200,
+    ): Response {
         $history  = $this->shipments->history($shipment->id);
 
         if ($history === null) {
@@ -227,14 +242,16 @@ final class ShipmentsController
             ],
             events: $events,
             companyName: Screen::companyName(),
-            notice: $this->deskNotice($app),
+            notice: $notice,
+            noticeKind: $noticeKind,
+            note: $note,
         );
 
         return $app->page('admin/shipment', [
             'page'  => $page,
             'shell' => Screen::shell($admin, 'shipments'),
             'theme' => Screen::theme($app),
-        ]);
+        ], $statusCode);
     }
 
     /** POST /admin/shipments/update - the details, not the status. */
@@ -273,8 +290,16 @@ final class ShipmentsController
         $status = $app->request->post('status', '', 24);
         $note   = $app->request->post('note', '', 1000);
 
+        // A REFUSED UPDATE IS ANSWERED HERE, NOT ACROSS A REDIRECT. The redirect
+        // carries a code and never text (see Notice), so it lost the note the
+        // office had just typed - "Handed to Emirates EK623", gone - and could
+        // only say the generic sentence, not WHICH move was refused. Nothing
+        // was written, so there is nothing a reload could repeat: the desk is
+        // drawn again with a 422, the note still in its box and the reason on
+        // top. The select only offers allowed moves (ShipmentPage), so this is
+        // the stale page, or two people at one desk.
         if (!ShipmentStatus::isValid($status)) {
-            return $this->toDesk($app, $shipment->id, ['err' => 'badstatus']);
+            return $this->renderDesk($app, $admin, $shipment, Notice::text('badstatus'), 'err', $note, 422);
         }
 
         try {
@@ -282,9 +307,19 @@ final class ShipmentsController
         } catch (InvalidTransition $e) {
             Log::warn('shipment_transition_refused', ['id' => $shipment->id, 'reason' => $e->getMessage()]);
 
-            return $this->toDesk($app, $shipment->id, ['err' => 'badstatus']);
+            // Re-read: the refusal is most often somebody else having moved it
+            // meanwhile, and the desk must show the status it is in NOW.
+            return $this->renderDesk(
+                $app,
+                $admin,
+                $this->findOr404($shipment->id),
+                $e->getMessage() . ' Choose one of the statuses offered - your note is still in the box.',
+                'err',
+                $note,
+                422,
+            );
         } catch (ValueTooLong) {
-            return $this->toDesk($app, $shipment->id, ['err' => 'toolong']);
+            return $this->renderDesk($app, $admin, $shipment, Notice::text('toolong'), 'err', $note, 422);
         }
 
         if ($event === null) {
@@ -364,16 +399,57 @@ final class ShipmentsController
         return ShipmentRepository::OPEN;
     }
 
-    /** The line at the top of the desk after an action. */
-    private function deskNotice(App $app): string
+    /**
+     * The line at the top of the desk after an action, and its kind.
+     *
+     * The kind is the point: `err=toolong` used to render in the same green
+     * role=status box as "Update added", so a refused save read as a done one.
+     *
+     * @return array{0:string,1:string} ['ok'|'err', sentence]
+     */
+    private function deskNotice(App $app): array
     {
         $error = Notice::error($app);
 
         if ($error !== '') {
-            return $error;
+            return ['err', $error];
         }
 
-        return Notice::toast($app);
+        return ['ok', Notice::toast($app)];
+    }
+
+    /**
+     * The ids of the destinations whose name contains each word of the search,
+     * so "canada" finds the shipments booked to `ca` and "ali canada" finds
+     * Ali's. Per word, because the repository ANDs the words: matched against
+     * the whole search, "ali canada" named no country and found nothing.
+     *
+     * Every destination on the live card, active or not: a country switched
+     * off still has parcels in the air. One taken off the card altogether is
+     * not matched by name - NameLookup can name an id, but not search the
+     * history for a name - and is still found by its number or its customer.
+     *
+     * @return array<string,list<string>> word => destination ids
+     */
+    private function destinationsNamed(string $filter): array
+    {
+        $words = LeadRepository::searchWords($filter);
+
+        if ($words === []) {
+            return [];
+        }
+
+        $ids = [];
+        foreach (Live::site()->data->card->destinations as $dest) {
+            $key = Str::nameKey($dest->name);
+            foreach ($words as $word) {
+                if ($key !== '' && str_contains($key, $word)) {
+                    $ids[$word][] = $dest->id;
+                }
+            }
+        }
+
+        return $ids;
     }
 
     /** @param array<string,int|string|bool> $codes */

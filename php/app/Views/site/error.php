@@ -26,7 +26,11 @@ $this->layout('site/layout', ['page' => $view->page]);
 <section class="page nf">
 <?= $this->partial('site/partials/page-head', ['title' => $view->title, 'lede' => $view->line]) ?>
   <div class="nf-actions">
+<?php if ($view->adminHref !== '') { ?>
+    <a class="btn primary big" href="<?= e($this->url($view->adminHref)) ?>">Back to the admin</a>
+<?php } else { ?>
     <a class="btn primary big" href="<?= e($this->url('/')) ?>">Get a price</a>
+<?php } ?>
 <?php if ($view->waHref !== '') { ?>
     <a class="btn wa big" href="<?= e($view->waHref) ?>" target="_blank" rel="noopener"><?= $this->partial('site/partials/icon', ['id' => 'i-wa']) ?>WhatsApp us</a>
 <?php } ?>

@@ -194,9 +194,12 @@ final class ContactController
         $clean  = array_map(static fn (string $v): string => Str::squish($v), $values);
         $clean['message'] = trim($values['message']);
 
+        // From here on the render token has passed, so the page that comes
+        // back carries one the visitor can send with straight away
+        // (`SiteController::contactRejected()` says why).
         $errors = self::validate($clean);
         if ($errors !== []) {
-            return $this->site->contactRejected($app, $values, $errors, 422);
+            return $this->site->contactRejected($app, $values, $errors, 422, tokenPassed: true);
         }
 
         /* 6 - the per-IP limit ---------------------------------------------- */
@@ -212,6 +215,7 @@ final class ContactController
                     . (int) ceil($limit->retryAfter / 60) . ' minutes or WhatsApp us.',
                 429,
                 $limit->retryAfter,
+                tokenPassed: true,
             );
         }
 
@@ -250,9 +254,15 @@ final class ContactController
      *
      * @param array<string,string> $values
      */
-    private function reject(App $app, array $values, string $said, int $status, int $retryAfter = 0): Response
-    {
-        $response = $this->site->contactRejected($app, $values, ['_' => $said], $status);
+    private function reject(
+        App $app,
+        array $values,
+        string $said,
+        int $status,
+        int $retryAfter = 0,
+        bool $tokenPassed = false,
+    ): Response {
+        $response = $this->site->contactRejected($app, $values, ['_' => $said], $status, $tokenPassed);
 
         if ($retryAfter > 0) {
             $response->header('Retry-After', (string) $retryAfter);

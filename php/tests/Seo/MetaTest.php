@@ -271,7 +271,7 @@ final class MetaTest extends TestCase
         // It still has a head worth having: a title, a description and a card.
         $this->assertStringContains('Speedat International Courier', $tags['og:title']);
         $this->assertNotSame('', $tags['description']);
-        $this->assertStringContains('og-default.png', $tags['og:image']);
+        $this->assertStringContains(ShareCard::CARD_PNG, $tags['og:image']);
     }
 
     public function testTheErrorRouteNeverReflectsTheRequestedPath(): void
@@ -293,7 +293,7 @@ final class MetaTest extends TestCase
     {
         $tags = $this->map(Routes::byKey('home'));
 
-        $this->assertSame('https://speedat.com.pk/assets/img/og-default.png', $tags['og:image']);
+        $this->assertSame('https://speedat.com.pk/' . ShareCard::CARD_PNG, $tags['og:image']);
         $this->assertSame('image/png', $tags['og:image:type']);
         $this->assertSame('1200', $tags['og:image:width']);
         $this->assertSame('630', $tags['og:image:height']);

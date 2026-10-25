@@ -1,0 +1,1348 @@
+{
+ "note": "HAND-WRITTEN, unlike pricing.json. These are answers the TypeScript engine cannot give, because they pin decisions taken after it: slab steps counted from the first slab, JavaScript trim() in the settings parser, add-on labels matched by key, \"Courier\" and no zero add-on in the WhatsApp text, a mixed-piece weight sentence, and a one-tonne ceiling when there is no cargo threshold (2026-10-25). Every expected value was worked out by hand and is checked by BOTH engines; docs/engine-parity.md, \"Owner-decision vectors\", explains each group. Regenerating pricing.json does not touch this file.",
+ "count": 34,
+ "sites": {
+  "ownerSlabFirst05Step1": {
+   "company": {
+    "name": "Speedat International Courier",
+    "whatsapp": "923157667076"
+   },
+   "settings": {
+    "pricingMode": "slab",
+    "currency": "PKR",
+    "volumetricDivisor": 5000,
+    "firstKg": 0.5,
+    "stepKg": 1,
+    "taxPct": 0,
+    "roundTo": 10,
+    "maxKg": 70,
+    "showEta": true,
+    "cutoffHour": 15,
+    "workingDays": "Mon, Tue, Wed, Thu, Fri, Sat",
+    "holidays": "",
+    "addons": "Pickup and service charges | 500 | on",
+    "disclaimer": "Prices are for the weight and size entered here and are confirmed when your shipment is weighed and measured at pickup. Delivery dates are estimates and exclude customs delays."
+   },
+   "services": [
+    {
+     "id": "express",
+     "name": "Express",
+     "note": "Priority air service, door to door"
+    }
+   ],
+   "destinations": [
+    {
+     "id": "gb",
+     "name": "United Kingdom",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 4000,
+       "addl": 1000,
+       "days": "3–5"
+      }
+     }
+    }
+   ]
+  },
+  "ownerSlabFirst15Step1": {
+   "company": {
+    "name": "Speedat International Courier",
+    "whatsapp": "923157667076"
+   },
+   "settings": {
+    "pricingMode": "slab",
+    "currency": "PKR",
+    "volumetricDivisor": 5000,
+    "firstKg": 1.5,
+    "stepKg": 1,
+    "taxPct": 0,
+    "roundTo": 10,
+    "maxKg": 70,
+    "showEta": true,
+    "cutoffHour": 15,
+    "workingDays": "Mon, Tue, Wed, Thu, Fri, Sat",
+    "holidays": "",
+    "addons": "Pickup and service charges | 500 | on",
+    "disclaimer": "Prices are for the weight and size entered here and are confirmed when your shipment is weighed and measured at pickup. Delivery dates are estimates and exclude customs delays."
+   },
+   "services": [
+    {
+     "id": "express",
+     "name": "Express",
+     "note": "Priority air service, door to door"
+    }
+   ],
+   "destinations": [
+    {
+     "id": "gb",
+     "name": "United Kingdom",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 4000,
+       "addl": 1000,
+       "days": "3–5"
+      }
+     }
+    }
+   ]
+  },
+  "ownerSlabNoLimit": {
+   "company": {
+    "name": "Speedat International Courier",
+    "whatsapp": "923157667076"
+   },
+   "settings": {
+    "pricingMode": "slab",
+    "currency": "PKR",
+    "volumetricDivisor": 5000,
+    "firstKg": 0.5,
+    "stepKg": 0.5,
+    "taxPct": 0,
+    "roundTo": 10,
+    "maxKg": 0,
+    "showEta": true,
+    "cutoffHour": 15,
+    "workingDays": "Mon, Tue, Wed, Thu, Fri, Sat",
+    "holidays": "",
+    "addons": "Pickup and service charges | 500 | on",
+    "disclaimer": "Prices are for the weight and size entered here and are confirmed when your shipment is weighed and measured at pickup. Delivery dates are estimates and exclude customs delays."
+   },
+   "services": [
+    {
+     "id": "express",
+     "name": "Express",
+     "note": "Priority air service, door to door"
+    }
+   ],
+   "destinations": [
+    {
+     "id": "gb",
+     "name": "United Kingdom",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 4000,
+       "addl": 1000,
+       "days": "3–5"
+      }
+     }
+    }
+   ]
+  },
+  "ownerSeed": {
+   "company": {
+    "name": "Speedat International Courier",
+    "whatsapp": "923157667076"
+   },
+   "settings": {
+    "pricingMode": "slab",
+    "currency": "PKR",
+    "volumetricDivisor": 5000,
+    "firstKg": 0.5,
+    "stepKg": 0.5,
+    "taxPct": 0,
+    "roundTo": 10,
+    "maxKg": 70,
+    "showEta": true,
+    "cutoffHour": 15,
+    "workingDays": "Mon, Tue, Wed, Thu, Fri, Sat",
+    "holidays": "",
+    "addons": "Pickup and service charges | 500 | on",
+    "disclaimer": "Prices are for the weight and size entered here and are confirmed when your shipment is weighed and measured at pickup. Delivery dates are estimates and exclude customs delays."
+   },
+   "services": [
+    {
+     "id": "express",
+     "name": "Express",
+     "note": "Priority air service, door to door"
+    },
+    {
+     "id": "normal",
+     "name": "Normal",
+     "note": "Economy air service, door to door"
+    }
+   ],
+   "destinations": [
+    {
+     "id": "gb",
+     "name": "United Kingdom",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 4500,
+       "addl": 1100,
+       "days": "3–5"
+      },
+      "normal": {
+       "first": 3200,
+       "addl": 850,
+       "days": "6–9"
+      }
+     }
+    },
+    {
+     "id": "us",
+     "name": "United States",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 5200,
+       "addl": 1300,
+       "days": "4–6"
+      },
+      "normal": {
+       "first": 3800,
+       "addl": 950,
+       "days": "7–10"
+      }
+     }
+    },
+    {
+     "id": "ca",
+     "name": "Canada",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 5400,
+       "addl": 1350,
+       "days": "4–6"
+      },
+      "normal": {
+       "first": 3900,
+       "addl": 980,
+       "days": "7–10"
+      }
+     }
+    },
+    {
+     "id": "au",
+     "name": "Australia",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 5600,
+       "addl": 1400,
+       "days": "4–6"
+      },
+      "normal": {
+       "first": 4000,
+       "addl": 1000,
+       "days": "7–10"
+      }
+     }
+    },
+    {
+     "id": "ae",
+     "name": "United Arab Emirates",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 3200,
+       "addl": 800,
+       "days": "2–3"
+      },
+      "normal": {
+       "first": 2400,
+       "addl": 600,
+       "days": "4–6"
+      }
+     }
+    },
+    {
+     "id": "sa",
+     "name": "Saudi Arabia",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 3400,
+       "addl": 850,
+       "days": "2–4"
+      },
+      "normal": {
+       "first": 2500,
+       "addl": 650,
+       "days": "4–7"
+      }
+     }
+    },
+    {
+     "id": "de",
+     "name": "Germany",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 4700,
+       "addl": 1150,
+       "days": "3–5"
+      },
+      "normal": {
+       "first": 3300,
+       "addl": 880,
+       "days": "6–9"
+      }
+     }
+    },
+    {
+     "id": "it",
+     "name": "Italy",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 4700,
+       "addl": 1150,
+       "days": "3–5"
+      },
+      "normal": {
+       "first": 3300,
+       "addl": 880,
+       "days": "6–9"
+      }
+     }
+    },
+    {
+     "id": "tr",
+     "name": "Türkiye",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 4300,
+       "addl": 1050,
+       "days": "3–5"
+      },
+      "normal": {
+       "first": 3100,
+       "addl": 800,
+       "days": "6–9"
+      }
+     }
+    },
+    {
+     "id": "my",
+     "name": "Malaysia",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 4100,
+       "addl": 1000,
+       "days": "3–5"
+      },
+      "normal": {
+       "first": 3000,
+       "addl": 780,
+       "days": "6–9"
+      }
+     }
+    }
+   ]
+  }
+ },
+ "groups": [
+  {
+   "fn": "computeWeights",
+   "cases": [
+    {
+     "name": "ownerSlabFirst05Step1: 0.3 kg",
+     "input": {
+      "site": "ownerSlabFirst05Step1",
+      "rows": [
+       {
+        "kg": 0.3,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": {
+      "pieces": 1,
+      "actualG": 300,
+      "volG": 0,
+      "chargeG": 300,
+      "billableG": 500,
+      "volumetricWins": false,
+      "lines": [
+       {
+        "qty": 1,
+        "kg": 0.3,
+        "L": null,
+        "W": null,
+        "H": null,
+        "actualG": 300,
+        "volG": 0,
+        "pieceG": 300,
+        "volumetricWins": false
+       }
+      ]
+     }
+    },
+    {
+     "name": "ownerSlabFirst05Step1: 0.5 kg",
+     "input": {
+      "site": "ownerSlabFirst05Step1",
+      "rows": [
+       {
+        "kg": 0.5,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": {
+      "pieces": 1,
+      "actualG": 500,
+      "volG": 0,
+      "chargeG": 500,
+      "billableG": 500,
+      "volumetricWins": false,
+      "lines": [
+       {
+        "qty": 1,
+        "kg": 0.5,
+        "L": null,
+        "W": null,
+        "H": null,
+        "actualG": 500,
+        "volG": 0,
+        "pieceG": 500,
+        "volumetricWins": false
+       }
+      ]
+     }
+    },
+    {
+     "name": "ownerSlabFirst05Step1: 1.2 kg",
+     "input": {
+      "site": "ownerSlabFirst05Step1",
+      "rows": [
+       {
+        "kg": 1.2,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": {
+      "pieces": 1,
+      "actualG": 1200,
+      "volG": 0,
+      "chargeG": 1200,
+      "billableG": 1500,
+      "volumetricWins": false,
+      "lines": [
+       {
+        "qty": 1,
+        "kg": 1.2,
+        "L": null,
+        "W": null,
+        "H": null,
+        "actualG": 1200,
+        "volG": 0,
+        "pieceG": 1200,
+        "volumetricWins": false
+       }
+      ]
+     }
+    },
+    {
+     "name": "ownerSlabFirst05Step1: 1.5 kg",
+     "input": {
+      "site": "ownerSlabFirst05Step1",
+      "rows": [
+       {
+        "kg": 1.5,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": {
+      "pieces": 1,
+      "actualG": 1500,
+      "volG": 0,
+      "chargeG": 1500,
+      "billableG": 1500,
+      "volumetricWins": false,
+      "lines": [
+       {
+        "qty": 1,
+        "kg": 1.5,
+        "L": null,
+        "W": null,
+        "H": null,
+        "actualG": 1500,
+        "volG": 0,
+        "pieceG": 1500,
+        "volumetricWins": false
+       }
+      ]
+     }
+    },
+    {
+     "name": "ownerSlabFirst05Step1: 2 kg",
+     "input": {
+      "site": "ownerSlabFirst05Step1",
+      "rows": [
+       {
+        "kg": 2,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": {
+      "pieces": 1,
+      "actualG": 2000,
+      "volG": 0,
+      "chargeG": 2000,
+      "billableG": 2500,
+      "volumetricWins": false,
+      "lines": [
+       {
+        "qty": 1,
+        "kg": 2,
+        "L": null,
+        "W": null,
+        "H": null,
+        "actualG": 2000,
+        "volG": 0,
+        "pieceG": 2000,
+        "volumetricWins": false
+       }
+      ]
+     }
+    },
+    {
+     "name": "ownerSlabFirst15Step1: 1 kg",
+     "input": {
+      "site": "ownerSlabFirst15Step1",
+      "rows": [
+       {
+        "kg": 1,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": {
+      "pieces": 1,
+      "actualG": 1000,
+      "volG": 0,
+      "chargeG": 1000,
+      "billableG": 1500,
+      "volumetricWins": false,
+      "lines": [
+       {
+        "qty": 1,
+        "kg": 1,
+        "L": null,
+        "W": null,
+        "H": null,
+        "actualG": 1000,
+        "volG": 0,
+        "pieceG": 1000,
+        "volumetricWins": false
+       }
+      ]
+     }
+    },
+    {
+     "name": "ownerSlabFirst15Step1: 2 kg",
+     "input": {
+      "site": "ownerSlabFirst15Step1",
+      "rows": [
+       {
+        "kg": 2,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": {
+      "pieces": 1,
+      "actualG": 2000,
+      "volG": 0,
+      "chargeG": 2000,
+      "billableG": 2500,
+      "volumetricWins": false,
+      "lines": [
+       {
+        "qty": 1,
+        "kg": 2,
+        "L": null,
+        "W": null,
+        "H": null,
+        "actualG": 2000,
+        "volG": 0,
+        "pieceG": 2000,
+        "volumetricWins": false
+       }
+      ]
+     }
+    },
+    {
+     "name": "ownerSlabFirst15Step1: 2.6 kg",
+     "input": {
+      "site": "ownerSlabFirst15Step1",
+      "rows": [
+       {
+        "kg": 2.6,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": {
+      "pieces": 1,
+      "actualG": 2600,
+      "volG": 0,
+      "chargeG": 2600,
+      "billableG": 3500,
+      "volumetricWins": false,
+      "lines": [
+       {
+        "qty": 1,
+        "kg": 2.6,
+        "L": null,
+        "W": null,
+        "H": null,
+        "actualG": 2600,
+        "volG": 0,
+        "pieceG": 2600,
+        "volumetricWins": false
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "fn": "priceAll",
+   "cases": [
+    {
+     "name": "ownerSlabFirst05Step1: gb 0.5 kg",
+     "input": {
+      "site": "ownerSlabFirst05Step1",
+      "input": {
+       "destId": "gb",
+       "rows": [
+        {
+         "kg": 0.5,
+         "qty": 1
+        }
+       ]
+      }
+     },
+     "expected": {
+      "ok": true,
+      "destId": "gb",
+      "weights": {
+       "pieces": 1,
+       "actualG": 500,
+       "volG": 0,
+       "chargeG": 500,
+       "billableG": 500,
+       "volumetricWins": false,
+       "lines": [
+        {
+         "qty": 1,
+         "kg": 0.5,
+         "L": null,
+         "W": null,
+         "H": null,
+         "actualG": 500,
+         "volG": 0,
+         "pieceG": 500,
+         "volumetricWins": false
+        }
+       ]
+      },
+      "prices": {
+       "express": {
+        "first": 4000,
+        "addl": 1000,
+        "steps": 0,
+        "gridKg": null,
+        "base": 4000,
+        "tax": 0,
+        "total": 4000,
+        "days": "3–5"
+       }
+      }
+     }
+    },
+    {
+     "name": "ownerSlabFirst05Step1: gb 1.2 kg",
+     "input": {
+      "site": "ownerSlabFirst05Step1",
+      "input": {
+       "destId": "gb",
+       "rows": [
+        {
+         "kg": 1.2,
+         "qty": 1
+        }
+       ]
+      }
+     },
+     "expected": {
+      "ok": true,
+      "destId": "gb",
+      "weights": {
+       "pieces": 1,
+       "actualG": 1200,
+       "volG": 0,
+       "chargeG": 1200,
+       "billableG": 1500,
+       "volumetricWins": false,
+       "lines": [
+        {
+         "qty": 1,
+         "kg": 1.2,
+         "L": null,
+         "W": null,
+         "H": null,
+         "actualG": 1200,
+         "volG": 0,
+         "pieceG": 1200,
+         "volumetricWins": false
+        }
+       ]
+      },
+      "prices": {
+       "express": {
+        "first": 4000,
+        "addl": 1000,
+        "steps": 1,
+        "gridKg": null,
+        "base": 5000,
+        "tax": 0,
+        "total": 5000,
+        "days": "3–5"
+       }
+      }
+     }
+    },
+    {
+     "name": "ownerSlabFirst05Step1: gb 2 kg",
+     "input": {
+      "site": "ownerSlabFirst05Step1",
+      "input": {
+       "destId": "gb",
+       "rows": [
+        {
+         "kg": 2,
+         "qty": 1
+        }
+       ]
+      }
+     },
+     "expected": {
+      "ok": true,
+      "destId": "gb",
+      "weights": {
+       "pieces": 1,
+       "actualG": 2000,
+       "volG": 0,
+       "chargeG": 2000,
+       "billableG": 2500,
+       "volumetricWins": false,
+       "lines": [
+        {
+         "qty": 1,
+         "kg": 2,
+         "L": null,
+         "W": null,
+         "H": null,
+         "actualG": 2000,
+         "volG": 0,
+         "pieceG": 2000,
+         "volumetricWins": false
+        }
+       ]
+      },
+      "prices": {
+       "express": {
+        "first": 4000,
+        "addl": 1000,
+        "steps": 2,
+        "gridKg": null,
+        "base": 6000,
+        "tax": 0,
+        "total": 6000,
+        "days": "3–5"
+       }
+      }
+     }
+    },
+    {
+     "name": "ownerSlabFirst15Step1: gb 1.5 kg",
+     "input": {
+      "site": "ownerSlabFirst15Step1",
+      "input": {
+       "destId": "gb",
+       "rows": [
+        {
+         "kg": 1.5,
+         "qty": 1
+        }
+       ]
+      }
+     },
+     "expected": {
+      "ok": true,
+      "destId": "gb",
+      "weights": {
+       "pieces": 1,
+       "actualG": 1500,
+       "volG": 0,
+       "chargeG": 1500,
+       "billableG": 1500,
+       "volumetricWins": false,
+       "lines": [
+        {
+         "qty": 1,
+         "kg": 1.5,
+         "L": null,
+         "W": null,
+         "H": null,
+         "actualG": 1500,
+         "volG": 0,
+         "pieceG": 1500,
+         "volumetricWins": false
+        }
+       ]
+      },
+      "prices": {
+       "express": {
+        "first": 4000,
+        "addl": 1000,
+        "steps": 0,
+        "gridKg": null,
+        "base": 4000,
+        "tax": 0,
+        "total": 4000,
+        "days": "3–5"
+       }
+      }
+     }
+    },
+    {
+     "name": "ownerSlabFirst15Step1: gb 2 kg",
+     "input": {
+      "site": "ownerSlabFirst15Step1",
+      "input": {
+       "destId": "gb",
+       "rows": [
+        {
+         "kg": 2,
+         "qty": 1
+        }
+       ]
+      }
+     },
+     "expected": {
+      "ok": true,
+      "destId": "gb",
+      "weights": {
+       "pieces": 1,
+       "actualG": 2000,
+       "volG": 0,
+       "chargeG": 2000,
+       "billableG": 2500,
+       "volumetricWins": false,
+       "lines": [
+        {
+         "qty": 1,
+         "kg": 2,
+         "L": null,
+         "W": null,
+         "H": null,
+         "actualG": 2000,
+         "volG": 0,
+         "pieceG": 2000,
+         "volumetricWins": false
+        }
+       ]
+      },
+      "prices": {
+       "express": {
+        "first": 4000,
+        "addl": 1000,
+        "steps": 1,
+        "gridKg": null,
+        "base": 5000,
+        "tax": 0,
+        "total": 5000,
+        "days": "3–5"
+       }
+      }
+     }
+    },
+    {
+     "name": "ownerSlabNoLimit: gb 3 x 400 kg is a cargo enquiry",
+     "input": {
+      "site": "ownerSlabNoLimit",
+      "input": {
+       "destId": "gb",
+       "rows": [
+        {
+         "kg": 400,
+         "qty": 3
+        }
+       ]
+      }
+     },
+     "expected": {
+      "ok": false,
+      "reason": "overmax",
+      "destId": "gb",
+      "weights": {
+       "pieces": 3,
+       "actualG": 1200000,
+       "volG": 0,
+       "chargeG": 1200000,
+       "billableG": 1200000,
+       "volumetricWins": false,
+       "lines": [
+        {
+         "qty": 3,
+         "kg": 400,
+         "L": null,
+         "W": null,
+         "H": null,
+         "actualG": 400000,
+         "volG": 0,
+         "pieceG": 400000,
+         "volumetricWins": false
+        }
+       ]
+      }
+     }
+    },
+    {
+     "name": "ownerSlabNoLimit: gb 1000 kg is still priced",
+     "input": {
+      "site": "ownerSlabNoLimit",
+      "input": {
+       "destId": "gb",
+       "rows": [
+        {
+         "kg": 1000,
+         "qty": 1
+        }
+       ]
+      }
+     },
+     "expected": {
+      "ok": true,
+      "destId": "gb",
+      "weights": {
+       "pieces": 1,
+       "actualG": 1000000,
+       "volG": 0,
+       "chargeG": 1000000,
+       "billableG": 1000000,
+       "volumetricWins": false,
+       "lines": [
+        {
+         "qty": 1,
+         "kg": 1000,
+         "L": null,
+         "W": null,
+         "H": null,
+         "actualG": 1000000,
+         "volG": 0,
+         "pieceG": 1000000,
+         "volumetricWins": false
+        }
+       ]
+      },
+      "prices": {
+       "express": {
+        "first": 4000,
+        "addl": 1000,
+        "steps": 1999,
+        "gridKg": null,
+        "base": 2003000,
+        "tax": 0,
+        "total": 2003000,
+        "days": "3–5"
+       }
+      }
+     }
+    },
+    {
+     "name": "ownerSlabNoLimit: gb 1000.1 kg is a cargo enquiry",
+     "input": {
+      "site": "ownerSlabNoLimit",
+      "input": {
+       "destId": "gb",
+       "rows": [
+        {
+         "kg": 1000.1,
+         "qty": 1
+        }
+       ]
+      }
+     },
+     "expected": {
+      "ok": false,
+      "reason": "overmax",
+      "destId": "gb",
+      "weights": {
+       "pieces": 1,
+       "actualG": 1000100,
+       "volG": 0,
+       "chargeG": 1000100,
+       "billableG": 1000500,
+       "volumetricWins": false,
+       "lines": [
+        {
+         "qty": 1,
+         "kg": 1000.1,
+         "L": null,
+         "W": null,
+         "H": null,
+         "actualG": 1000100,
+         "volG": 0,
+         "pieceG": 1000100,
+         "volumetricWins": false
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "fn": "weightSentence",
+   "cases": [
+    {
+     "name": "ownerSlabFirst05Step1: 0.3 kg is the minimum",
+     "input": {
+      "site": "ownerSlabFirst05Step1",
+      "rows": [
+       {
+        "kg": 0.3,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": "Charged on 0.5 kg (0.3 kg, minimum 0.5 kg)."
+    },
+    {
+     "name": "ownerSlabFirst05Step1: 1.2 kg",
+     "input": {
+      "site": "ownerSlabFirst05Step1",
+      "rows": [
+       {
+        "kg": 1.2,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": "Charged on 1.5 kg (1.2 kg, rounded up to the next 1 kg)."
+    },
+    {
+     "name": "ownerSlabFirst15Step1: 1 kg is the minimum",
+     "input": {
+      "site": "ownerSlabFirst15Step1",
+      "rows": [
+       {
+        "kg": 1,
+        "qty": 1
+       }
+      ]
+     },
+     "expected": "Charged on 1.5 kg (1 kg, minimum 1.5 kg)."
+    },
+    {
+     "name": "ownerSeed: mixed pieces",
+     "input": {
+      "site": "ownerSeed",
+      "rows": [
+       {
+        "kg": 10,
+        "qty": 1,
+        "L": 10,
+        "W": 10,
+        "H": 10
+       },
+       {
+        "kg": 1,
+        "qty": 1,
+        "L": 50,
+        "W": 50,
+        "H": 20
+       }
+      ]
+     },
+     "expected": "Charged on 20 kg for 2 pieces - each piece is charged at the greater of its actual and volumetric weight (11 kg actual in total)."
+    },
+    {
+     "name": "ownerSeed: every piece volumetric",
+     "input": {
+      "site": "ownerSeed",
+      "rows": [
+       {
+        "kg": 1,
+        "qty": 1,
+        "L": 50,
+        "W": 40,
+        "H": 30
+       },
+       {
+        "kg": 1,
+        "qty": 1,
+        "L": 50,
+        "W": 50,
+        "H": 20
+       }
+      ]
+     },
+     "expected": "Charged on 22 kg for 2 pieces - volumetric weight (22 kg) is higher than actual (2 kg)."
+    }
+   ]
+  },
+  {
+   "fn": "parts",
+   "cases": [
+    {
+     "name": "trailing no-break space",
+     "input": {
+      "line": "Delivery | 1000 | on ",
+      "n": 3
+     },
+     "expected": [
+      "Delivery",
+      "1000",
+      "on"
+     ]
+    },
+    {
+     "name": "unicode spaces and a BOM",
+     "input": {
+      "line": " Insurance　| 250|off﻿",
+      "n": 3
+     },
+     "expected": [
+      "Insurance",
+      "250",
+      "off"
+     ]
+    }
+   ]
+  },
+  {
+   "fn": "addonsList",
+   "cases": [
+    {
+     "name": "on with a trailing no-break space",
+     "input": {
+      "addons": "Delivery | 1000 | on "
+     },
+     "expected": [
+      {
+       "id": "a0",
+       "label": "Delivery",
+       "amount": 1000,
+       "on": true
+      }
+     ]
+    },
+    {
+     "name": "a line of only no-break spaces is empty",
+     "input": {
+      "addons": "A | 1 | on\n  \nB | 2 | off"
+     },
+     "expected": [
+      {
+       "id": "a0",
+       "label": "A",
+       "amount": 1,
+       "on": true
+      },
+      {
+       "id": "a1",
+       "label": "B",
+       "amount": 2,
+       "on": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "fn": "toNumLoose",
+   "cases": [
+    {
+     "name": "dash padded with no-break spaces",
+     "input": {
+      "v": " - "
+     },
+     "expected": {
+      "value": null
+     }
+    },
+    {
+     "name": "n/a with a BOM",
+     "input": {
+      "v": "﻿n/a"
+     },
+     "expected": {
+      "value": null
+     }
+    }
+   ]
+  },
+  {
+   "fn": "resolveAddons",
+   "cases": [
+    {
+     "name": "double space in the document label",
+     "input": {
+      "addons": "Pickup  and packing | 500 | on",
+      "labels": [
+       "Pickup and packing"
+      ]
+     },
+     "expected": [
+      {
+       "id": "a0",
+       "label": "Pickup  and packing",
+       "amount": 500,
+       "on": true
+      }
+     ]
+    },
+    {
+     "name": "tab in the document label",
+     "input": {
+      "addons": "Pickup\tand packing | 500 | on",
+      "labels": [
+       "Pickup and packing"
+      ]
+     },
+     "expected": [
+      {
+       "id": "a0",
+       "label": "Pickup\tand packing",
+       "amount": 500,
+       "on": true
+      }
+     ]
+    },
+    {
+     "name": "label longer than 80 characters, posted cut",
+     "input": {
+      "addons": "Insurance for fragile and high value goods, declared at booking and confirmed at pickup by our team | 250 | off",
+      "labels": [
+       "Insurance for fragile and high value goods, declared at booking and confirmed at"
+      ]
+     },
+     "expected": [
+      {
+       "id": "a0",
+       "label": "Insurance for fragile and high value goods, declared at booking and confirmed at pickup by our team",
+       "amount": 250,
+       "on": false
+      }
+     ]
+    },
+    {
+     "name": "label longer than 80 characters, posted whole",
+     "input": {
+      "addons": "Insurance for fragile and high value goods, declared at booking and confirmed at pickup by our team | 250 | off",
+      "labels": [
+       "Insurance for fragile and high value goods, declared at booking and confirmed at pickup by our team"
+      ]
+     },
+     "expected": [
+      {
+       "id": "a0",
+       "label": "Insurance for fragile and high value goods, declared at booking and confirmed at pickup by our team",
+       "amount": 250,
+       "on": false
+      }
+     ]
+    },
+    {
+     "name": "the 80-character cut lands on a space",
+     "input": {
+      "addons": "Fragile goods cover Fragile goods cover Fragile goods cover Fragile goods cover Fragile goods cover | 900 | off",
+      "labels": [
+       "Fragile goods cover Fragile goods cover Fragile goods cover Fragile goods cover "
+      ]
+     },
+     "expected": [
+      {
+       "id": "a0",
+       "label": "Fragile goods cover Fragile goods cover Fragile goods cover Fragile goods cover Fragile goods cover",
+       "amount": 900,
+       "on": false
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "fn": "quoteText",
+   "cases": [
+    {
+     "name": "a zero add-on prints no line",
+     "input": {
+      "quote": {
+       "id": "SP-260922-TEST",
+       "from": "",
+       "dest": "Canada",
+       "destId": "ca",
+       "service": "Express",
+       "serviceId": "express",
+       "days": "4–6",
+       "eta": "",
+       "pickup": "",
+       "pieces": 1,
+       "piecesText": "1 × 5 kg",
+       "billableG": 5000,
+       "chargeG": 5000,
+       "total": 17550,
+       "version": 1
+      },
+      "companyName": "Speedat",
+      "currency": "PKR",
+      "addonSettings": "Delivery | 0 | on\nPickup and service charges | 500 | on",
+      "addonLabels": [
+       "Delivery",
+       "Pickup and service charges"
+      ],
+      "contents": null
+     },
+     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: Canada\nService: Express (4–6 working days)\nPackages: 1 × 5 kg\nCharged on: 5 kg\nCourier: PKR 17,550\nPickup and service charges: PKR 500\nTotal: PKR 18,050"
+    },
+    {
+     "name": "only a zero add-on is a single price",
+     "input": {
+      "quote": {
+       "id": "SP-260922-TEST",
+       "from": "",
+       "dest": "Canada",
+       "destId": "ca",
+       "service": "Express",
+       "serviceId": "express",
+       "days": "4–6",
+       "eta": "",
+       "pickup": "",
+       "pieces": 1,
+       "piecesText": "1 × 5 kg",
+       "billableG": 5000,
+       "chargeG": 5000,
+       "total": 17550,
+       "version": 1
+      },
+      "companyName": "Speedat",
+      "currency": "PKR",
+      "addonSettings": "Delivery | 0 | on\nPickup and service charges | 500 | on",
+      "addonLabels": [
+       "Delivery"
+      ],
+      "contents": null
+     },
+     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: Canada\nService: Express (4–6 working days)\nPackages: 1 × 5 kg\nCharged on: 5 kg\nPrice: PKR 17,550"
+    }
+   ]
+  }
+ ]
+}

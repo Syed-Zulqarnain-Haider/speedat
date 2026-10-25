@@ -61,7 +61,7 @@ $disabled = $readOnly ? ' disabled' : '';
   <label class="field">
     <span>Button link</span>
     <input type="text" name="promo[ctaHref]" value="<?= e($draft->promo('ctaHref')) ?>" maxlength="300" form="editor"<?= $disabled ?>>
-    <span class="hint">Where the button goes: a full https:// link, a page like /contact, or a wa.me / mailto link.</span>
+    <span class="hint">Where the button goes: a full link like https://wa.me/923001234567, a page like /contact, or a mailto: link.</span>
   </label>
 
   <div class="btn-row">

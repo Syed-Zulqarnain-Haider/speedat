@@ -1171,6 +1171,8 @@ dl.facts dd {
 }
 .faq-list dd {
   margin: 8px 0 0;
+  /* The owner types answers in a textarea; a blank line there is a paragraph break and must read as one. */
+  white-space: pre-line;
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   color: var(--muted);
@@ -1481,6 +1483,15 @@ dl.facts dd {
     bottom: calc(28px + var(--tap-big, 56px) + 17px + env(safe-area-inset-bottom, 0px));
   }
 }
+/* Under 360 the live bar stacks (calculator.css) and stands ~129px tall, not 73: the lift above left the card
+   28px short, and z-toast put it OVER the bar, so the 28px price figure sat under the card until it was
+   dismissed (measured at 320, 2026-10-25). Mirrors the grown --i-bar, the same as the footer's under-360 rule. */
+@media (max-width: 359.98px) {
+  .site.wrap:has(.pricebar) .promo-pop:not([hidden]),
+  .site.wrap:has(.pricebar) ~ .promo-pop:not([hidden]) {
+    bottom: calc(12px + var(--tap-big, 56px) + 73px + env(safe-area-inset-bottom, 0px));
+  }
+}
 /* A gentle rise as the card appears; reduced motion gets it with no movement. */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes promo-rise {
@@ -1741,6 +1752,9 @@ dl.facts dd {
 }
 .review-text {
   margin: 0;
+  /* A pasted Google review keeps its line breaks in the store; without this a two-paragraph review printed
+     as one run-on block. pre-line keeps the breaks and still collapses runs of spaces. */
+  white-space: pre-line;
   font-size: var(--fs-body);
   line-height: 1.55;
   color: var(--ink);

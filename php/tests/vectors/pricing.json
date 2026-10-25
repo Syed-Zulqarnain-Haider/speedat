@@ -32540,7 +32540,7 @@
       ],
       "contents": null
      },
-     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: Canada\nService: Express (4–6 working days)\nPackages: 1 × 5 kg\nCharged on: 5 kg\nShipping: PKR 17,550\nPickup and service charges: PKR 500\nTotal: PKR 18,050"
+     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: Canada\nService: Express (4–6 working days)\nPackages: 1 × 5 kg\nCharged on: 5 kg\nCourier: PKR 17,550\nPickup and service charges: PKR 500\nTotal: PKR 18,050"
     },
     {
      "name": "uk normal 2.5kg with eta / no add-ons",
@@ -32598,7 +32598,7 @@
       ],
       "contents": "Two shirts"
      },
-     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nFrom: Lahore\nTo: United Kingdom\nService: Normal (6–9 working days)\nPickup: Sat 19 Sept\nEstimated delivery: Wed 23 Sept – Fri 25 Sept\nPackages: 1 × 2.5 kg\nCharged on: 2.5 kg\nShipping: PKR 6,600\nPickup and service charges: PKR 500\nTotal: PKR 7,100\nContents: Two shirts"
+     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nFrom: Lahore\nTo: United Kingdom\nService: Normal (6–9 working days)\nPickup: Sat 19 Sept\nEstimated delivery: Wed 23 Sept – Fri 25 Sept\nPackages: 1 × 2.5 kg\nCharged on: 2.5 kg\nCourier: PKR 6,600\nPickup and service charges: PKR 500\nTotal: PKR 7,100\nContents: Two shirts"
     },
     {
      "name": "grid uk 1.2kg / no add-ons",
@@ -32656,7 +32656,7 @@
       ],
       "contents": "  "
      },
-     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: United Kingdom\nService: Express (3–5 working days)\nPackages: 1 × 1.2 kg\nCharged on: 2 kg\nShipping: PKR 7,800\nPickup and service charges: PKR 500\nTotal: PKR 8,300"
+     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: United Kingdom\nService: Express (3–5 working days)\nPackages: 1 × 1.2 kg\nCharged on: 2 kg\nCourier: PKR 7,800\nPickup and service charges: PKR 500\nTotal: PKR 8,300"
     },
     {
      "name": "no transit days / no add-ons",
@@ -32714,7 +32714,7 @@
       ],
       "contents": "Papers"
      },
-     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: X\nService: Express\nPackages: 1 × 1 kg\nCharged on: 1 kg\nShipping: PKR 1,100\nPickup and service charges: PKR 500\nTotal: PKR 1,600\nContents: Papers"
+     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: X\nService: Express\nPackages: 1 × 1 kg\nCharged on: 1 kg\nCourier: PKR 1,100\nPickup and service charges: PKR 500\nTotal: PKR 1,600\nContents: Papers"
     }
    ]
   },
@@ -33122,7 +33122,7 @@
       "site": "gridWithGaps"
      },
      "expected": [
-      "United Kingdom · Express: no price for 20 weights (3, 4, 6, 7, 8, 9… kg) - those parcels are charged at the next heavier priced kg.",
+      "United Kingdom · Express: no price for 20 weights (3, 4, 6, 7, 8, 9… kg) - customers at those weights get no price on the site and are sent to WhatsApp.",
       "United Kingdom · Express: no price above 24 kg - parcels of 25 kg get no price on the site and are sent to WhatsApp.",
       "United Kingdom: Express is cheaper than Normal (PKR 4,000 vs PKR 4,050)."
      ]

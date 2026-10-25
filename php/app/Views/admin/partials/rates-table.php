@@ -80,10 +80,15 @@ $keys = ['revision' => $revision, 'baseVersion' => $baseVersion];
            aria-label="Find a destination" data-filter-table="rates-table">
     <button class="btn small outline" type="submit" form="tableform" formaction="<?= e($this->url(Routes::SORT_DESTINATIONS)) ?>" name="sort" value="az"<?= $page->readOnly ? ' disabled' : '' ?>>Sort A&#8211;Z</button>
     <button class="btn small primary" type="submit" form="tableform" formaction="<?= e($this->url(Routes::ADD_DESTINATION)) ?>" name="add" value="1"<?= $page->readOnly ? ' disabled' : '' ?>>Add country</button>
-    <a class="btn small" href="<?= e($this->url(Routes::EXPORT_CSV)) ?>" download>Download as CSV</a>
+    <a class="btn small" href="<?= e($this->url(Routes::EXPORT_CSV)) ?>" download
+       title="<?= e('The live prices, version ' . $page->live->version . ' - not the unpublished draft') ?>">Download as CSV</a>
     <?php /* The copy button needs the text in the browser; the server puts it below.
              Without JavaScript it stays hidden and the download link is the way out. */ ?>
-    <button class="btn small" type="button" data-copy-from="rates-csv" data-copy-ok="CSV copied to the clipboard" hidden>Copy as CSV</button>
+    <?php /* Both say WHICH prices in their title: the label is the one the
+             owner has learned, and the source is what he has to know before
+             the text leaves the building. */ ?>
+    <button class="btn small" type="button" data-copy-from="rates-csv" data-copy-ok="<?= e('Live prices (version ' . $page->live->version . ') copied to the clipboard') ?>"
+            title="<?= e('The live prices, version ' . $page->live->version . ' - not the unpublished draft') ?>" hidden>Copy as CSV</button>
     <?php /* One weight down every country - how a rate change usually arrives
              ("10 kg is going up"). It edits the same boxes the folds do, so it
              needs the boxes in the page: JavaScript only, hidden until admin.js
@@ -97,8 +102,16 @@ $keys = ['revision' => $revision, 'baseVersion' => $baseVersion];
   <?php /* The CSV as text for the copy button. A <pre hidden> and not a <script>
            block: a country name is the owner's free text, and the one string an
            HTML script element cannot carry is "</script". Escaped here and read
-           back with textContent, which decodes it, so what lands on the
-           clipboard is byte for byte what the download gives. */ ?>
+           back with textContent, which decodes it.
+
+           IT IS THE LIVE VERSION, like the download beside it, and it starts
+           with the same "# Speedat published rates - version N" row - both are
+           `View\Admin\Csv::document()`. Until 2026-10-25 this was the DRAFT
+           with no first line, so two buttons with the same look and the same
+           wording handed out different prices, and this comment claimed they
+           were byte-identical. They now differ by the download's UTF-8 BOM
+           (kept off the clipboard) and the minute in "exported ... UTC". The
+           draft is exported at `?draft=1`, where the file says it is one. */ ?>
   <pre id="rates-csv" hidden><?= e($page->csv) ?></pre>
 
   <p class="hint save-note" data-save-note>Each country saves on its own - press <strong>Save</strong> on the row you changed. Settings and Website pages have their own Save.</p>

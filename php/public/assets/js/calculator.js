@@ -18,12 +18,21 @@
  *   the engine is wrong, and the engine is the one thing with golden vectors.
  *
  * THE RULES IT KEEPS (design brief v3 §4 - all four are load-bearing)
- *   1. Nothing scrolls by itself. There is not one scrollIntoView, focus() or
- *      hash write in this file. The visitor's thumb decides where the page is.
+ *   1. Nothing scrolls by itself. There is not one scrollIntoView or hash
+ *      write in this file. The visitor's thumb decides where the page is.
+ *      focus() appears in exactly three places, all with preventScroll so
+ *      the page cannot move (audit B6, 2026-10-25): handing focus back to the
+ *      service control a re-render replaced (keepFocus), moving it into the
+ *      view a "Box size · many pieces" / "Back" tap just opened (applyMode),
+ *      and following the arrow keys across the country tiles (onTileKey).
+ *      Each answers a key or a tap the visitor made; without them a keyboard
+ *      or screen-reader user was dropped on <body> by their own action.
  *   2. Tap feedback under 80ms. Every click handler mutates the DOM
  *      synchronously - no rAF, no timers, no debounce, no fetch on the path
  *      between the tap and the paint. The price is printed, never counted up:
- *      there is no animation code here at all, by design.
+ *      there is no animation code here at all, by design. The one timer in
+ *      the calculator (shownLog) runs AFTER the paint and only decides whether
+ *      to log a price that stayed on screen; it never touches the DOM.
  *   3. Nothing shifts when the price lands. .result carries data-state and
  *      data-n so calculator.css can reserve the room the live rows, lines and
  *      bar will take; this file only ever changes those attributes and fills
@@ -172,6 +181,26 @@
   function localDateFromInput(v) {
     var m = String(v === null || v === undefined ? "" : v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+  }
+
+  /**
+   * "Now" on the office's clock, not the visitor's.
+   *
+   * Pickup, the 3 pm cutoff, the delivery window and the date on a quote id
+   * are all Lahore facts. A relative in London booking at 11:00 local is
+   * booking at 16:00 in Lahore - after the cutoff - and the site used to
+   * promise them today's pickup anyway, in the WhatsApp text and in the
+   * stored quote (audit B6, 2026-10-25). Pakistan is UTC+5 with no daylight
+   * saving, so the offset is a constant: shift the instant by five hours and
+   * rebuild a LOCAL Date from its UTC fields. Every getter the date code uses
+   * (getHours, getDate, getDay…) then reads Karachi wall-clock time, whatever
+   * zone the device is in.
+   */
+  var KARACHI_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+  function karachiNow() {
+    var k = new Date(Date.now() + KARACHI_OFFSET_MS);
+    return new Date(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate(), k.getUTCHours(), k.getUTCMinutes(), k.getUTCSeconds(), k.getUTCMilliseconds());
   }
 
   /** SP-260920-K7QX: date-stamped, short enough to read out on the phone. */
@@ -345,19 +374,19 @@
       .join("; ");
   }
 
-  /** One sentence naming the weight the price is charged on, and the rounding the ENGINE did. */
-  function weightSentence(w, settings) {
-    var txt = "Charged on " + P.gToKg(w.billableG) + " kg" + (w.pieces > 1 ? " for " + w.pieces + " pieces" : "");
-    if (w.volumetricWins) {
-      txt += " - volumetric weight (" + P.gToKg(w.chargeG) + " kg) is higher than actual (" + P.gToKg(w.actualG) + " kg).";
-    } else if (w.billableG !== w.chargeG) {
-      var eff = P.effectiveSteps(settings);
-      var stepG = P.kgToG(eff.stepKg);
-      var byMinimum = Math.ceil(w.chargeG / stepG) * stepG < P.kgToG(eff.firstKg);
-      txt += " (" + P.gToKg(w.actualG) + " kg, " + (byMinimum ? "minimum " + eff.firstKg + " kg" : "rounded up to the next " + eff.stepKg + " kg") + ").";
-    } else txt += ".";
-    return txt;
-  }
+  /*
+   * weightSentence() and quoteText() are NOT ported here any more (audit B6,
+   * 2026-10-25). Both are server-twinned sentences - the WhatsApp message and
+   * the lead row the office reads must word one quote the same way - and
+   * pricing.js has always exported both, so adoptFromEngine() replaced the
+   * local copies on every page load. The copies never ran, and had drifted
+   * from the pair they were copies of - the "Courier" line and the zero
+   * add-on rule were fixed here and not there, and the mixed-piece wording
+   * was fixed there (B5) and not here. A twin that never runs is a second
+   * answer waiting to be believed. boot() now refuses
+   * to build the calculator without them, exactly as it does without
+   * priceAll, so there is one wording and it is the one the server shares.
+   */
 
   /** "Pickup and service charges" -> "pickup and service charges"; an acronym keeps its case. */
   function midSentence(s) {
@@ -371,30 +400,6 @@
     return addons.reduce(function (t, a) {
       return t + a.amount;
     }, shipping);
-  }
-
-  function quoteText(q, ctx) {
-    var out = ["Hi " + ctx.companyName + ", I want to book a shipment.", "Quote: " + q.id];
-    if (q.from) out.push("From: " + q.from);
-    out.push("To: " + q.dest, "Service: " + q.service + (q.days ? " (" + q.days + " working days)" : ""));
-    if (q.pickup) out.push("Pickup: " + q.pickup);
-    if (q.eta) out.push("Estimated delivery: " + q.eta);
-    // One label: there is one kind of shipment since 2026-09-27.
-    out.push("Packages: " + q.piecesText, "Charged on: " + P.gToKg(q.billableG) + " kg");
-    // Only add-ons with a real amount are shown, and the base line is
-    // "Courier" to match the on-site breakdown (not "Shipping", which read as a
-    // different thing). A Delivery left on at 0 therefore prints no line, and
-    // the message falls back to a single "Price".
-    var paidAddons = [];
-    for (var ai = 0; ai < ctx.addons.length; ai++) if (ctx.addons[ai].amount > 0) paidAddons.push(ctx.addons[ai]);
-    if (paidAddons.length) {
-      out.push("Courier: " + fmtMoney(q.total, ctx.currency));
-      for (var i = 0; i < paidAddons.length; i++) out.push(paidAddons[i].label + ": " + fmtMoney(paidAddons[i].amount, ctx.currency));
-      out.push("Total: " + fmtMoney(bookedTotal(q.total, ctx.addons), ctx.currency));
-    } else out.push("Price: " + fmtMoney(q.total, ctx.currency));
-    var c = (ctx.contents || "").trim();
-    if (c) out.push("Contents: " + c);
-    return out.join("\n");
   }
 
   function waLink(whatsapp, text) {
@@ -514,13 +519,21 @@
    * lead row logged beside it could word the same quote differently.
    *
    * So: adopt every helper pricing.js exports, keep the port for the rest.
-   * If a future pricing.js narrows back to engine.ts, this file still works.
+   * If a future pricing.js narrows back to engine.ts, this file still works -
+   * except for quoteText and weightSentence, which are taken from pricing.js
+   * or not at all (audit B6, 2026-10-25; see the note above midSentence()).
    * Parity between the two is proven by the PHP suite instead: engine-parity
    * runs the same vectors through pricing.js and App\Domain\Pricing\Engine.
    * ================================================================== */
 
+  // Bound only from pricing.js - see the note above midSentence().
+  var weightSentence = null;
+  var quoteText = null;
+
   function adoptFromEngine() {
     if (!P) return;
+    weightSentence = typeof P.weightSentence === "function" ? P.weightSentence : null;
+    quoteText = typeof P.quoteText === "function" ? P.quoteText : null;
     var take = function (name, set) {
       if (typeof P[name] === "function") set(P[name]);
     };
@@ -536,10 +549,8 @@
     take("parseDaysRange", function (f) { parseDaysRange = f; });
     take("estimateDelivery", function (f) { estimateDelivery = f; });
     take("piecesText", function (f) { piecesText = f; });
-    take("weightSentence", function (f) { weightSentence = f; });
     take("midSentence", function (f) { midSentence = f; });
     take("bookedTotal", function (f) { bookedTotal = f; });
-    take("quoteText", function (f) { quoteText = f; });
     take("waLink", function (f) { waLink = f; });
     take("cargoText", function (f) { cargoText = f; });
     if (typeof P.LB === "number") LB = P.LB;
@@ -729,7 +740,7 @@
 
     function switchMode(m) {
       writeSession("sp-mode", m);
-      applyMode();
+      applyMode(true);
     }
 
     function selectedAddons() {
@@ -768,6 +779,79 @@
       } catch (err) {
         /* logging never blocks a booking */
       }
+    }
+
+    /**
+     * THE "PRICE SHOWN" LOG (audit B6, 2026-10-25).
+     *
+     * The log used to fire only from the Book button, so every row in it was a
+     * booking: 500 visitors priced and 40 booked read as "Prices shown: 40"
+     * and a 100% WhatsApp share, and the rankings described bookers only.
+     * QuoteRepository and the stats were always written for a log that ALSO
+     * records the price being seen - this is the half that never fired.
+     *
+     * "Shown" means a live price that stayed put for SHOWN_MS. Tapping through
+     * 1, 2, 3 kg on the way to 5 is not three quotes, so every render re-arms
+     * the timer and only the price the visitor stopped on is logged. Each quote
+     * id is logged as shown at most once per tab.
+     *
+     * The id is the one the Book tap will send. It already changes with the
+     * inputs (quick: salt + destination + weight + service; detailed: a fresh
+     * id per Choose, bound to the inputs' signature), and that matters: the
+     * server refuses an id whose destination or service changed under it, so a
+     * shown-log must never borrow an id across changed inputs or the Book POST
+     * that follows it would be the one refused.
+     *
+     * Only the view on screen arms it - the hidden view re-renders too (an
+     * add-on or a country change renders both) and must not log what nobody
+     * can see. A Book tap cancels the pending shown-log; booked:true says more,
+     * and QuoteRepository keeps booked once it is set, so even a shown-log that
+     * already left cannot undo a booking that lands before it.
+     */
+    var SHOWN_MS = 1500;
+    var shownLog = (function () {
+      var timer = 0;
+      var sent = {};
+      function cancel() {
+        if (timer) clearTimeout(timer);
+        timer = 0;
+      }
+      function arm(q, addonList, extra) {
+        cancel();
+        if (!q || sent[q.id]) return;
+        timer = setTimeout(function () {
+          timer = 0;
+          sent[q.id] = true;
+          logQuote(q, addonList, extra);
+        }, SHOWN_MS);
+      }
+      function booked(id) {
+        cancel();
+        sent[id] = true;
+      }
+      return { arm: arm, cancel: cancel, booked: booked };
+    })();
+
+    /**
+     * Give focus back to the control a re-render replaced.
+     *
+     * The quick view's service radios and the detailed view's service cards
+     * are rebuilt by render(), and choosing one IS a render. The focused
+     * element was removed under the keyboard user's finger and focus fell to
+     * <body>: the next arrow key did nothing and the screen reader lost its
+     * place (audit B6, 2026-10-25). `before` is read just ahead of the clear(),
+     * `pick` finds the same control in the new markup. preventScroll, so rule
+     * 1 still holds: the page never moves.
+     */
+    function focusedIn(box) {
+      var a = document.activeElement;
+      return a && a !== document.body && box.contains(a) ? a : null;
+    }
+
+    function keepFocus(before, pick) {
+      if (!before) return;
+      var next = pick();
+      if (next && next !== document.activeElement && typeof next.focus === "function") next.focus({ preventScroll: true });
     }
 
     /* ---- the shared destination <select> (DestOptions) ------------- */
@@ -859,7 +943,19 @@
       var headWeight = h("div.step-head", null, [h("span.step-name", { text: "2 Weight" })]);
       var kgRow = h("div.kgs", { role: "group", "aria-label": "Weight" });
       var result = h("div.result");
+      // THE ONE LIVE REGION of the quick view (audit B6, 2026-10-25). It sits
+      // OUTSIDE .result because render() clears .result, and a live region
+      // that is created already holding its words is not announced by most
+      // screen readers - which is what every rebuilt pricebar-sum and p.wait
+      // used to be. This node is made once, empty, and only ever has its text
+      // changed, at the end of render(), to the readout sentence. It is .sr,
+      // so it takes no room and cannot shift anything (rule 3).
+      // It goes in the panel, not the page, so in the detailed view it is
+      // inside the hidden wrapper and says nothing.
+      var say = h("p.sr", { role: "status" });
+      var said = null;
       var tileButtons = {};
+      var tileList = [];
       var kgButtons = {};
       var picker = null;
       // The guided next-step hint that sits at the top of the weight row, and the
@@ -868,13 +964,16 @@
       var exactSel = null;
 
       panel.appendChild(h("h2.sr", { text: "Get your price" }));
+      // Near the top, not the end: ".panel > :last-child" drops its margin in
+      // calculator.css, and that child must stay .result.
+      panel.appendChild(say);
       panel.appendChild(headCountry);
       panel.appendChild(ctiles);
       panel.appendChild(headWeight);
       panel.appendChild(kgRow);
       panel.appendChild(result);
 
-      tiles.forEach(function (d) {
+      tiles.forEach(function (d, ti) {
         var from = froms[d.id];
         // A spoken name: as a bare role="radio" the tile read out as "button" on
         // some screen readers, so the country - and its from-price when there is
@@ -894,9 +993,46 @@
         btn.addEventListener("click", function () {
           setDestId(d.id);
         });
+        // Position stated outright: the "More countries" <select> shares the
+        // grid with the tiles (it is the grid's last cell, by design), and
+        // left to count the group's children a screen reader could fold it
+        // into "radio 3 of N".
+        btn.setAttribute("aria-posinset", String(ti + 1));
+        btn.setAttribute("aria-setsize", String(tiles.length));
+        btn.addEventListener("keydown", onTileKey);
         tileButtons[d.id] = btn;
+        tileList.push(btn);
         ctiles.appendChild(btn);
       });
+
+      /**
+       * A radio group behaves like one (audit B6, 2026-10-25). The tiles said
+       * role=radiogroup/radio and then behaved like eight buttons: every tile
+       * its own Tab stop and the arrow keys doing nothing. Now the group is ONE
+       * Tab stop (the checked tile, or the first when none is - roving
+       * tabindex, kept by render()) and the arrows move through it, wrapping.
+       * Moving checks the tile, which is what arrowing a native radio group
+       * does, so the price follows the keyboard exactly as it follows a tap.
+       * The More countries select stays its own Tab stop after the group.
+       */
+      function onTileKey(ev) {
+        if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+        var k = ev.key;
+        var i = tileList.indexOf(ev.currentTarget);
+        if (i < 0) return;
+        var n = tileList.length;
+        var to = -1;
+        if (k === "ArrowRight" || k === "ArrowDown") to = (i + 1) % n;
+        else if (k === "ArrowLeft" || k === "ArrowUp") to = (i - 1 + n) % n;
+        else if (k === "Home") to = 0;
+        else if (k === "End") to = n - 1;
+        // Space and Enter need nothing: the tile is a <button>, so both
+        // already click it, which checks it.
+        if (to < 0) return;
+        ev.preventDefault();
+        tileList[to].click();
+        tileList[to].focus({ preventScroll: true });
+      }
 
       if (more) {
         picker = h("select.ctile-more", { "aria-label": "More countries" });
@@ -957,15 +1093,31 @@
       });
       kgRow.appendChild(h("div.kg-exact", null, [add(h("label.kg-exact-lab"), [h("span.kg-exact-text", { text: "Or pick your exact weight" }), exactSel])]));
 
+      /*
+       * The tapped weight is remembered for the tab, and "Box size · many
+       * pieces" no longer throws it away (audit B6, 2026-10-25). A customer who
+       * tapped 5 kg and then went to the detailed view found "Weight per piece"
+       * empty, and on Back the quick view said "Now tap a weight" - the same
+       * question twice. Now the detailed view's first piece is seeded from it
+       * (detail.seedKg) and the quick view keeps it for the way back.
+       */
       function onKg(v) {
         if (v === "exact") {
-          kgv = "";
           render();
           switchMode("detail");
           return;
         }
         kgv = v;
+        if (v !== "more" && isFinite(Number(v)) && Number(v) > 0) rememberKg(v);
         render();
+      }
+
+      /** On the way back from the detailed view: its first piece's weight, if it is one we offer here. */
+      function seedKg(v) {
+        // "Over N kg" is a choice too, and a stale remembered weight must not
+        // quietly replace it.
+        if (kgv === "more") return;
+        if (v && priced.indexOf(Number(v)) >= 0) kgv = String(Number(v));
       }
 
       function etaQuick(p) {
@@ -1017,6 +1169,11 @@
         for (var id in tileButtons) {
           if (Object.prototype.hasOwnProperty.call(tileButtons, id)) tileButtons[id].setAttribute("aria-checked", id === destId() ? "true" : "false");
         }
+        // Roving tabindex: the checked tile is the group's one Tab stop, or
+        // the first tile while none is (a country chosen from the select
+        // checks no tile). See onTileKey.
+        var tabTile = tileButtons[destId()] || tileList[0] || null;
+        for (var ti2 = 0; ti2 < tileList.length; ti2++) tileList[ti2].setAttribute("tabindex", tileList[ti2] === tabTile ? "0" : "-1");
         if (picker) {
           var offTile = destId() && !tileButtons[destId()] ? destId() : "";
           picker.value = offTile;
@@ -1070,7 +1227,7 @@
           state = "live";
           var sv = null;
           for (var s2 = 0; s2 < site.services.length; s2++) if (site.services[s2].id === chosen) sv = site.services[s2];
-          var est = sets.showEta && p && p.days ? estimateDelivery(p.days, sets, null, new Date()) : null;
+          var est = sets.showEta && p && p.days ? estimateDelivery(p.days, sets, null, karachiNow()) : null;
           note = (sv ? sv.name : "") + " · " + kgv + " kg";
           noteTo = dest ? dest.name : "";
           when = est ? "Arrives " + fmtRange(est) : "";
@@ -1094,9 +1251,9 @@
         } else if (p && res && res.ok && dest) {
           var svx = null;
           for (var s3 = 0; s3 < site.services.length; s3++) if (site.services[s3].id === chosen) svx = site.services[s3];
-          var est2 = sets.showEta && p.days ? estimateDelivery(p.days, sets, null, new Date()) : null;
+          var est2 = sets.showEta && p.days ? estimateDelivery(p.days, sets, null, karachiNow()) : null;
           quote = {
-            id: quoteIdFor(salt + "|" + dest.id + "|" + kgv + "|" + chosen),
+            id: quoteIdFor(salt + "|" + dest.id + "|" + kgv + "|" + chosen, karachiNow()),
             from: "",
             dest: dest.name,
             destId: dest.id,
@@ -1152,6 +1309,9 @@
          * room the rows, lines and bar take once live (per tier and per how
          * many services the document has, hence data-n), so the third tap
          * paints into a slot that was already there and nothing below moves. */
+        // Read before the clear: was the keyboard on a service radio?
+        var focusWas = focusedIn(result);
+        var focusSvc = focusWas && focusWas.name === "q-svc" ? focusWas.value : "";
         clear(result);
         result.setAttribute("data-state", state);
         result.setAttribute("data-n", String(Math.min(site.services.length, 4)));
@@ -1222,7 +1382,9 @@
           // sticks to the bottom of the screen while the calculator is in
           // view; it is the block's LAST child, so it comes to rest at the
           // panel's end and never covers what follows.
-          var sumBox = h("div.pricebar-sum", { "aria-live": "polite" });
+          // No aria-live here: this node is new on every render, so it would
+          // be created already full and not be read. `say` speaks for it.
+          var sumBox = h("div.pricebar-sum");
           if (state === "live") sumBox.appendChild(h("span.tval", { text: fmtMoney(sum, cur) }));
           var tnote = h("span.tnote", null, [note]);
           if (noteTo) tnote.appendChild(h("span.tnote-to", { text: " · " + noteTo }));
@@ -1230,6 +1392,7 @@
           var book = h("a.btn.book.giant", { href: bookHref, target: "_blank", rel: "noopener" }, [waIcon(), bookLabel]);
           if (quote) {
             book.addEventListener("click", function () {
+              shownLog.booked(quote.id);
               logQuote(quote, picked, { booked: true, mode: "quick", contents: contents });
             });
           }
@@ -1237,7 +1400,40 @@
         } else {
           // The line that waits, at the TOP of the slot until there is a bar
           // (the CSS pins it there; the bar, when it comes, lands at the end).
-          result.appendChild(h("p.wait", { "aria-live": "polite", text: note }));
+          // Not aria-live, for the same reason as the bar; `say` reads it.
+          // The server-rendered p.wait in calculator.php keeps its aria-live:
+          // that one is in the page from the first byte, which is what a
+          // live region needs, and it is replaced by this file on mount.
+          result.appendChild(h("p.wait", { text: note }));
+        }
+
+        if (focusSvc) {
+          keepFocus(focusWas, function () {
+            var rs = result.querySelectorAll('input[name="q-svc"]');
+            for (var ri = 0; ri < rs.length; ri++) if (rs[ri].value === focusSvc) return rs[ri];
+            return null;
+          });
+        }
+
+        /* --- what the screen reader hears ------------------------- *
+         * One sentence, the same words the eye reads: the figure, the note
+         * and the arrival line when live, the waiting line otherwise. Set
+         * only when it changes, so a re-render that changes nothing (an
+         * add-on toggled in the hidden view) does not repeat it. The first
+         * render only records it: "Tap a country" is already on the page
+         * and announcing it on load would talk over the page title. */
+        var sentence = state === "live" ? [fmtMoney(sum, cur), note + (noteTo ? " · " + noteTo : ""), when].filter(Boolean).join(". ") : note;
+        if (said === null) said = sentence;
+        else if (sentence !== said) {
+          said = sentence;
+          say.textContent = sentence;
+        }
+
+        // Log the price once it has stayed on screen (see shownLog). Only
+        // while this view is the one showing.
+        if (mode() === "quick") {
+          if (quote) shownLog.arm(quote, picked, { booked: false, mode: "quick", contents: contents });
+          else shownLog.cancel();
         }
       }
 
@@ -1252,6 +1448,11 @@
         el: panel,
         render: render,
         onDest: render,
+        seedKg: seedKg,
+        // Where focus lands when the quick view is opened by a tap.
+        focusTarget: function () {
+          return btnOther;
+        },
       };
     })();
 
@@ -1268,6 +1469,14 @@
       var units = "metric";
       var pieces = [newRow(1, remembered().kg || "")];
       var nextKey = 2;
+      // The key of the piece whose weight came from the quick view (seedKg)
+      // or from the tab's remembered weight at boot, and has not been typed
+      // in since. Only that piece, or a blank one, may be re-seeded: a
+      // customer who tapped 5 kg, came here, went Back and tapped 10 kg was
+      // still priced on 5 kg, because the old rule only filled a blank box
+      // (review of audit B6, 2026-10-25). Typing in the box clears it, so
+      // a weight the visitor typed is never overwritten.
+      var seededKey = remembered().kg ? 1 : 0;
       var shipDateInput = "";
       var chosen = null; // { serviceId, sig, quoteId }
       var contents = "";
@@ -1419,8 +1628,9 @@
         return JSON.stringify({ destId: destId(), units: units, pieces: pieces, shipDate: shipDate(), from: from });
       }
 
+      // Lahore's today, not the device's: see karachiNow().
       function today() {
-        return inputDate(new Date());
+        return inputDate(karachiNow());
       }
 
       function shipDate() {
@@ -1438,6 +1648,7 @@
           // Store what was typed WITH the system it was typed in; never write
           // back to the box, so the caret never jumps.
           pc[field] = entry(inp.value, units);
+          if (field === "kg" && pc.key === seededKey) seededKey = 0;
           if (field === "kg" && pieces.length && pieces[0].key === pc.key) rememberKg(shown(entry(inp.value, units), "metric", "kg"));
           render();
         });
@@ -1575,7 +1786,7 @@
               text: "Message us on WhatsApp",
             });
             add(statusBox, [
-              "Shipments over " + sets.maxKg + " kg get a cargo rate. " + weightSentence(res.weights, sets) + " ",
+              "Shipments over " + (res.limitKg || sets.maxKg) + " kg get a cargo rate. " + weightSentence(res.weights, sets) + " ",
               link,
               " and we will price it within the hour.",
             ]);
@@ -1627,9 +1838,9 @@
                 break;
               }
             }
-            var estFirst = firstP ? estimateDelivery(firstP.days, sets, shipDateObj, new Date()) : null;
+            var estFirst = firstP ? estimateDelivery(firstP.days, sets, shipDateObj, karachiNow()) : null;
             if (estFirst && estFirst.moved) {
-              var now = new Date();
+              var now = karachiNow();
               var startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
               var afterCutoff =
                 sets.cutoffHour !== null && sets.cutoffHour !== undefined && now.getHours() >= sets.cutoffHour && shipDateObj !== null && shipDateObj.getTime() <= startOfToday;
@@ -1652,14 +1863,18 @@
          * dash, no "PKR 0", no greyed card implying it might be had for
          * something. When that leaves nothing at all, the head goes with the
          * box and the status line above carries the whole answer. */
+        // Choosing a card IS a render, which rebuilds the cards: remember
+        // which one had the keyboard and give it back below.
+        var focusCard = focusedIn(svcsBox);
+        var focusCardId = focusCard ? focusCard.getAttribute("data-svc") || "" : "";
         clear(svcsBox);
         svcsHead.hidden = nothingPriced;
         svcsBox.hidden = nothingPriced;
         (res.ok ? offered : site.services).forEach(function (sv) {
           var sp = res.ok ? res.prices[sv.id] : null;
-          var e = sp && sp.days && sets.showEta ? estimateDelivery(sp.days, sets, shipDateObj, new Date()) : null;
+          var e = sp && sp.days && sets.showEta ? estimateDelivery(sp.days, sets, shipDateObj, karachiNow()) : null;
           var isChosen = !!active && active.serviceId === sv.id;
-          var btn = h("button.svc", { type: "button", "aria-pressed": isChosen ? "true" : "false" });
+          var btn = h("button.svc", { type: "button", "aria-pressed": isChosen ? "true" : "false", "data-svc": sv.id });
           if (!sp) btn.disabled = true;
           var name = h("span.svc-name", null, [sv.name]);
           if (sp) name.appendChild(h("span.svc-cta", { text: isChosen ? "Chosen" : "Choose" }));
@@ -1672,20 +1887,30 @@
           btn.appendChild(add(h("span.svc-main"), [name, eta]));
           btn.appendChild(h("span.svc-price", { text: sp ? fmtMoney(sp.total, cur) : "" }));
           btn.addEventListener("click", function () {
-            chosen = { serviceId: sv.id, sig: inputSig(), quoteId: quoteId() };
+            chosen = { serviceId: sv.id, sig: inputSig(), quoteId: quoteId(karachiNow()) };
             render();
           });
           svcsBox.appendChild(btn);
         });
+        if (focusCardId) {
+          keepFocus(focusCard, function () {
+            // A walk, not a selector: a service id is the admin's text.
+            for (var ci = 0; ci < svcsBox.children.length; ci++) if (svcsBox.children[ci].getAttribute("data-svc") === focusCardId) return svcsBox.children[ci];
+            return null;
+          });
+        }
 
         /* --- the quote card ---------------------------------- */
         if (quoteCard && quoteCard.parentNode) quoteCard.parentNode.removeChild(quoteCard);
         quoteCard = null;
-        if (!(res.ok && active && res.prices[active.serviceId])) return;
+        if (!(res.ok && active && res.prices[active.serviceId])) {
+          if (mode() === "detail") shownLog.cancel();
+          return;
+        }
         var price = res.prices[active.serviceId];
         var svp = null;
         for (var s4 = 0; s4 < site.services.length; s4++) if (site.services[s4].id === active.serviceId) svp = site.services[s4];
-        var est = sets.showEta && price.days ? estimateDelivery(price.days, sets, shipDateObj, new Date()) : null;
+        var est = sets.showEta && price.days ? estimateDelivery(price.days, sets, shipDateObj, karachiNow()) : null;
         var quote = {
           id: active.quoteId,
           from: from,
@@ -1749,10 +1974,17 @@
         card.appendChild(hd);
 
         var dl = h("dl");
-        if (picked.length) {
+        // Only add-ons that cost something get a row - the quick view's split
+        // line has the same rule. A Delivery left on at 0 printed "Delivery
+        // PKR 0", the one figure rule 4 says never appears; with nothing paid
+        // the card falls back to a single Price, as the quick bar does.
+        var paid = picked.filter(function (a) {
+          return a.amount > 0;
+        });
+        if (paid.length) {
           dl.appendChild(h("dt", { text: "Courier" }));
           dl.appendChild(h("dd", { text: fmtMoney(quote.total, cur) }));
-          picked.forEach(function (a) {
+          paid.forEach(function (a) {
             dl.appendChild(h("dt", { text: a.label }));
             dl.appendChild(h("dd", { text: fmtMoney(a.amount, cur) }));
           });
@@ -1807,6 +2039,7 @@
 
         var bookLink = h("a.btn.book.giant", { target: "_blank", rel: "noopener", href: waLink(site.company.whatsapp, text) }, [waIcon(), "Book on WhatsApp"]);
         bookLink.addEventListener("click", function () {
+          shownLog.booked(quote.id);
           logQuote(quote, picked, { booked: true, mode: "detail", contents: contents });
         });
         var actions2 = h("div.actions-2");
@@ -1838,14 +2071,43 @@
 
         quoteCard = card;
         if (quoteAnchor.parentNode) quoteAnchor.parentNode.insertBefore(card, quoteAnchor);
+
+        // The card is the detailed view's price on screen (see shownLog).
+        if (mode() === "detail") shownLog.arm(quote, picked, { booked: false, mode: "detail", contents: contents });
       }
 
       renderPieces();
+
+      /**
+       * On the way in from the quick view: a tapped weight fills the first
+       * piece when it is blank OR still holds an untouched seeded weight
+       * (seededKey). Never overwrites what was typed here. The second half
+       * matters because the box is rarely blank any more: it is pre-filled
+       * from the tab's remembered weight at boot, and every quick tap now
+       * updates that weight, so "tap 5 kg, reload, tap 3 kg, Box size"
+       * showed 5 kg here while the quick view had said 3 kg.
+       */
+      function seedKg(v) {
+        if (!v || !pieces.length) return;
+        var first = pieces[0];
+        if (String(first.kg.v).trim() !== "" && first.key !== seededKey) return;
+        first.kg = entry(String(v), "metric");
+        seededKey = first.key;
+        renderPieces();
+        render();
+      }
 
       return {
         el: wrap,
         render: render,
         onDest: render,
+        seedKg: seedKg,
+        // Where focus lands when the detailed view is opened by a tap: the
+        // Back button, the first control of the view and the one that says
+        // where the visitor now is.
+        focusTarget: function () {
+          return back;
+        },
       };
     })();
 
@@ -1854,10 +2116,34 @@
     var quickWrap = h("div", null, [quick.el]);
     var detailWrap = h("div", null, [detail.el]);
 
-    function applyMode() {
+    /**
+     * `byTap` is true when the visitor switched views (Box size · many pieces,
+     * Back), false at boot. On a tap, hiding the wrapper hid the very button
+     * that had focus, and focus fell to <body>: Tab went on from somewhere
+     * unpredictable and nothing said a new form had opened (audit B6,
+     * 2026-10-25). So focus moves into the view that opened - preventScroll,
+     * rule 1 - and the weight travels with it (see onKg). At boot nothing is
+     * focused: the page opens where the visitor is.
+     *
+     * The newly visible view is re-rendered so its price, if it has one,
+     * counts as shown (shownLog) and the hidden one's pending log is dropped.
+     */
+    function applyMode(byTap) {
       var m = mode();
       quickWrap.hidden = m !== "quick";
       detailWrap.hidden = m !== "detail";
+      if (!byTap) return;
+      shownLog.cancel();
+      var kg = remembered().kg;
+      if (m === "detail") {
+        detail.seedKg(kg);
+        detail.render();
+      } else {
+        quick.seedKg(kg);
+        quick.render();
+      }
+      var to = m === "detail" ? detail.focusTarget() : quick.focusTarget();
+      if (to && typeof to.focus === "function") to.focus({ preventScroll: true });
     }
 
     clear(mount);
@@ -1988,10 +2274,11 @@
     if (!mount) return;
     var blob = UI.readBlob ? UI.readBlob(mount.getAttribute("data-calculator") || "speedat-calculator") : null;
     if (!blob || !blob.site) return;
-    if (!P || typeof P.priceAll !== "function") {
+    if (!P || typeof P.priceAll !== "function" || !quoteText || !weightSentence) {
       // Leave whatever PHP printed in the mount (the plain WhatsApp way out).
-      // Half a calculator is worse than none.
-      if (window.console && console.warn) console.warn("calculator.js: window.SpeedatPricing is missing; leaving the no-script fallback in place.");
+      // Half a calculator is worse than none, and a calculator that words the
+      // quote differently from the server is worse than half.
+      if (window.console && console.warn) console.warn("calculator.js: window.SpeedatPricing is missing (or lacks quoteText/weightSentence); leaving the no-script fallback in place.");
       return;
     }
     flagsBase = blob.flagsBase || flagsBase;

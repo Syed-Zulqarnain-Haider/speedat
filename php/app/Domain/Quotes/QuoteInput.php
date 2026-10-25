@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Speedat\Domain\Quotes;
 
 use Speedat\Core\Str;
+use Speedat\Domain\Pricing\Engine;
 use Speedat\Domain\Pricing\Piece;
+use Speedat\Domain\Pricing\QuoteText;
 
 /**
  * What the browser posted when a customer acted on a price - validated, capped,
@@ -48,8 +50,14 @@ final class QuoteInput
      * is guarded separately, in the repository, so a caller that bypasses this
      * class still cannot reach an out-of-range INSERT (audit round 1, finding
      * 13). tests/Pricing/QuoteLimitsTest.php pins the order of the two.
+     *
+     * It is the engine's own constant, because the engine has to know it too:
+     * with the cargo threshold at 0 ("no limit") the calculator used to price a
+     * 1,200 kg shipment that this cap then refused to log. Engine::priceAll()
+     * now answers "cargo" above the same tonne, so the page never offers a Book
+     * link for a quote the server will not store.
      */
-    public const MAX_GRAMS = 1_000_000;
+    public const MAX_GRAMS = Engine::NO_LIMIT_MAX_G;
 
     /** quotes.total is INT; the TypeScript route capped the claim here too. */
     public const MAX_TOTAL = 100_000_000;
@@ -65,7 +73,12 @@ final class QuoteInput
     private const MAX_FROM        = 80;
     private const MAX_CONTENTS    = 120;
     private const MAX_ADDONS      = 20;
-    private const MAX_ADDON_LABEL = 80;
+    /**
+     * QuoteText's, not a number of our own: resolveAddons() compares the
+     * document's labels cut to this same length, so a label longer than the
+     * cap still matches the one the browser posted (which this class cuts).
+     */
+    private const MAX_ADDON_LABEL = QuoteText::ADDON_LABEL_MAX;
 
     /** The detailed form has ten rows; twenty is generous and bounded. */
     private const MAX_PIECE_ROWS = 20;

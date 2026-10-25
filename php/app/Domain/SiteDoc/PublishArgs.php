@@ -42,6 +42,19 @@ final class PublishArgs
          * object", which is true of a restore, a seed and a script.
          */
         public readonly ?array $raw = null,
+        /**
+         * The draft fingerprint the REVIEW CARD was drawn from, or null for
+         * a publish with no review behind it (a roll-back, a seed, a script).
+         *
+         * `expectedBase` only says the LIVE version has not moved. It said
+         * nothing about the draft, so an owner could read a three-line diff
+         * while a colleague's autosave put twenty more prices into the draft,
+         * press Publish, and put all twenty-three live (2026-10-25). When this
+         * is set, `Repo::publishVersion()` re-reads the draft row under a lock
+         * inside the publishing transaction and refuses with `DraftConflict`
+         * when it is no longer the row the card described.
+         */
+        public readonly ?string $expectedRevision = null,
     ) {
     }
 }

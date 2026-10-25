@@ -169,6 +169,57 @@ final class HousekeepingTest extends OpsTestCase
         $this->assertStringContains('pdo_mysql', $written, 'and which extensions it had loaded');
     }
 
+    /**
+     * Logs past their age go; today's, a recent one and anything that is not an
+     * app-*.log stay. This used to be a function inside bin/cron.php, so the URL
+     * cron never ran it (2026-10-25); it is a Housekeeping job now, measured
+     * against the run's clock.
+     */
+    public function testOldLogFilesArePrunedAndRecentOnesKept(): void
+    {
+        $savedLogs = Config::str('paths.logs');
+        $savedDays = Config::int('ops.log_days', 30);
+        $dir       = Paths::tmp() . '/' . $this->tag . '-logs';
+
+        if (!Paths::ensureWritable($dir)) {
+            $this->skip('could not create a temporary log directory under storage/tmp');
+        }
+
+        $now   = self::utc('2026-10-25 12:00:00');
+        $files = [
+            'old'    => [$dir . '/app-2026-09-01.log', $now->modify('-40 days')->getTimestamp()],
+            'recent' => [$dir . '/app-2026-10-20.log', $now->modify('-5 days')->getTimestamp()],
+            'other'  => [$dir . '/notes.txt', $now->modify('-400 days')->getTimestamp()],
+        ];
+
+        try {
+            Config::set('paths.logs', $dir);
+            Config::set('ops.log_days', 30);
+
+            foreach ($files as [$path, $modified]) {
+                file_put_contents($path, 'x');
+                touch($path, $modified);
+            }
+
+            $removed = $this->housekeeping($now)->logFiles();
+
+            $this->assertSame(1, $removed, 'the forty-day-old log and nothing else');
+            $this->assertFalse(is_file($files['old'][0]), 'a log past thirty days is deleted');
+            $this->assertTrue(is_file($files['recent'][0]), 'a five-day-old log is kept');
+            $this->assertTrue(is_file($files['other'][0]), 'a file that is not app-*.log is somebody else\'s');
+        } finally {
+            Config::set('paths.logs', $savedLogs);
+            Config::set('ops.log_days', $savedDays);
+
+            foreach (glob($dir . '/*') ?: [] as $entry) {
+                if (is_file($entry)) {
+                    @unlink($entry);
+                }
+            }
+            @rmdir($dir);
+        }
+    }
+
     private function cacheFile(string $name, int $modified): string
     {
         $path = $this->cacheDir . '/' . $name;

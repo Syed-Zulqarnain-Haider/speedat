@@ -236,29 +236,115 @@ final class ShipmentRepository
     /**
      * The desk list, most recently touched first. Port of `listShipments`.
      *
-     * @param string $status a ShipmentStatus, or self::OPEN / self::ANY
+     * THE SEARCH IS HERE, BEFORE THE LIMIT, AND NOT IN THE CALLER AFTER IT.
+     * The controller used to fetch the 200 most recently touched rows and
+     * filter those in PHP, so a customer ringing about a parcel delivered three
+     * months ago was told "No shipments here" while the row sat in the table -
+     * and the empty list's own advice was to create it again. A search that
+     * cannot see past the first page is not a search.
+     *
+     * HOW IT MATCHES - the inbox's way (LeadRepository::search), so the two
+     * desks find the same things for the same typing:
+     *
+     *   - The search is cut into words the way `Str::nameKey` cuts it
+     *     (LeadRepository::searchWords), and EVERY word must appear in SOME
+     *     column: the shipment number, the quote it came from, the customer,
+     *     the carrier, the tracking number - or the destination's name. A
+     *     single substring over the raw text, as this first was, lost two
+     *     things the old PHP filter's nameKey had: "SH ABCD2345", which is how
+     *     a number is read down the phone, no longer found SH-ABCD2345, and
+     *     "ali canada" (a customer and where it went) found nothing at all.
+     *   - What was typed is ALSO run through ShipmentId::normalise, and if it
+     *     is a shipment number in any spelling - "shabcd2345", "SH ABCD 2345" -
+     *     that row matches outright, by its key.
+     *
+     * The destination is stored as an id, so a country NAME cannot be matched
+     * in SQL; the caller resolves the names it knows to ids, per word, and
+     * passes them as `$destIds` (word => ids). `%` and `_` in a word are
+     * escaped - a search with no Latin letters or digits is matched whole, and
+     * "50%" in it is a search for "50%", not for everything beginning with 50.
+     * Every value is bound; the words reach the SQL only as `?`.
+     *
+     * @param string       $status  a ShipmentStatus, or self::OPEN / self::ANY
+     * @param array<string,list<string>> $destIds word => destinations whose name contains it
      * @return list<Shipment>
      */
-    public function list(string $status = self::OPEN, int $limit = 200): array
+    public function list(string $status = self::OPEN, int $limit = 200, string $search = '', array $destIds = []): array
     {
-        $limit = max(1, min(self::MAX_LIMIT, $limit));
+        $limit  = max(1, min(self::MAX_LIMIT, $limit));
+        $where  = [];
+        $params = [];
 
-        if ($status === self::ANY) {
-            $rows = Db::all(
-                'SELECT ' . self::COLUMNS . ' FROM shipments ORDER BY updated_at DESC, id DESC LIMIT ?',
-                [$limit],
-            );
-        } elseif ($status === self::OPEN) {
-            $rows = Db::all(
-                'SELECT ' . self::COLUMNS . ' FROM shipments WHERE status <> ? ORDER BY updated_at DESC, id DESC LIMIT ?',
-                [ShipmentStatus::DELIVERED, $limit],
-            );
-        } else {
-            $rows = Db::all(
-                'SELECT ' . self::COLUMNS . ' FROM shipments WHERE status = ? ORDER BY updated_at DESC, id DESC LIMIT ?',
-                [self::status($status), $limit],
-            );
+        if ($status === self::OPEN) {
+            $where[]  = 'status <> ?';
+            $params[] = ShipmentStatus::DELIVERED;
+        } elseif ($status !== self::ANY) {
+            $where[]  = 'status = ?';
+            $params[] = self::status($status);
         }
+
+        $search = Str::limit(Str::squish($search), self::MAX_PERSON);
+        $words  = LeadRepository::searchWords($search);
+
+        if ($words !== []) {
+            // The words' own binds, kept apart: the id alternative below goes
+            // in FRONT of them in the SQL, so its `?` must come first here too.
+            $all   = [];
+            $binds = [];
+            foreach ($words as $word) {
+                $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $word) . '%';
+
+                // `id` is ascii_bin - case-sensitive, and a non-ASCII pattern is
+                // an "illegal mix of collations" against it - so it is compared
+                // in the table's own case-insensitive collation like every other
+                // column. No ESCAPE clause: backslash is the default one, and
+                // sql_mode (Db) does not set NO_BACKSLASH_ESCAPES.
+                $any = [
+                    'CONVERT(id USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ?',
+                    'quote_id LIKE ?',
+                    'customer_name LIKE ?',
+                    'carrier LIKE ?',
+                    'tracking_no LIKE ?',
+                ];
+                array_push($binds, $like, $like, $like, $like, $like);
+
+                $ids = array_values(array_unique(array_filter(
+                    array_map(
+                        static fn (mixed $d): string => is_string($d) ? Str::limit($d, self::MAX_DEST_ID) : '',
+                        is_array($destIds[$word] ?? null) ? $destIds[$word] : [],
+                    ),
+                    static fn (string $d): bool => $d !== '',
+                )));
+                if ($ids !== []) {
+                    $any[] = 'dest_id IN (' . implode(', ', array_fill(0, count($ids), '?')) . ')';
+                    array_push($binds, ...$ids);
+                }
+
+                $all[] = '(' . implode(' OR ', $any) . ')';
+            }
+
+            $match = '(' . implode(' AND ', $all) . ')';
+
+            // "SHABCD2345" is one word that is in no column as typed; the
+            // number it spells is. Compared by the key, so it costs nothing.
+            $id = ShipmentId::normalise($search);
+            if ($id !== null) {
+                $match = '(id = ? OR ' . $match . ')';
+                array_unshift($binds, $id);
+            }
+
+            $where[] = $match;
+            array_push($params, ...$binds);
+        }
+
+        $params[] = $limit;
+
+        $rows = Db::all(
+            'SELECT ' . self::COLUMNS . ' FROM shipments'
+                . ($where === [] ? '' : ' WHERE ' . implode(' AND ', $where))
+                . ' ORDER BY updated_at DESC, id DESC LIMIT ?',
+            $params,
+        );
 
         return array_map(Shipment::fromRow(...), $rows);
     }

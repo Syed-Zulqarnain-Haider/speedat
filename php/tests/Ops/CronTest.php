@@ -7,6 +7,8 @@ namespace Speedat\Tests\Ops;
 use Speedat\Core\Config;
 use Speedat\Core\Db;
 use Speedat\Core\Paths;
+use Speedat\Domain\Notify\Alerts;
+use Speedat\Domain\Notify\Notifier;
 use Speedat\Domain\Ops\Counts;
 use Speedat\Domain\Ops\Cron;
 use Speedat\Domain\Ops\DailyOnce;
@@ -15,6 +17,7 @@ use Speedat\Tests\Ops\Support\FakeHold;
 use Speedat\Tests\Ops\Support\FakeVersions;
 use Speedat\Tests\Ops\Support\RecordingOffice;
 use Speedat\Tests\Ops\Support\ThrowingVersions;
+use Speedat\Vendor\Smtp\NullTransport;
 
 /**
  * The periodic job end to end: the token, the two checks, the once-a-day
@@ -43,6 +46,8 @@ final class CronTest extends OpsTestCase
 
     private int $savedDbPort = 0;
 
+    private int $savedLogDays = 0;
+
     public function setUp(): void
     {
         parent::setUp();
@@ -51,17 +56,25 @@ final class CronTest extends OpsTestCase
         $this->savedCachePath = Config::str('paths.cache');
         $this->savedDbHost    = Config::str('db.host');
         $this->savedDbPort    = Config::int('db.port', 3306);
+        $this->savedLogDays   = Config::int('ops.log_days', 30);
         $this->cacheDir       = Paths::tmp() . '/' . $this->tag . '-cron-cache';
 
         Config::set('tokens.cron', self::TOKEN);
         Paths::ensureWritable($this->cacheDir);
         Config::set('paths.cache', $this->cacheDir);
+
+        // The run prunes storage/logs now. Every test here runs it, and the
+        // log directory is the real one (CronEnvironmentTest reads it back), so
+        // the age is pushed out of reach: the pruning itself is proved in
+        // HousekeepingTest, against a directory that test owns.
+        Config::set('ops.log_days', 36500);
     }
 
     public function tearDown(): void
     {
         Config::set('tokens.cron', $this->savedCronToken);
         Config::set('paths.cache', $this->savedCachePath);
+        Config::set('ops.log_days', $this->savedLogDays);
 
         // Put the connection back BEFORE the parent cleans its rows up: the
         // outage test leaves it pointed at a closed port, and a tear-down that
@@ -139,7 +152,7 @@ final class CronTest extends OpsTestCase
         $this->assertTrue($body['ok'] ?? false);
 
         $jobs = is_array($body['jobs'] ?? null) ? $body['jobs'] : [];
-        foreach (['rates', 'hold', 'counts', 'sessions', 'rate_limits', 'cache', 'environment'] as $job) {
+        foreach (['rates', 'hold', 'counts', 'sessions', 'rate_limits', 'cache', 'logs', 'environment'] as $job) {
             $this->assertTrue(array_key_exists($job, $jobs), 'the "' . $job . '" job reported');
         }
 
@@ -293,7 +306,7 @@ final class CronTest extends OpsTestCase
         $this->assertStringContains('rates:', $result->failures[0] ?? '');
 
         // Everything after the failure still happened.
-        foreach (['hold', 'counts', 'sessions', 'rate_limits', 'cache', 'environment'] as $job) {
+        foreach (['hold', 'counts', 'sessions', 'rate_limits', 'cache', 'logs', 'environment'] as $job) {
             $this->assertTrue(array_key_exists($job, $result->jobs), 'the "' . $job . '" job still ran');
         }
 
@@ -387,10 +400,72 @@ final class CronTest extends OpsTestCase
         $office = new RecordingOffice();
         $text   = $this->cron(self::utc('now'), $office, $this->settingsKey('ops'))->run()->text();
 
-        foreach (['rates', 'hold', 'counts', 'sessions', 'rate_limits', 'cache', 'environment'] as $job) {
+        foreach (['rates', 'hold', 'counts', 'sessions', 'rate_limits', 'cache', 'logs', 'environment'] as $job) {
             $this->assertStringContains($job, $text);
         }
 
         $this->assertStringContains('0 failure(s).', $text);
+    }
+
+    /**
+     * The rates_stale row goes with the run that claimed the day, not with
+     * every run. It used to be written before the once-a-day claim, so the
+     * hourly cron wrote one an hour and the Security page's activity list
+     * filled up with them (2026-10-25).
+     */
+    public function testTheStaleAuditRowIsWrittenOnceADayNotOnceARun(): void
+    {
+        $key      = $this->settingsKey('ops');
+        $office   = new RecordingOffice();
+        $monday   = self::utc('2026-09-27 06:00:00');
+        $versions = FakeVersions::publishedAt('2026-09-18 06:00:00', 12);
+        $count    = static fn (): int => (int) Db::value(
+            'SELECT COUNT(*) FROM audit_log WHERE action = ?',
+            ['rates_stale'],
+            0
+        );
+
+        $before = $count();
+
+        foreach ([0, 1, 2, 3] as $hour) {
+            $this->cron($monday->modify('+' . $hour . ' hours'), $office, $key, $versions)->run();
+        }
+
+        $this->assertSame(1, $office->count(), 'one message today');
+        $this->assertSame($before + 1, $count(), 'and one audit row with it, not one an hour');
+    }
+
+    /**
+     * A log or null transport accepts the alert and delivers nothing. The run
+     * must not say "office told" over it, and must not say "already alerted
+     * today" either - that was the same false, read as the wrong one.
+     */
+    public function testAnAlertThatWasNotDeliveredIsNotReportedAsSent(): void
+    {
+        $transport = new NullTransport();
+        $now       = self::utc('2026-09-27 06:00:00');
+        $notifier  = new Notifier(
+            $transport,
+            RecordingOffice::OFFICE,
+            'noreply@speedat.test',
+            'Speedat International',
+            'speedat.test',
+            delivers: false,
+            undeliveredReason: 'mail.transport is log - messages are written to the log, not sent',
+        );
+
+        $result = (new Cron(
+            new Alerts($notifier, $this->settingsKey('alerts')),
+            new Counts($now),
+            FakeVersions::publishedAt('2026-09-18 06:00:00', 12),
+            FakeHold::off(),
+            new Housekeeping(new DailyOnce($this->settingsKey('ops')), $now),
+            $now,
+        ))->run();
+
+        $this->assertSame(1, $transport->count(), 'the message still reached the transport, so log mode logs it');
+        $this->assertFalse($result->checks['staleAlert'] ?? true, 'but it was not delivered');
+        $this->assertStringContains('NOT told', $result->jobs['rates'] ?? '');
+        $this->assertStringNotContains('already alerted', $result->jobs['rates'] ?? '');
     }
 }

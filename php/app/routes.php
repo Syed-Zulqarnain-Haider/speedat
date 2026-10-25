@@ -57,10 +57,10 @@ declare(strict_types=1);
 
 use Speedat\Core\App;
 use Speedat\Core\Config;
-use Speedat\Core\Db;
 use Speedat\Core\Response;
 use Speedat\Core\Router;
 use Speedat\Domain\Ops\BearerToken;
+use Speedat\Domain\Ops\Health;
 use Speedat\Http\Admin\AdminUser;
 use Speedat\Http\Admin\AnalyticsController;
 use Speedat\Http\Admin\Guard;
@@ -391,9 +391,19 @@ return static function (Router $router): void {
     /**
      * Liveness check for uptime monitoring.
      *
-     * Public answer: "the PHP is running". Nothing else - a health endpoint
-     * that reports which component is broken is a map for someone deciding
-     * what to attack. The detail is behind the metrics token.
+     * Public answer: one boolean, `{"ok":true}` with a 200 or `{"ok":false}`
+     * with a 503. Nothing else - a health endpoint that reports which
+     * component is broken is a map for someone deciding what to attack. The
+     * detail is behind the metrics token.
+     *
+     * THE CHECK IS Domain\Ops\Health's. This route used to answer 200
+     * `{"ok":true}` without asking anything, and the detailed form answered 200
+     * beside `"database":"down"` - so with MariaDB refusing connections the
+     * go-live uptime monitor stayed green while quotes, leads and sign-in all
+     * failed (found 2026-10-25). Health was written for exactly this, with a
+     * real round-trip and a 503 when the site cannot do its job, and was never
+     * routed. Both forms carry its status code, so a monitor that only ever
+     * calls the public one still goes red.
      */
     $router->get('/health', static function (App $app): Response {
         // THE DETAIL IS BEHIND THE SAME SECRET /api/metrics USES, so it is
@@ -410,16 +420,17 @@ return static function (Router $router): void {
         // this detail rather than publish it.
         $detailed = BearerToken::matches(Config::str('tokens.metrics'), OpsController::headerOnly($app));
 
-        if (!$detailed) {
-            return Response::json(['ok' => true])->noStore();
+        $ops      = Health::fromConfig()->respond($detailed);
+        $response = Response::text($ops->body, $ops->status);
+
+        // OpsResponse carries its own Content-Type and the no-store set; the
+        // same adapter OpsController::send() uses for the other three.
+        foreach ($ops->headers as $name => $value) {
+            $response->header($name, $value);
         }
 
-        return Response::json([
-            'ok'       => true,
-            'php'      => PHP_VERSION,
-            'env'      => Config::env(),
-            'database' => Db::healthy() ? 'up' : 'down',
-            'time'     => gmdate('c'),
-        ])->noStore();
+        // And Pragma as well, which the route form always sent and an old
+        // proxy between the monitor and the site may still be reading.
+        return $response->noStore();
     });
 };

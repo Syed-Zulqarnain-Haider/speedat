@@ -25,15 +25,16 @@ current rates and settings the operator publishes.
 
 ## Where it ships
 
-Speedat ships from Pakistan (pickup in Lahore and other listed cities) to
-destinations around the world, including the United Kingdom, the United States,
-Canada, Europe, the Gulf, Australia and Southeast Asia. The full, current list of
-destinations with live starting prices is on the home page and in the sitemap —
-that list is the authoritative one, because it comes straight from the rate card.
+Speedat ships from Pakistan (pickup in Lahore and other listed cities) to the
+destinations on its current rate card. The list changes as the operator adds or
+hides countries, so it is not repeated here: see the home page for the current
+destinations, each with its live starting price. That list is the authoritative
+one, because it comes straight from the rate card; do not assume a country is
+served unless it is listed there.
 
 ## Key pages
 
-- [Get a price](/): the home page — country tiles with a starting "from" price
+- [Get a price](/): the home page - country tiles with a starting "from" price
   per destination and a calculator that quotes by country and weight.
 - [Services](/services): the courier services on offer, with delivery-day ranges
   and what each one is for.

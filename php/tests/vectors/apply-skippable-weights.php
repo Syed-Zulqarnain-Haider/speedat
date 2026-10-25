@@ -50,6 +50,24 @@ declare(strict_types=1);
  * nothing, because after the first run no surviving answer names a kilogram
  * other than the one asked for.
  *
+ * TWO WORDING RULES, added 2026-10-25. These rewrite EXPECTED STRINGS only -
+ * never an input, never a number - so that a regeneration cannot bring back
+ * text the engines no longer write:
+ *
+ *   W1  warnSite:  "... kg) - those parcels are charged at the next heavier
+ *                  priced kg." (spaced em dash or spaced hyphen) becomes
+ *                  "... kg) - customers at those weights get no price on the
+ *                  site and are sent to WhatsApp." The old sentence described
+ *                  the very fallback S1-S3 remove, and the owner published a gap
+ *                  on its word.
+ *   W2  quoteText: the line "Shipping: " becomes "Courier: ", the word the
+ *                  on-site breakdown uses (owner, 2026-10-05). The engines also
+ *                  leave out an add-on whose amount is 0; the TypeScript
+ *                  generator has no such case, so that half is pinned in
+ *                  tests/vectors/owner-decisions.json instead.
+ *
+ * Both are idempotent: the text they write does not match what they look for.
+ *
  * docs/engine-parity.md, "Skippable weight prices", is the prose version of
  * this list and carries the counts.
  */
@@ -84,8 +102,43 @@ $report = [
     'priceAll'     => [],
 ];
 
+$wording = [];
+
+/** W1 and W2, on one expected value. */
+$reword = static function (string $fn, mixed $expected): mixed {
+    if ($fn === 'warnSite' && is_array($expected)) {
+        foreach ($expected as $i => $line) {
+            if (is_string($line)) {
+                $expected[$i] = preg_replace(
+                    '/ kg\) (?:\x{2014}|-) those parcels are charged at the next heavier priced kg\.$/u',
+                    ' kg) - customers at those weights get no price on the site and are sent to WhatsApp.',
+                    $line,
+                ) ?? $line;
+            }
+        }
+    }
+
+    if ($fn === 'quoteText' && is_string($expected)) {
+        $expected = preg_replace('/^Shipping: /m', 'Courier: ', $expected) ?? $expected;
+    }
+
+    return $expected;
+};
+
 foreach ($data['groups'] as $gi => $group) {
     $fn = $group['fn'];
+
+    if ($fn === 'warnSite' || $fn === 'quoteText') {
+        foreach ($group['cases'] as $ci => $case) {
+            $after = $reword($fn, $case['expected'] ?? null);
+            if ($after !== ($case['expected'] ?? null)) {
+                $data['groups'][$gi]['cases'][$ci]['expected'] = $after;
+                $wording[] = $fn . ' / ' . $case['name'];
+            }
+        }
+
+        continue;
+    }
 
     if ($fn !== 'gridPrice' && $fn !== 'priceService' && $fn !== 'priceAll') {
         continue;
@@ -177,4 +230,9 @@ foreach ($report as $fn => $names) {
     foreach ($names as $n) {
         fwrite(STDOUT, "    - $n\n");
     }
+}
+
+fwrite(STDOUT, 'wording: ' . count($wording) . " expected answer(s) reworded\n");
+foreach ($wording as $n) {
+    fwrite(STDOUT, "    - $n\n");
 }

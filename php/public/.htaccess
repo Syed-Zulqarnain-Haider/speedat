@@ -195,8 +195,14 @@ DirectoryIndex index.php
     # only header that static file, that 500 and that directory index carry.
     Header always set X-Frame-Options "DENY"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    Header always set Cross-Origin-Opener-Policy "same-origin"
-    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), interest-cohort=()"
+    # COOP and Permissions-Policy are spelled EXACTLY as app/Core/App.php
+    # spells them. On Hostinger this `Header always set` runs after PHP and
+    # wins (measured 2026-09-30), so this copy is the live value, not a
+    # fallback. same-origin-allow-popups because plain same-origin breaks
+    # Firebase's Google sign-in popup (popup-closed-by-user on every try).
+    # tests/Security/HeaderParityTest fails if the three copies drift.
+    Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), browsing-topics=(), interest-cohort=()"
 
     # HSTS: only meaningful once the domain is HTTPS-only. Hostinger issues a
     # free certificate and forces https, so this is safe there. It is commented

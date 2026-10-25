@@ -148,7 +148,7 @@ final class AppTest extends TestCase
 
         $this->assertSame('nosniff', $headers['X-Content-Type-Options']);
         $this->assertSame('strict-origin-when-cross-origin', $headers['Referrer-Policy']);
-        $this->assertSame('same-origin', $headers['Cross-Origin-Opener-Policy']);
+        $this->assertSame('same-origin-allow-popups', $headers['Cross-Origin-Opener-Policy'], 'plain same-origin breaks the Firebase Google sign-in popup');
 
         $csp = $headers['Content-Security-Policy'];
         foreach (["default-src 'self'", "base-uri 'none'", "object-src 'none'", "frame-ancestors 'none'", "form-action 'self'"] as $directive) {

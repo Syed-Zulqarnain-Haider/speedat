@@ -19,9 +19,14 @@ PHP suite and the node runner each put every vector through their own engine.
 
 > **A failing vector is a bug in the port. It is never a reason to change the
 > vector.** The TypeScript is the specification until it is deleted — except
-> where this file records a deliberate divergence, and there are now six.
+> where this file records a deliberate divergence, and there are now nine.
 
-Two of the six are product decisions the owner made after the TypeScript was
+Beside it sits `php/tests/vectors/owner-decisions.json`: **34 hand-written
+answers** for decisions taken after the TypeScript, which it therefore cannot
+generate. Both runners read it with the same handlers; "Owner-decision vectors"
+below says what is in it and why it is a separate file.
+
+Two of the nine are product decisions the owner made after the TypeScript was
 written, and both are DERIVED into the vector file rather than hand-edited:
 
 - **the document rate**, removed on **2026-09-27**, and
@@ -48,8 +53,9 @@ node tests/js/run-vectors.mjs    # the browser half on its own
 a missing node is reported as a FAILURE, not a pass. `--skip-js` accepts an
 unchecked browser engine and says so in the summary line.
 
-Expected today: `17 passed, 0 failed, 887 assertions` for
-`PricingVectorsTest`, and `pricing.js: 861 of 861 vectors passed`.
+Expected today: `17 passed, 0 failed, 923 assertions` for
+`PricingVectorsTest`, and `pricing.js: 895 of 895 vectors passed` (861
+generated + 34 owner-decision).
 
 ---
 
@@ -66,7 +72,7 @@ cd /d/speedat
 TZ=Asia/Karachi node_modules/.bin/tsx php/tools/make-vectors.ts             # 940 cases
 cd php
 php tests/vectors/strip-document-rate.php tests/vectors/pricing.json       # 861 cases
-php tests/vectors/apply-skippable-weights.php tests/vectors/pricing.json   # 861 cases, 6 answers nulled
+php tests/vectors/apply-skippable-weights.php tests/vectors/pricing.json   # 861 cases, 6 answers nulled, 5 reworded
 php tests/vectors/apply-plain-dashes.php tests/vectors/pricing.json        # 6 expected strings: "—" -> "-"
 php bin/test.php
 ```
@@ -74,6 +80,16 @@ php bin/test.php
 The third, `apply-plain-dashes.php` (owner, 2026-10-11: no em dash in
 customer or office text), rewrites " — " to " - " in EXPECTED strings only -
 never an input, never a number.
+
+`apply-skippable-weights.php` also carries two wording rules (2026-10-25),
+which rewrite EXPECTED strings only: **W1** turns the `warnSite` gap warning's
+"those parcels are charged at the next heavier priced kg" into "customers at
+those weights get no price on the site and are sent to WhatsApp", and **W2**
+turns the `quoteText` line "Shipping: " into "Courier: ". Without them a
+regeneration brings back text neither engine writes any more.
+
+`tests/vectors/owner-decisions.json` is not touched by any of this: it is not
+generated, so regenerating cannot lose it.
 
 The first two derivation scripts only ever REMOVE — one drops cases and keys, the other
 turns six answers into `null` — and neither computes a price, so neither can
@@ -291,12 +307,15 @@ then `strip-document-rate.php` reproduced the previously checked-in file **byte
 for byte**, and `apply-skippable-weights.php` then produced the file in the tree.
 A second run of the new script changes nothing.
 
-### The admin still needs telling
+### The admin is told the same rule (2026-10-25)
 
-`Validate::warnings()` and the rates editor still describe the old rule to the
-owner ("those parcels are charged at the next heavier priced kg"). That wording
-is now wrong and belongs to whoever owns `app/Domain/SiteDoc/` and
-`app/View/Admin/` — it is in the handover notes, not fixed here.
+`Validate::warnings()` and `pricing.js` `warnSite()` used to tell the owner a
+gap was "charged at the next heavier priced kg" - the rule that went - so an
+owner could publish a gap on purpose believing it was priced, and customers at
+that weight were sent to WhatsApp. The warning now says exactly that: "... (2
+kg) - customers at those weights get no price on the site and are sent to
+WhatsApp." The `gridWithGaps` vector was reworded by rule W1 above, never
+hand-edited. The rates editor's own copy is `app/View/Admin/`'s.
 
 ---
 
@@ -390,13 +409,13 @@ identical rate cards cannot serialise differently.
 
 ---
 
-## Six deliberate divergences
+## Nine deliberate divergences
 
-All six are documented here because "the PHP matches the TypeScript exactly" is
-otherwise a claim with an asterisk. Apart from the first and the sixth, every one
-is a case no vector covers, and **none of them moves a price the owner typed**:
-`--filter=PricingVectors` passes and the browser half `861 of 861 vectors
-passed`.
+All nine are documented here because "the PHP matches the TypeScript exactly" is
+otherwise a claim with an asterisk. Apart from the first, the sixth and the
+last three, every one is a case no generated vector covers, and **none of them
+moves a price the owner typed**: `--filter=PricingVectors` passes and the
+browser half `895 of 895 vectors passed`.
 
 1. **The document rate, removed from the product** (owner, 2026-09-27) — the
    whole section above. It is the one divergence that vectors *did* cover,
@@ -455,6 +474,68 @@ passed`.
    cover, which is why six of them were re-derived rather than left to fail, and
    why the change is spelled out answer by answer instead of summarised. The
    TypeScript still walks upward; the PHP and `pricing.js` read one box.
+7. **Slab steps are counted from the first slab** (2026-10-25). The
+   TypeScript bills `max(first, ceil(charge / step) * step)` and then prices
+   `ceil((billed - first) / step)` steps. Those agree only when the first slab
+   is a multiple of the step. With a 0.5 kg first slab and 1 kg steps it billed
+   a 0.5 kg parcel as **1 kg with one step** (5,000 instead of 4,000) and
+   1.2 kg as 2 kg with two steps, a breakdown that contradicted itself. Both
+   ports now bill `charge <= first ? first : first + ceil((charge - first) /
+   step) * step`, which is the old answer exactly whenever the first slab is a
+   multiple of the step - every generated fixture is, and grid is 1 / 1 - so no
+   generated vector moved. `weightSentence()`'s "minimum" test is anchored the
+   same way. Pinned by `owner-decisions.json`.
+8. **No cargo threshold means one tonne** (2026-10-25). With `maxKg` 0 the
+   TypeScript prices any weight, but `QuoteInput::MAX_GRAMS` refuses to log
+   over 1,000,000 g, so a 3 x 400 kg shipment was priced on the page with a
+   Book link whose POST was rejected. `Engine::NO_LIMIT_MAX_G` (which
+   `MAX_GRAMS` now reads) and `pricing.js` answer `overmax` above it.
+   Text that names the threshold beside an overmax result reads
+   `Engine::cargoLimitKg()` / `SpeedatPricing.cargoLimitKg()` (or the JS
+   result's `limitKg`), which give 1000 at `maxKg` 0, never `maxKg` itself -
+   otherwise a "no limit" card says "over 0 kg".
+9. **Text and parsing the owner corrected** (2026-10-25), all pinned by
+   `owner-decisions.json` or reworded by W1 / W2:
+   - the WhatsApp text says **"Courier"**, as the on-site breakdown does
+     (owner, 2026-10-05), and prints no line for an add-on whose amount is 0;
+   - a shipment whose pieces are **mixed** (some charged on volume, some on
+     scale weight) is no longer said to have a "volumetric weight" equal to
+     the sum: "each piece is charged at the greater of its actual and
+     volumetric weight (11 kg actual in total)";
+   - `resolveAddons()` compares labels by **key** (`QuoteText::labelKey()` /
+     `pricing.js` `labelKey()`: whitespace runs collapsed, cut to 80
+     characters), because `QuoteInput` squishes and cuts what is posted and an
+     exact match dropped "Pickup  and packing" from the stored total;
+   - the settings parser trims with **JavaScript's** `trim()` set on both
+     sides (`Engine::jsTrim()`). This one is a port bug rather than a
+     divergence - the TypeScript already did it - but no generated vector had
+     a no-break space in it, so it is pinned here.
+
+---
+
+## Owner-decision vectors
+
+`php/tests/vectors/owner-decisions.json` has the same shape as `pricing.json`
+(`sites`, `groups`, `count`) and its groups use the same handlers in
+`tests/PricingVectorsTest.php` and `tests/js/run-vectors.mjs`, so each case
+is held to both engines. It exists because divergences 7-9 cannot come from
+the generator, and a hand-edit to `pricing.json` would be lost on the next
+regeneration. Every expected value in it was worked out by hand. 23 of the
+34 fail against `pricing.js` as it was before 2026-10-25, and the six trim
+cases failed only the old PHP; the rest pin the edges so a fix cannot
+overreach - exactly a tonne still priced, an all-volumetric shipment keeping
+its old sentence, a label posted whole still matching.
+
+| Group | Cases | What they pin |
+|---|---|---|
+| `computeWeights` | 8 | first slab 0.5 / step 1 and 1.5 / 1 |
+| `priceAll` | 8 | the same two cards priced; `maxKg` 0 at 1,000 kg, 1,000.1 kg and 3 x 400 kg |
+| `weightSentence` | 5 | "minimum" on 0.5 / 1 and 1.5 / 1; mixed and all-volumetric pieces |
+| `parts`, `addonsList`, `toNumLoose` | 6 | no-break spaces, ideographic and em spaces, a BOM |
+| `resolveAddons` | 5 | double space, tab, labels over 80 characters, a cut that lands on a space |
+| `quoteText` | 2 | a zero add-on beside a paid one; a zero add-on alone |
+
+Site names must not repeat one in `pricing.json`; both runners refuse a clash.
 
 ---
 

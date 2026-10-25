@@ -8,6 +8,7 @@ use Speedat\Core\Audit;
 use Speedat\Core\Clock;
 use Speedat\Core\Config;
 use Speedat\Core\Log;
+use Speedat\Domain\Notify\AlertMessage;
 use Speedat\Domain\Notify\Alerts;
 use Speedat\Domain\Notify\Notifier;
 use Speedat\Domain\Notify\OfficeMessages;
@@ -45,10 +46,18 @@ use Speedat\Domain\Ops\Contract\Versions;
  * in, so both checks are gone rather than rewritten.
  *
  * WHAT IT ALSO DOES. Housekeeping the host needs and cannot do for itself -
- * expired sessions, stale rate-limit windows, an ageing cache directory, and
- * one line a day recording which PHP the CLI actually runs (see Housekeeping
- * for why each of those is here) - and it records the day's numbers through
- * Counts, the same helper the admin badges and the metrics scrape read.
+ * expired sessions, stale rate-limit windows, an ageing cache directory, logs
+ * past thirty days, and one line a day recording which PHP the CLI actually
+ * runs (see Housekeeping for why each of those is here) - and it records the
+ * day's numbers through Counts, the same helper the admin badges and the
+ * metrics scrape read.
+ *
+ * BOTH DOORS RUN THIS, AND ONLY THIS. bin/cron.php (the hourly hPanel entry)
+ * and /api/cron (a URL-only plan) both call run(). Until 2026-10-25 the CLI
+ * job carried its own three-job list - sessions, rate limits, logs - and never
+ * reached this class, so on the documented cron no stale-rates or long-hold
+ * mail ever went out, and the URL door never pruned a log. One list, two
+ * doors, nothing either of them can miss.
  *
  * EVERY JOB IS WRAPPED. One that throws is recorded and the rest still run: a
  * cron that stops at the first error is a cron whose later jobs silently never
@@ -118,6 +127,7 @@ final class Cron
             'sessions'    => fn (): array => [$this->housekeeping->expiredSessions() . ' expired session(s) removed', []],
             'rate_limits' => fn (): array => [$this->housekeeping->rateLimitWindows() . ' old window(s) removed', []],
             'cache'       => fn (): array => [$this->housekeeping->cacheFiles() . ' cache file(s) removed', []],
+            'logs'        => fn (): array => [$this->housekeeping->logFiles() . ' log file(s) removed', []],
             'environment' => fn (): array => [$this->housekeeping->logEnvironment() ? 'logged' : 'already logged today', []],
         ];
 
@@ -168,21 +178,20 @@ final class Cron
             return [$ageDays . ' day(s) since publish', $fields];
         }
 
-        Audit::log('cron', 'rates_stale', ['ageDays' => $ageDays, 'version' => $live->version]);
-
-        $sent = $this->alerts->onceMessage(
+        [$sent, $outcome] = $this->alertOnce(
             OfficeMessages::ratesStale(
                 $ageDays,
                 $live->version,
                 $this->display($live->publishedAt, 'Y-m-d'),
                 $this->baseUrl(),
             ),
-            $this->now,
+            'rates_stale',
+            ['ageDays' => $ageDays, 'version' => $live->version],
         );
 
         $fields['staleAlert'] = $sent;
 
-        return [$sent ? 'stale, office told' : 'stale, already alerted today', $fields];
+        return ['stale, ' . $outcome, $fields];
     }
 
     /**
@@ -206,21 +215,54 @@ final class Cron
             return ['held for ' . $hours . ' hour(s)', $fields];
         }
 
-        Audit::log('cron', 'hold_long', ['hours' => $hours, 'by' => $hold->by]);
-
-        $sent = $this->alerts->onceMessage(
+        [$sent, $outcome] = $this->alertOnce(
             OfficeMessages::holdLong(
                 $hours,
                 $hold->by,
                 $this->display($hold->since, 'Y-m-d H:i'),
                 $this->baseUrl(),
             ),
-            $this->now,
+            'hold_long',
+            ['hours' => $hours, 'by' => $hold->by],
         );
 
         $fields['holdAlert'] = $sent;
 
-        return [$sent ? 'held too long, office told' : 'held too long, already alerted today', $fields];
+        return ['held too long, ' . $outcome, $fields];
+    }
+
+    /**
+     * Raise one deduplicated alert, and say truthfully what became of it.
+     *
+     * THE AUDIT ROW IS WRITTEN ONCE A DAY, NOT ONCE A RUN. It used to sit in
+     * front of the once-a-day claim, so an hourly cron wrote a rates_stale and
+     * a hold_long row every hour the condition lasted - thirteen hours of that
+     * and the Security page's forty-row activity list held nothing but machine
+     * rows, with yesterday's sign-in pushed off the end (found 2026-10-25). The
+     * row now goes with the run that claimed today's slot, whether or not the
+     * mail then went: a slot claimed and not delivered is exactly the day the
+     * office needs the row, and Notifier writes notify_skipped or notify_failed
+     * beside it saying why.
+     *
+     * THE SUMMARY TELLS THE THREE OUTCOMES APART. "already alerted today" was
+     * also what a send that went nowhere read as, so a cron log over a log-only
+     * transport said everything was fine. Alerts::once() answers false for both,
+     * so the slot is read first and the two falses are told apart here.
+     *
+     * @param  array<string,mixed> $detail
+     * @return array{bool,string} whether it was delivered, and the words for the cron log
+     */
+    private function alertOnce(AlertMessage $alert, string $action, array $detail): array
+    {
+        if ($this->alerts->sentToday($alert->key, $this->now)) {
+            return [false, 'already alerted today'];
+        }
+
+        $sent = $this->alerts->onceMessage($alert, $this->now);
+
+        Audit::log('cron', $action, $detail + ['emailed' => $sent]);
+
+        return [$sent, $sent ? 'office told' : 'office NOT told - see notify_skipped or notify_failed in the audit'];
     }
 
     /**

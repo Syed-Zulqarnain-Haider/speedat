@@ -145,6 +145,19 @@ final class Migrate
                     'truck | Pickup | We collect from your door in our pickup cities; book before the cutoff and we come the same day.',
                     'shield | Packing and customs | We tell you what can fly and what paperwork the destination needs.',
                 ]),
+                // The v4 default, retired 2026-10-25: its Documents line sent the
+                // customer to "the cheapest row in the table", and the table has
+                // had no documents row since 2026-09-27.
+                implode("\n", [
+                    'plane | Express | Priority air. The faster of the two on every route; the days are in the table.',
+                    'globe | Normal | Economy air. Same handling, a few days longer, the lower price.',
+                    'doc | Documents | Passports, certificates, contracts. Priced by weight like any parcel, '
+                        . 'and light enough that it is usually the cheapest row in the table.',
+                    "box | Cargo | Above the calculator's top weight, commercial goods or many boxes: "
+                        . 'send the details on WhatsApp and we quote within the hour.',
+                    'truck | Pickup | We collect from your door in our pickup cities; book before the cutoff and we come the same day.',
+                    'shield | Packing and customs | We tell you what can fly and what paperwork the destination needs.',
+                ]),
             ],
             'story' => [
                 implode("\n", [

@@ -179,8 +179,9 @@ final class MailPathTest extends TestCase
      * Every PHP file that can run on the host: app/, bin/ and public/.
      *
      * Not app/ alone, because the cap does not care which directory reached it.
-     * bin/cron.php is the one thing here that runs unattended and the only
-     * caller of the alerts, so a `mail(` added there for a "quick" notification
+     * bin/cron.php is the one thing here that runs unattended, and through
+     * Domain\Ops\Cron::run() it is what raises the office alerts, so a `mail(`
+     * added there for a "quick" notification
      * would be dropped with nobody watching - exactly the failure this scan
      * exists to make impossible. public/ is in for the same reason: it is the
      * front door, and a form that answered with mail() would be blocked on the

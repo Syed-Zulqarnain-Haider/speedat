@@ -24,7 +24,6 @@ declare(strict_types=1);
  */
 
 use Speedat\View\Admin\Routes;
-use Speedat\View\Admin\ShipmentStatus;
 
 $this->layout('admin/layouts/shell', ['title' => 'Shipment ' . $page->id(), 'shell' => $shell]);
 
@@ -48,7 +47,11 @@ $timeline = $page->timeline();
     </div>
   </div>
 
-  <?php if ($page->notice !== '') { ?>
+  <?php if ($page->notice !== '' && $page->noticeIsError()) { ?>
+  <?php /* A refusal is an alert, not a status: it is the thing the office has
+           to act on before pressing anything else (as rates.php's notices). */ ?>
+  <div class="notice err" role="alert"><?= e($page->notice) ?></div>
+  <?php } elseif ($page->notice !== '') { ?>
   <div class="notice ok" role="status"><?= e($page->notice) ?></div>
   <?php } ?>
 
@@ -85,7 +88,8 @@ $timeline = $page->timeline();
             <label class="field">
               <span>Status</span>
               <select name="status">
-                <?php foreach (ShipmentStatus::options() as $value => $label) { ?>
+                <?php /* Only the moves the server will accept from here. */ ?>
+                <?php foreach ($page->statusOptions() as $value => $label) { ?>
                 <option value="<?= e($value) ?>"<?= $value === $current ? ' selected' : '' ?>><?= e($label) ?></option>
                 <?php } ?>
               </select>
@@ -98,7 +102,7 @@ $timeline = $page->timeline();
                      inline script, which is the risk that matters. */ ?>
             <label class="field" style="flex: 2">
               <span>Note (included in the WhatsApp update)</span>
-              <input type="text" name="note" maxlength="1000" placeholder="e.g. Handed to Emirates flight EK623">
+              <input type="text" name="note" maxlength="1000" value="<?= e($page->note) ?>" placeholder="e.g. Handed to Emirates flight EK623">
             </label>
             <button class="btn primary" type="submit" data-once data-busy-text="Adding&#8230;">Add update</button>
           </div>

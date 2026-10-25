@@ -49,6 +49,9 @@ final class GoogleCertificates implements CertificateSource
      * @param Closure|null $fetcher   fn(string $url): array{body:string, maxAge:int|null}
      *                                - injected by the tests so they never touch the network
      * @param Closure|null $clock     fn(): int returning unix seconds
+     * @param list<string> $webRoots  directories the web server is KNOWN to serve
+     *                                (the caller passes Paths::publicDir()); the
+     *                                live DOCUMENT_ROOT is always added
      */
     public function __construct(
         private readonly string $cacheDir,
@@ -56,6 +59,7 @@ final class GoogleCertificates implements CertificateSource
         private readonly ?Closure $clock = null,
         private readonly string $url = self::URL,
         private readonly int $graceSeconds = 86400,
+        private readonly array $webRoots = [],
     ) {
         $this->refuseWebRoot($cacheDir);
     }
@@ -286,9 +290,23 @@ final class GoogleCertificates implements CertificateSource
     }
 
     /**
-     * Refuse a cache directory inside the document root. Best effort by design:
-     * a domain class does not know where the web root is, so it rejects the
-     * shapes that are always wrong rather than pretending to be certain.
+     * Refuse a cache directory inside the document root. Two checks, because a
+     * domain class does not know the web root for certain:
+     *
+     *   KNOWN ROOTS  the directories the caller says are served, plus the live
+     *                DOCUMENT_ROOT. Inside one of those is refused whatever the
+     *                folders are called. This is the check that is actually sure.
+     *   NAMES        a segment called public, public_html or htdocs is a web root
+     *                on every panel this has met, so it is refused even when no
+     *                root was passed (the CLI, a test, a misconfigured caller).
+     *
+     * `www` USED TO BE IN THE SECOND LIST, AND THAT BROKE GOOGLE SIGN-IN ON
+     * EVERY /var/www INSTALL - the documented staging layout. There `www` is the
+     * conventional PARENT of site trees (/var/www/html, /var/www/speedat), not a
+     * served directory, so /var/www/speedat/storage/cache was refused and every
+     * Google sign-in said "refused" (review, 2026-10-23). It is still refused by
+     * name anywhere else (C:\inetpub\www), and a /var/www that really is the
+     * document root is caught by the first check.
      */
     private function refuseWebRoot(string $dir): void
     {
@@ -298,11 +316,74 @@ final class GoogleCertificates implements CertificateSource
             throw new FirebaseTokenError('The certificate cache directory must be given');
         }
 
-        foreach (explode('/', trim($normalised, '/')) as $segment) {
-            if ($segment === 'public' || $segment === 'public_html' || $segment === 'htdocs' || $segment === 'www') {
+        $segments = explode('/', trim($normalised, '/'));
+
+        foreach ($segments as $i => $segment) {
+            $name = strtolower($segment);
+
+            if ($name === 'public' || $name === 'public_html' || $name === 'htdocs') {
+                throw new FirebaseTokenError('The certificate cache must not live inside the web root (' . $segment . ')');
+            }
+
+            if ($name === 'www' && !($i === 1 && strtolower($segments[0]) === 'var')) {
                 throw new FirebaseTokenError('The certificate cache must not live inside the web root (' . $segment . ')');
             }
         }
+
+        $roots = $this->webRoots;
+        $docRoot = $_SERVER['DOCUMENT_ROOT'] ?? '';
+
+        if (is_string($docRoot) && $docRoot !== '') {
+            $roots[] = $docRoot;
+        }
+
+        $here = self::resolved($normalised);
+
+        foreach ($roots as $root) {
+            if (!is_string($root) || trim($root) === '') {
+                continue;
+            }
+
+            $root = self::resolved(str_replace('\\', '/', $root));
+
+            if ($root === '/' || $root === '') {
+                // A document root of "/" would make every path "inside" it; that
+                // is a server nobody should be running, not a reason to lock the
+                // owner out.
+                continue;
+            }
+
+            if ($here === $root || str_starts_with($here . '/', $root . '/')) {
+                throw new FirebaseTokenError('The certificate cache must not live inside the web root (' . $root . ')');
+            }
+        }
+    }
+
+    /**
+     * A path with symlinks resolved as far as it exists, so a cache directory
+     * that has not been created yet still compares against the real root. On
+     * Windows the comparison ignores case, as the filesystem does.
+     */
+    private static function resolved(string $path): string
+    {
+        $path = rtrim($path, '/');
+        $tail = '';
+
+        while ($path !== '' && !is_dir($path)) {
+            $cut = strrpos($path, '/');
+
+            if ($cut === false) {
+                break;
+            }
+
+            $tail = substr($path, $cut) . $tail;
+            $path = substr($path, 0, $cut);
+        }
+
+        $real = $path !== '' ? realpath($path) : false;
+        $out  = rtrim(str_replace('\\', '/', $real === false ? $path : $real), '/') . $tail;
+
+        return PHP_OS_FAMILY === 'Windows' ? strtolower($out) : $out;
     }
 
     private function now(): int

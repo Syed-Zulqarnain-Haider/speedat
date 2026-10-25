@@ -44,14 +44,14 @@ final class PageViews
     /**
      * Where every path that is not one of the site's own pages is counted.
      *
-     * WHY A BUCKET AND NOT THE PATH ITSELF. The recording happens before
-     * routing, so a 404 is indistinguishable here from a page - and the raw
-     * path is whoever is typing. A scanner working through a wordlist of ten
-     * thousand words would write ten thousand rows a day into a table that has
-     * no sweeper and lives on a plan with a disk quota. Bucketed, the same scan
-     * is one row, and one row that the owner can still see: a large "/other" is
-     * worth knowing about, because it is either a broken link somebody is
-     * publishing or somebody prodding the site.
+     * WHY A BUCKET AND NOT THE PATH ITSELF. The raw path is whoever is
+     * typing, and a table with no sweeper on a plan with a disk quota is not
+     * the place to keep it. Since 2026-10-25 the counter only runs on a 200
+     * HTML page (countable(), and Core\Bootstrap::web() for where), so a
+     * scanner's wordlist of 404s no longer reaches here at all - but a 200 on
+     * an address that is not one of Seo\Routes' pages still can (a page that
+     * takes a parameter, a route added without a Routes entry), and the bucket
+     * is still what keeps that to one row rather than one per address.
      */
     public const OTHER = '/other';
 
@@ -76,14 +76,22 @@ final class PageViews
      * promise an accuracy no substring match has. Everything here either says
      * what it is (bot, crawler, spider), is a tool rather than a browser (curl,
      * wget, python), is a link preview (facebookexternalhit, WhatsApp,
-     * Telegram, Slack) or is a monitor. A crawler that lies about its
+     * Slack) or is a monitor. A crawler that lies about its
      * User-Agent is counted as a visitor, and that is the right way for this to
      * fail - an inflated count of real-looking visits, never a page view thrown
      * away because a pattern was too clever.
+     *
+     * NO BARE "telegram" (removed 2026-10-25). Telegram's in-app browser is a
+     * Chrome WebView whose User-Agent ends in "Telegram-Android/11.x" - a real
+     * person who tapped a link in a chat - and the bare word threw every one
+     * of those visits away. Telegram's link-preview fetcher calls itself
+     * "TelegramBot" and is still caught, by "bot". The same is NOT true of
+     * "whatsapp": WhatsApp opens links in the phone's own browser, so the only
+     * thing that ever sends that word is the preview fetcher.
      */
     private const BOTS = '/bot|crawler?|spider|slurp|curl|wget|python|java|scrapy|headless|phantom|'
         . 'lighthouse|pagespeed|pingdom|uptime|monitor|preview|fetcher|archiver|'
-        . 'facebookexternalhit|whatsapp|telegram|slackbot|discord|semrush|ahrefs|mj12|dotbot/i';
+        . 'facebookexternalhit|whatsapp|slackbot|discord|semrush|ahrefs|mj12|dotbot/i';
 
     /** A file extension at the end of a path: .css, .js, .png, .webmanifest. */
     private const ASSET = '/\.[a-z0-9]{1,12}$/i';
@@ -92,21 +100,68 @@ final class PageViews
     private const MAX_HOST = 190;
 
     /**
+     * Is this finished response one a landing can be counted on?
+     *
+     * A GET (not a HEAD: that is a monitor or a link checker asking whether a
+     * page exists, and nobody read anything), answered 200, with an HTML body.
+     *
+     * WHY THE ANSWER AND NOT THE QUESTION (2026-10-25). The counter used to run
+     * before routing, on the request alone, and that measured the wrong thing:
+     * `/services/` (a 301) and the `/services` it redirects to were two
+     * landings for one visit, `/FAQ` (a 404) counted as `/faq`, and a scanner
+     * with a browser User-Agent working through /wp-admin, /backup and the rest
+     * of its list put a spike into "/other" - which total() and byDay() add up
+     * - so the Landings and Busiest day tiles jumped on the nights somebody
+     * prodded the site. A redirect, an error page, a JSON answer and a
+     * download are none of them a page somebody read.
+     *
+     * Values in, like everything else here: the caller reads the status and
+     * the Content-Type off whatever it sent.
+     */
+    public static function countable(string $method, int $status, string $contentType): bool
+    {
+        return strtoupper($method) === 'GET'
+            && $status === 200
+            && str_starts_with(strtolower(ltrim($contentType)), 'text/html');
+    }
+
+    /**
      * Count one landing. Returns whether a row was written, and never throws.
      *
      * The boolean is for the tests and for anybody reading a log - the caller
      * in Core\Bootstrap ignores it, because there is nothing it could usefully
      * do about a false either way.
      *
+     * A LANDING IS AN ARRIVAL, NOT A CLICK (2026-10-25). `$ownHosts` are the
+     * site's own hostnames - `app.url`'s and the one the request came in on,
+     * in any form referrerHost() accepts - and a request whose Referer is one
+     * of them is somebody already on the site: an internal link, the page the
+     * contact form's POST redirected back to, a reload of a page reached that
+     * way. Counting those made a visitor from Google who read four pages and
+     * sent a message five "landings", four of them "from speedat.co", and the
+     * headline figure several times what actually arrived. They are not
+     * bucketed separately either: the table's primary key is (day, path,
+     * device, referrer) and a row of "came from ourselves" answers no question
+     * the owner asks.
+     *
      * THE ORDER MATTERS: the cheap value checks come first, so a request for a
-     * missing stylesheet or a crawl of /admin costs no database connection at
-     * all. On this plan a connection is the expensive part of the request.
+     * missing stylesheet, a crawl of /admin or a click from one page to the
+     * next costs no database connection at all. On this plan a connection is
+     * the expensive part of the request.
+     *
+     * @param list<string> $ownHosts the site's own hosts or URLs; "" entries are ignored
      */
-    public function record(string $path, string $userAgent = '', string $referer = ''): bool
+    public function record(string $path, string $userAgent = '', string $referer = '', array $ownHosts = []): bool
     {
         $page = self::page($path);
 
         if ($page === null || self::isBot($userAgent)) {
+            return false;
+        }
+
+        $from = self::referrerHost($referer);
+
+        if ($from !== '' && self::isOwnHost($from, $ownHosts)) {
             return false;
         }
 
@@ -119,7 +174,7 @@ final class PageViews
                     ':day'           => Clock::now()->format('Y-m-d'),
                     ':path'          => Caps::fit('page_views.path', $page),
                     ':device'        => self::device($userAgent),
-                    ':referrer_host' => Caps::fit('page_views.referrer_host', self::referrerHost($referer)),
+                    ':referrer_host' => Caps::fit('page_views.referrer_host', $from),
                 ],
             );
         } catch (\Throwable $e) {
@@ -229,6 +284,32 @@ final class PageViews
         // Letters, digits, dots and hyphens: an internationalised domain
         // arrives punycoded, so this rejects nothing real.
         return preg_match('/^[a-z0-9]([a-z0-9.-]{0,' . (self::MAX_HOST - 1) . '})$/', $host) === 1 ? $host : '';
+    }
+
+    /**
+     * Is this referring host one of the site's own?
+     *
+     * Each entry goes through referrerHost() too, so "https://www.speedat.co",
+     * "speedat.co" and the Host header's "speedat.co:443" all compare as the
+     * same "speedat.co" the Referer was reduced to. A bare host is given a
+     * scheme first because parse_url() reads "speedat.co" as a path.
+     *
+     * @param list<string> $ownHosts
+     */
+    private static function isOwnHost(string $host, array $ownHosts): bool
+    {
+        foreach ($ownHosts as $own) {
+            $own = trim($own);
+            if ($own === '') {
+                continue;
+            }
+
+            if (self::referrerHost(str_contains($own, '://') ? $own : 'http://' . $own) === $host) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /* ===================================================================== */

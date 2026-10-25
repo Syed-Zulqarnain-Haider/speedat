@@ -45,11 +45,13 @@ declare(strict_types=1);
  * @var \Speedat\View\Admin\RatesPage $page
  * @var \Speedat\View\Admin\Review    $review
  * @var int                           $baseVersion
+ * @var string                        $revision    the draft fingerprint this card was drawn from
  */
 
 use Speedat\View\Admin\Routes;
 
 $baseVersion = isset($baseVersion) && is_int($baseVersion) ? $baseVersion : 0;
+$revision    = isset($revision) && is_string($revision) ? $revision : '';
 $comparedWith = max(0, $review->nextVersion - 1);
 ?>
 <?php if ($review->blocked()) { ?>
@@ -95,6 +97,18 @@ $comparedWith = max(0, $review->nextVersion - 1);
   <form method="post" action="<?= e($this->url(Routes::PUBLISH)) ?>">
     <?= $csrf->field() ?>
     <input type="hidden" name="expectedBase" value="<?= e($comparedWith) ?>">
+    <?php /* AND THE DRAFT THIS LIST WAS DRAWN FROM. `expectedBase` only says
+             the live version has not moved; a colleague's autosave into the
+             draft did not move it, so their twenty prices went live under a
+             card that listed three. `data-revision` lets admin.js follow this
+             page's OWN autosaves (the publish flushes them first), while
+             anybody else's save makes it disagree and the publish is refused
+             as `reviewmoved`. Left out when the page has no fingerprint to
+             give: an empty one matches nothing and would refuse every
+             publish, where an absent one keeps the old behaviour. */ ?>
+    <?php if ($revision !== '') { ?>
+    <input type="hidden" name="revision" value="<?= e($revision) ?>" data-revision>
+    <?php } ?>
     <?php if ($review->offerGoLive) { ?>
     <label class="chk">
       <input type="hidden" name="goLive" value="0">

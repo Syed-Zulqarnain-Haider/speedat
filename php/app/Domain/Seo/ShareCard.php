@@ -43,9 +43,19 @@ final class ShareCard
     /** Square logo for structured data. Google wants a raster, not the SVG. */
     public const LOGO_SIZE = 512;
 
-    /** Published paths, relative to public/. Renaming one is how the scrapers' caches are busted. */
-    public const CARD_PNG = 'assets/img/og-default.png';
-    public const CARD_SVG = 'assets/img/og-default.svg';
+    /**
+     * Published paths, relative to public/. Renaming one is how the scrapers' caches are busted.
+     *
+     * "-2" since 2026-10-25: the first card was drawn from the sample document
+     * on the old domain, so every WhatsApp share of speedat.co showed
+     * "speedat.com.pk" and "and 7 more countries" while the page (and
+     * og:image:alt) said "and 3 more". WhatsApp had already cached the old
+     * URL, so the corrected card had to go out under a new name. The tests
+     * read these constants rather than the filename, so the next rename is
+     * this line and the files, nothing else.
+     */
+    public const CARD_PNG = 'assets/img/og-default-2.png';
+    public const CARD_SVG = 'assets/img/og-default-2.svg';
     public const LOGO_PNG = 'assets/img/og-logo.png';
 
     /** Frozen light-theme tokens (public/assets/css/tokens.css). */

@@ -11,6 +11,18 @@ declare(strict_types=1);
  * element out as a two-column grid, and an extra div between it and its
  * children would have collapsed the columns.
  *
+ * A SEARCH KEEPS ITS BOX (fixed 2026-10-25). The box used to sit inside the
+ * "there are leads" branch, so a search that matched nothing replaced it with
+ * "Nothing here." and the search could not be edited - only abandoned by
+ * clicking a tab. The box is now drawn whenever there are leads OR a search,
+ * and a search that finds nothing says so in its own words, with a link back
+ * to the whole tab. A tab that is simply empty still has no box: there is
+ * nothing on it to look for.
+ *
+ * EACH CARD POSTS WHERE IT WAS SAVED FROM - the tab, the search, the page - so
+ * the redirect comes back to the same screen and the same card rather than
+ * to New, with the card gone and no word said.
+ *
  * @var \Speedat\Core\View            $this
  * @var \Speedat\Core\Csrf            $csrf
  * @var \Speedat\View\Admin\InboxPage $page
@@ -20,7 +32,7 @@ declare(strict_types=1);
 use Speedat\View\Admin\LeadCard;
 use Speedat\View\Admin\Routes;
 
-$this->layout('admin/layouts/shell', ['title' => 'Inbox', 'shell' => $shell]);
+$this->layout('admin/layouts/shell', ['title' => 'Inbox', 'shell' => $shell, 'toast' => $page->toast]);
 ?>
 <section class="admin">
   <div class="topbar">
@@ -44,6 +56,10 @@ $this->layout('admin/layouts/shell', ['title' => 'Inbox', 'shell' => $shell]);
   </div>
   <?php } ?>
 
+  <?php if ($page->error !== '') { ?>
+  <div class="notice err" role="alert"><?= e($page->error) ?></div>
+  <?php } ?>
+
   <nav class="subnav" aria-label="Lead status">
     <?php foreach ($page->tabs() as $tab) { ?>
     <a href="<?= e($this->url($tab['href'])) ?>"<?= $tab['active'] ? ' aria-current="page"' : '' ?>>
@@ -52,16 +68,37 @@ $this->layout('admin/layouts/shell', ['title' => 'Inbox', 'shell' => $shell]);
     <?php } ?>
   </nav>
 
-  <?php if ($page->isEmpty()) { ?>
-  <p class="hint empty">Nothing here.</p>
-  <?php } else { ?>
+  <?php if (!$page->isEmpty() || $page->isSearch()) { ?>
+  <?php /* The search ALWAYS goes to the server (fixed 2026-10-25), which
+           looks through every lead in the tab, not only the 200 on screen
+           (LeadRepository). The input used to carry `data-list-filter`, and
+           admin.js cancels the submit of any form whose input does - so with
+           scripting on, which is every office laptop and phone, Enter only hid
+           cards among those already loaded: a customer from three months ago
+           could not be found, and a search that matched none of them left a
+           blank list with no "No leads match" line, since only the server
+           draws that. Same rule as the shipment desk's #shipfind. */ ?>
   <form id="leadfind" method="get" action="<?= e($this->url(Routes::INBOX)) ?>">
     <input type="hidden" name="status" value="<?= e($page->status) ?>">
-    <label class="field">
-      <span>Find a lead</span>
-      <input type="text" name="q" value="<?= e($page->filter) ?>" data-list-filter="lead-list" placeholder="Name, number or destination">
-    </label>
+    <div class="inline">
+      <label class="field">
+        <span>Find a lead</span>
+        <input type="text" name="q" value="<?= e($page->filter) ?>" placeholder="Name, number or destination">
+      </label>
+      <button class="btn outline" type="submit">Find</button>
+    </div>
   </form>
+  <?php } ?>
+
+  <?php if ($page->isEmpty()) { ?>
+  <p class="hint empty"><?= e($page->emptyLine()) ?><?php if ($page->isSearch()) { ?> <a href="<?= e($this->url($page->clearHref())) ?>">Clear the search</a><?php } ?></p>
+  <?php if ($page->newerHref() !== '') { ?>
+  <p class="hint"><a href="<?= e($this->url($page->newerHref())) ?>">&#8592; Newer leads</a></p>
+  <?php } ?>
+  <?php } else { ?>
+  <?php if ($page->rangeLine() !== '') { ?>
+  <p class="hint"><?= e($page->rangeLine()) ?></p>
+  <?php } ?>
   <ul class="hist leads" id="lead-list">
     <?php foreach ($page->leads as $lead) { ?>
     <li id="lead-<?= e($lead->id) ?>" class="lead<?= $lead->isNew() ? ' new' : '' ?>" data-search="<?= e($lead->searchKey()) ?>">
@@ -91,6 +128,9 @@ $this->layout('admin/layouts/shell', ['title' => 'Inbox', 'shell' => $shell]);
       <form class="lead-actions" method="post" action="<?= e($this->url(Routes::INBOX_UPDATE)) ?>">
         <?= $csrf->field() ?>
         <input type="hidden" name="id" value="<?= e($lead->id) ?>">
+        <input type="hidden" name="tab" value="<?= e($page->status) ?>">
+        <input type="hidden" name="q" value="<?= e($page->filter) ?>">
+        <input type="hidden" name="page" value="<?= e($page->pageNo()) ?>">
         <label class="field">
           <span>Status</span>
           <select name="status">
@@ -118,5 +158,11 @@ $this->layout('admin/layouts/shell', ['title' => 'Inbox', 'shell' => $shell]);
     </li>
     <?php } ?>
   </ul>
+  <?php if ($page->newerHref() !== '' || $page->olderHref() !== '') { ?>
+  <p class="hint">
+    <?php if ($page->newerHref() !== '') { ?><a href="<?= e($this->url($page->newerHref())) ?>">&#8592; Newer leads</a><?php } ?>
+    <?php if ($page->olderHref() !== '') { ?><a href="<?= e($this->url($page->olderHref())) ?>">Older leads &#8594;</a><?php } ?>
+  </p>
+  <?php } ?>
   <?php } ?>
 </section>

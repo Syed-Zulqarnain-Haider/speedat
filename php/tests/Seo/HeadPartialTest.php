@@ -8,6 +8,7 @@ use Speedat\Core\Paths;
 use Speedat\Core\View;
 use Speedat\Domain\Seo\Head;
 use Speedat\Domain\Seo\Routes;
+use Speedat\Domain\Seo\ShareCard;
 use Speedat\Domain\Seo\SiteFacts;
 use Speedat\Domain\Seo\Url;
 use Speedat\Tests\TestCase;
@@ -54,7 +55,7 @@ final class HeadPartialTest extends TestCase
         $this->assertStringContains('<meta property="og:type" content="website">', $html);
         $this->assertStringContains('<meta property="og:site_name" content="Speedat International Courier">', $html);
         $this->assertStringContains('<meta property="og:url" content="https://speedat.com.pk/">', $html);
-        $this->assertStringContains('<meta property="og:image" content="https://speedat.com.pk/assets/img/og-default.png">', $html);
+        $this->assertStringContains('<meta property="og:image" content="https://speedat.com.pk/' . ShareCard::CARD_PNG . '">', $html);
         $this->assertStringContains('<meta property="og:image:type" content="image/png">', $html);
         $this->assertStringContains('<meta property="og:image:width" content="1200">', $html);
         $this->assertStringContains('<meta property="og:image:height" content="630">', $html);

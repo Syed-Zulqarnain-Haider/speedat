@@ -67,11 +67,19 @@ the day it all happened.
       count since that day — this is the copy that did not.
 - [ ] **6. Files uploaded and the layout right.**
       Extract the zip at `domains/<domain>/` — **not** inside `public_html`.
-      *Evidence:* File Manager shows `app/ bin/ config/ db/ public_html/ storage/
-      var/ INSTALL.txt` side by side, and the uploaded zip's size matches item 1.
-      Delete the zip from the server afterwards.
-- [ ] **7. Permissions set.** `config/config.php` **600**, `config/` 700,
-      `storage/` and below **700**, everything else 755 directories / 644 files.
+      *Evidence:* File Manager shows `public_html/ speedat_main/ INSTALL.txt`
+      side by side, `speedat_main/php/` holds `app/ bin/ config/ db/ public/
+      storage/ var/`, and the uploaded zip's size matches item 1. Delete the zip
+      from the server afterwards.
+      **The application lives in `speedat_main/php/`, because that is the only
+      place `public_html/index.php` runs it from.** An `app/` or `config/`
+      straight beside `public_html` (what older releases
+      produced) is a tree nothing runs: uploading a fix there changes nothing,
+      and it looks exactly like OPcache. Every path below that is not under
+      `public_html` is under `speedat_main/php/`.
+- [ ] **7. Permissions set.** Under `speedat_main/php/`: `config/config.php`
+      **600**, `config/` 700, `storage/` and below **700**; everything else
+      (including `public_html/`) 755 directories / 644 files.
       Never 777.
       **THIS STEP CREATES THE PERMISSIONS — IT DOES NOT TIDY THEM UP.** The
       archive carries no unix modes worth honouring (it is built on Windows)
@@ -90,8 +98,10 @@ the day it all happened.
       `app.timezone = Asia/Karachi`, `app.trust_proxy = false`, the **prefixed**
       `db.*`, `auth.firebase_project_id`, `tokens.cron`, `tokens.metrics`,
       `mail.from` (an address on this domain), `mail.office`.
-      *Evidence:* `curl -sS "https://<domain>/health?token=$METRICS_TOKEN"`
+      *Evidence:* `curl -sS -H "Authorization: Bearer <tokens.metrics>" https://<domain>/health`
       returning `"database":"up"` with the expected `php` and `"env":"production"`.
+      The token goes in the header: `/health?token=…` is ignored and answers
+      only `{"ok":true}`, which proves nothing about the database.
       That one line proves items 5, 6, 7 and 8 all agree with each other.
 - [ ] **9. `.user.ini` pasted** into `public_html/` from
       [`../deploy/htaccess/user.ini.sample`](../deploy/htaccess/user.ini.sample).
@@ -124,9 +134,10 @@ the day it all happened.
       browser with `auth/unauthorized-domain` and **nothing appears in any server
       log**.
 - [ ] **14. Cron added.** hPanel → Advanced → Cron Jobs, hourly (`0 * * * *`):
-      `/usr/bin/php /home/uXXXXXXXX/domains/<domain>/bin/cron.php` — absolute
-      path, no `>` or `2>&1`.
-      *Evidence:* a `cron_run` line in `storage/logs/app-<today>.log` after the
+      `/usr/bin/php /home/uXXXXXXXX/domains/<domain>/speedat_main/php/bin/cron.php`
+      — absolute path, no `>` or `2>&1`. Without `speedat_main/php` the cron
+      boots a tree with no config and fails every hour.
+      *Evidence:* a `cron_run` line in `speedat_main/php/storage/logs/app-<today>.log` after the
       first hour, **and the PHP version on its environment line** (CLI PHP is not
       documented to match the website's).
 
@@ -141,7 +152,8 @@ the day it all happened.
       `Http\Admin\LoginController` prints no sign-in form at all — only
       *"Sign-in is not configured on this deployment yet."* That is the code
       being honest, and it is exactly what a correct install of a correct
-      release looks like until you choose. Pick one in `config/config.php`:
+      release looks like until you choose. Pick one in
+      `speedat_main/php/config/config.php`:
       ```php
       'firebase_project_id'  => 'your-firebase-project',   // Google sign-in
       // or
@@ -153,7 +165,7 @@ the day it all happened.
       §3.2. This step did not exist before that run.)*
 - [ ] **15. First admin created.** There is no shell on this plan, so either add
       a one-off hPanel cron entry
-      `/usr/bin/php /home/uXXXXXXXX/domains/<domain>/bin/seed.php --owner=<owner email>`
+      `/usr/bin/php /home/uXXXXXXXX/domains/<domain>/speedat_main/php/bin/seed.php --owner=<owner email>`
       and **delete the entry once it has run** (it also writes the price-hold
       setting, off), or insert the row in phpMyAdmin:
       ```sql
@@ -229,8 +241,14 @@ the day it all happened.
 ## Before you call it launched
 
 - [ ] **28. Rollback rehearsed once, on the live host.** Upload the previous
-      release zip, extract over the top, reset OPcache, `/health` green, then put
-      the current release back the same way. Do it now, while nothing is wrong and
+      release zip, extract over the top, redo item 7's permissions, reset
+      OPcache, `/health` green, then put the current release back the same way.
+      The previous zip must be one that writes `speedat_main/php/`: open it on
+      your computer and its top level holds `speedat_main/` beside
+      `public_html/` (the archive comment says "The app lands in
+      speedat_main/php/"). Go by that, not by a build date: an older one only replaces `public_html` and leaves the
+      running code where it was, so the "rollback" rolls back nothing but the
+      CSS. Do it now, while nothing is wrong and
       nobody is shouting.
       *Evidence:* the time it took, and a note of anything that surprised you.
 - [ ] **29. Backups confirmed and one restore rehearsed.** hPanel → Files →

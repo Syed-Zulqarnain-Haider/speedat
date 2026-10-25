@@ -136,16 +136,31 @@ final class SiteController
      * old one has been spent, and without a new one the second attempt would be
      * refused for a different reason than the first.
      *
+     * WHEN THE TOKEN THAT CAME IN WAS GOOD, THE NEW ONE IS BACKDATED (fixed
+     * 2026-10-25). A customer told "Enter a phone number we can call" fixes
+     * one dot and presses Send again inside three seconds - and a token minted
+     * "now" refused that as "That was quick", and again on every quick retry,
+     * for a person who had already proved they were not a script by waiting
+     * out the first token. So a rejection for the fields or the rate limit
+     * (`$tokenPassed`) hands back a token already MIN_AGE_MS old: the next
+     * submit is judged on its fields alone. A rejection BECAUSE of the token -
+     * too fast, stale, forged - still gets one stamped now, so the three
+     * seconds are never skipped by the one sender they exist to slow down.
+     * The 24-hour window is counted from the backdated stamp, which moves it
+     * by three seconds and nothing more.
+     *
      * @param array<string,string> $values what the visitor typed
      * @param array<string,string> $errors field name, or "_" for the whole form
      */
-    public function contactRejected(App $app, array $values, array $errors, int $status): Response
+    public function contactRejected(App $app, array $values, array $errors, int $status, bool $tokenPassed = false): Response
     {
         return $app->page('site/contact', [
             'view' => ContactView::build(
                 Page::forKey($app, 'contact'),
                 csrf: $app->csrf()->token(),
-                formToken: FormToken::issue(),
+                formToken: $tokenPassed
+                    ? FormToken::issue(Clock::millis() - FormToken::MIN_AGE_MS)
+                    : FormToken::issue(),
                 values: $values,
                 errors: $errors,
             ),

@@ -52,20 +52,38 @@ $rows = $page->table();
     <?php } ?>
   </nav>
 
-  <?php if ($rows === []) { ?>
-  <p class="hint empty">No shipments here. Create one from a lead in the Inbox, or with &#8220;New shipment&#8221;.</p>
-  <?php } else { ?>
-  <?php /* A GET form of its own: the search word is not part of any shipment,
-           and with JavaScript off the server filters the list. admin.js hides
-           the rows as the office types instead. */ ?>
+  <?php /* A GET form of its own: the search word is not part of any shipment.
+           It is ALWAYS here, and it always goes to the server, which searches
+           every shipment before the page limit (ShipmentRepository::list()).
+           It used to be drawn only when the page had rows, and admin.js
+           filtered the rows on screen instead of submitting - so a search
+           could only ever look through the 200 most recently touched, and
+           one that matched none of them took the box away and suggested
+           creating the shipment again. That is why the input carries no
+           `data-list-filter`: admin.js cancels the submit of any form whose
+           input does. */ ?>
   <form id="shipfind" method="get" action="<?= e($this->url(Routes::SHIPMENTS)) ?>">
     <input type="hidden" name="status" value="<?= e($page->status) ?>">
-    <label class="field">
-      <span>Find a shipment</span>
-      <input type="text" name="q" value="<?= e($page->filter) ?>" data-list-filter="ship-rows"
-             placeholder="Number, customer, destination or tracking">
-    </label>
+    <div class="inline">
+      <label class="field">
+        <span>Find a shipment</span>
+        <input type="text" name="q" value="<?= e($page->filter) ?>"
+               placeholder="Number, customer, destination or tracking">
+      </label>
+      <button class="btn outline" type="submit">Find</button>
+    </div>
   </form>
+
+  <?php if ($rows === [] && $page->filter !== '') { ?>
+  <?php /* Not "No shipments here. Create one": the shipment probably exists,
+           under another spelling or another tab, and a second booking of the
+           same parcel is the outcome to avoid. */ ?>
+  <p class="hint empty">No shipment matches &#8220;<?= e($page->filter) ?>&#8221;.
+    <a href="<?= e($this->url(Routes::shipments($page->status))) ?>">Clear the search</a><?php if ($page->status !== 'all') { ?>
+    or <a href="<?= e($this->url(Routes::shipments('all') . '&q=' . rawurlencode($page->filter))) ?>">look in All</a><?php } ?>.</p>
+  <?php } elseif ($rows === []) { ?>
+  <p class="hint empty">No shipments here. Create one from a lead in the Inbox, or with &#8220;New shipment&#8221;.</p>
+  <?php } else { ?>
   <div class="tablewrap">
     <table class="ships">
       <thead>

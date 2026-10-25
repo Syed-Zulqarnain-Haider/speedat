@@ -12,6 +12,7 @@ use Speedat\Core\Response;
 use Speedat\Core\Str;
 use Speedat\Domain\Auth\AuthError;
 use Speedat\Domain\Auth\Password;
+use Speedat\Domain\Notify\Notifier;
 use Speedat\View\Admin\Routes;
 use Speedat\View\Admin\SecurityPage;
 
@@ -45,6 +46,16 @@ final class SecurityController
 {
     /** How much of the audit trail the page shows. The React page showed forty. */
     private const ACTIVITY = 40;
+
+    /**
+     * Audit actions the scheduled job writes on its own, kept off the activity
+     * list. By ACTION, not by actor: `system` also signs notify_failed and
+     * notify_skipped, and "the office never got the lead email" is exactly
+     * what an admin opens this page to find.
+     *
+     * @var list<string>
+     */
+    private const MACHINE_ACTIONS = ['cron_run', 'rates_stale', 'hold_long'];
 
     /** GET /admin/security */
     public function page(App $app, AdminUser $admin): Response
@@ -177,7 +188,11 @@ final class SecurityController
     {
         $google    = Str::squish(Config::str('auth.firebase_project_id')) !== '';
         $passwords = Config::bool('auth.allow_password_login', false);
-        $mail      = $app->mail();
+        // The notifier itself rather than $app->mail(): Core\Mail answers the
+        // same configured(), but only the notifier can say WHY it is false -
+        // and "not configured" over a log transport with both addresses set
+        // sends the owner looking at the wrong setting.
+        $mail      = Notifier::fromConfig();
         $cron      = Config::str('tokens.cron') !== '';
         $metrics   = Config::str('tokens.metrics') !== '' || $cron;
         $admins    = Admins::count();
@@ -203,7 +218,7 @@ final class SecurityController
                 'ok'    => $mail->configured(),
                 'note'  => $mail->configured()
                     ? 'sending through ' . $mail->transportName()
-                    : 'not configured - alerts are logged, not sent',
+                    : 'not configured - ' . $mail->notConfiguredReason() . ', so alerts are not sent',
             ],
             [
                 'label' => 'Cron secret',
@@ -236,7 +251,12 @@ final class SecurityController
     {
         $out = [];
 
-        foreach (Audit::recent(self::ACTIVITY) as $row) {
+        // People, not machinery. The hourly cron writes a cron_run row every
+        // run, and rates_stale / hold_long while the condition lasts; unfiltered,
+        // forty rows was under two days of cron, and yesterday's sign-in or a
+        // second factor being switched off had scrolled off the panel built to
+        // show it (found 2026-10-25). The rows are still in the table.
+        foreach (Audit::recent(self::ACTIVITY, 0, self::MACHINE_ACTIONS) as $row) {
             $hash = is_string($row['ip_hash'] ?? null) ? $row['ip_hash'] : '';
 
             $out[] = [

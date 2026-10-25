@@ -13,8 +13,9 @@
  * THE BUTTON IS HIDDEN UNTIL THIS FILE HAS WORKED. reveal() runs after
  * initializeApp(), not on DOMContentLoaded. A blocked CDN, a CSP that has not
  * been filled in, a browser with JavaScript off - every one of those leaves the
- * sign-in page as the password form alone, which works. A visible button that
- * silently does nothing is the one outcome worth this much care: the person in
+ * sign-in page as the password form alone, which works - or, on a Google-only
+ * deployment, as the one sentence saying why there is no button. A visible
+ * button that silently does nothing is the one outcome worth this much care: the person in
  * front of it cannot tell it apart from a Google outage, and there is nothing
  * on screen to try instead.
  *
@@ -128,6 +129,17 @@
 
   function reveal() {
     wrapper.removeAttribute("hidden");
+    /* On a Google-only deployment the page carries a sentence for the case where
+       this button never appears. It has now appeared, so the sentence is false. */
+    var fallback = document.querySelector("[data-google-fallback]");
+    if (fallback) fallback.setAttribute("hidden", "");
+  }
+
+  /* The password form is rendered only when the deployment allows passwords, so
+     its presence is the answer. Asked at the moment of the error rather than
+     cached, in case anything ever re-renders the card. */
+  function passwordsOffered() {
+    return !!document.querySelector("[data-password-form]");
   }
 
   function busy(on) {
@@ -145,16 +157,21 @@
    *
    * Only the codes a person actually hits are named. The catch-all deliberately
    * does NOT print error.message: those messages name Firebase internals and the
-   * project, and the one thing that always helps is the password form below.
+   * project, and the one thing that always helps is the password form below -
+   * when there is one. A Google-only deployment has no form to point at, so
+   * those sentences end at "try again" instead.
    */
   function explain(error) {
     var code = (error && error.code) || "";
+    var orPassword = passwordsOffered();
     var says;
 
     if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
       says = "That sign-in window was closed before it finished. Try again.";
     } else if (code === "auth/popup-blocked") {
-      says = "Your browser blocked the Google sign-in window. Allow pop-ups for this site, or sign in with your email and password below.";
+      says = orPassword
+        ? "Your browser blocked the Google sign-in window. Allow pop-ups for this site, or sign in with your email and password below."
+        : "Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.";
     } else if (code === "auth/unauthorized-domain") {
       /* The one misconfiguration that is invisible from the server: this
          domain is not in the Firebase project's Authorised domains list.
@@ -162,9 +179,13 @@
          difference between a five-minute fix and an afternoon. */
       says = "This website is not on the Firebase project's list of authorised domains, so Google refused the sign-in. An administrator has to add it (docs/firebase-setup.md step 6).";
     } else if (code === "auth/network-request-failed") {
-      says = "Google could not be reached. Check the connection, or sign in with your email and password below.";
+      says = orPassword
+        ? "Google could not be reached. Check the connection, or sign in with your email and password below."
+        : "Google could not be reached. Check the connection and try again.";
     } else {
-      says = "That Google sign-in did not finish. Try again, or sign in with your email and password below.";
+      says = orPassword
+        ? "That Google sign-in did not finish. Try again, or sign in with your email and password below."
+        : "That Google sign-in did not finish. Try again.";
     }
 
     var notice = document.createElement("div");

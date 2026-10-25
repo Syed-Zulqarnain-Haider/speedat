@@ -49,6 +49,14 @@ final class Notifier
         private readonly string $fromName = '',
         /** Domain for EHLO and Message-ID; the site's host. */
         private readonly string $domain = '',
+        /**
+         * Whether the transport puts a message in somebody's inbox. Only SMTP
+         * does; `log` and `null` accept a message and drop it. Defaults to true
+         * so a test that hands in a recording transport is a delivering one.
+         */
+        private readonly bool $delivers = true,
+        /** Why it does not deliver, in words for the System page. '' when it does. */
+        private readonly string $undeliveredReason = '',
     ) {
     }
 
@@ -64,6 +72,7 @@ final class Notifier
         $host   = (string) (parse_url(Config::str('app.url'), PHP_URL_HOST) ?: '');
 
         $transport = null;
+        $reason    = '';
 
         if ($wanted === 'smtp') {
             try {
@@ -80,12 +89,20 @@ final class Notifier
                 // A bad mailbox configuration must not take the site down; it
                 // takes the notifications down, loudly.
                 Log::error('notify_smtp_misconfigured', ['reason' => $e->getMessage(), 'stage' => $e->stage]);
+                // SmtpSettings' messages name the field, never its value, so
+                // this is safe to show an admin.
+                $reason = 'the SMTP settings were refused: ' . $e->getMessage();
             }
         } elseif ($wanted !== 'log' && $wanted !== 'null' && $wanted !== '') {
             Log::warn('notify_transport_refused', [
                 'wanted' => $wanted,
                 'reason' => 'only smtp, log and null are supported; mail() is capped on this host',
             ]);
+            $reason = 'mail.transport "' . Str::limit($wanted, 20) . '" is not supported - only smtp sends';
+        } elseif ($wanted === 'null') {
+            $reason = 'mail.transport is null - nothing is sent';
+        } else {
+            $reason = 'mail.transport is log - messages are written to the log, not sent';
         }
 
         $transport ??= new NullTransport(
@@ -103,13 +120,40 @@ final class Notifier
             fromAddress: $from,
             fromName: Config::str('mail.from_name', 'Speedat International'),
             domain: $host,
+            // Decided by what was BUILT, not by what was asked for: an `smtp`
+            // whose settings failed is a NullTransport, and it delivers nothing.
+            delivers: $transport instanceof SmtpTransport,
+            undeliveredReason: $transport instanceof SmtpTransport ? '' : $reason,
         );
     }
 
-    /** Whether a message would actually go anywhere. The admin's System page reports this. */
+    /**
+     * Whether a message would actually go anywhere. The admin's System page and
+     * the inbox's "alerts not configured" banner both read this.
+     *
+     * THE TRANSPORT COUNTS. This used to check the two addresses and nothing
+     * else, so with `mail.transport` at `log` (the live state until SMTP is set
+     * up) or an `smtp` whose settings were refused, the System page showed a
+     * green "sending through null", the inbox banner was hidden, and every
+     * lead and alert "succeeded" into the log while the office got nothing
+     * (found 2026-10-25). An address with nowhere to send it is not configured.
+     */
     public function configured(): bool
     {
-        return $this->office !== '' && $this->fromAddress !== '';
+        return $this->hasAddresses() && $this->delivers;
+    }
+
+    /** Why configured() is false, in words an admin can act on. '' when it is true. */
+    public function notConfiguredReason(): string
+    {
+        if ($this->office === '') {
+            return 'no office address (mail.office)';
+        }
+        if ($this->fromAddress === '') {
+            return 'no sender address (mail.from)';
+        }
+
+        return $this->delivers ? '' : $this->undeliveredReason;
     }
 
     public function transportName(): string
@@ -125,7 +169,10 @@ final class Notifier
      */
     public function office(Notification $notification, ?string $replyTo = null): bool
     {
-        if (!$this->configured()) {
+        // The addresses only, not configured(): in log mode the message must
+        // still reach the transport, because the log line it writes is the
+        // only trace of it. to() records that it was not delivered.
+        if (!$this->hasAddresses()) {
             Log::warn('notify_not_configured', ['subject' => $notification->subject]);
             Audit::log('system', 'notify_skipped', [
                 'subject' => Str::limit($notification->subject, 190),
@@ -180,6 +227,23 @@ final class Notifier
 
             $this->transport->send($message);
 
+            if (!$this->delivers) {
+                // Accepted and dropped. Rule 2: a message that went nowhere
+                // leaves a row saying so, and the caller hears false - a cron
+                // summary reading "office told" over a log transport is the
+                // silence this class exists to prevent.
+                Log::warn('notify_not_delivered', [
+                    'subject'   => $notification->subject,
+                    'transport' => $this->transport->name(),
+                ]);
+                Audit::log('system', 'notify_skipped', [
+                    'subject' => Str::limit($notification->subject, 190),
+                    'reason'  => 'transport ' . $this->transport->name(),
+                ]);
+
+                return false;
+            }
+
             return true;
         } catch (SmtpException $e) {
             // stage and code, not the server's prose: see SmtpException.
@@ -205,5 +269,11 @@ final class Notifier
 
             return false;
         }
+    }
+
+    /** Both addresses are set. The half of configured() that does not ask about the transport. */
+    private function hasAddresses(): bool
+    {
+        return $this->office !== '' && $this->fromAddress !== '';
     }
 }

@@ -36,11 +36,22 @@ use Speedat\Domain\SiteDoc\Validate;
  * The suite touches no database. It does pin the time zone, because two of the
  * formatters print a wall-clock date and the vectors were generated in
  * Asia/Karachi.
+ *
+ * A SECOND, HAND-WRITTEN FILE rides along: tests/vectors/owner-decisions.json
+ * holds the answers the TypeScript cannot give, because they pin decisions
+ * taken after it (2026-10-25: slab steps from the first slab, JavaScript trim,
+ * add-on labels matched by key, "Courier" in the WhatsApp text, the mixed-piece
+ * sentence, a tonne as the ceiling with no cargo threshold). Its groups are run
+ * by the same handlers as the generated ones, so every case is held to both
+ * engines - tests/js/run-vectors.mjs reads the same file.
  */
 final class PricingVectorsTest extends TestCase
 {
     /** @var array<string,mixed>|null */
     private static ?array $data = null;
+
+    /** @var array<string,mixed>|null the hand-written owner-decision vectors */
+    private static ?array $owner = null;
 
     /** @var array<string,SiteData> */
     private static array $siteCache = [];
@@ -68,12 +79,25 @@ final class PricingVectorsTest extends TestCase
         $this->assertTrue(is_array($data['sites'] ?? null), 'the vector file has no site documents');
 
         $counted = 0;
-        foreach ($this->groups() as $group) {
+        foreach ($data['groups'] as $group) {
             $counted += count($group['cases']);
         }
 
         $this->assertSame((int) $data['count'], $counted, 'the vector file disagrees with itself about how many cases it holds');
         $this->assertTrue($counted > 500, 'expected several hundred vectors, found ' . $counted);
+
+        $owner = $this->owner();
+        $mine  = 0;
+        foreach ($owner['groups'] as $group) {
+            $mine += count($group['cases']);
+        }
+
+        $this->assertSame((int) $owner['count'], $mine, 'owner-decisions.json disagrees with itself about how many cases it holds');
+
+        // One fixture namespace for both files: a site called the same thing in
+        // each would make site() silently answer from the wrong document.
+        $clash = array_intersect(array_keys($data['sites']), array_keys($owner['sites']));
+        $this->assertSame([], array_values($clash), 'owner-decisions.json reuses a site name from pricing.json');
     }
 
     public function testRoundingAndGramConversion(): void
@@ -558,11 +582,40 @@ final class PricingVectorsTest extends TestCase
         return self::$data;
     }
 
-    /** @return list<array{fn: string, cases: list<array{name: string, input: array<string,mixed>, expected: mixed}>}> */
+    /** @return array<string,mixed> */
+    private function owner(): array
+    {
+        if (self::$owner === null) {
+            $file = dirname(__DIR__) . '/tests/vectors/owner-decisions.json';
+            $raw  = is_file($file) ? file_get_contents($file) : false;
+
+            if ($raw === false) {
+                $this->fail('tests/vectors/owner-decisions.json is missing or unreadable');
+            }
+
+            /** @var array<string,mixed>|null $decoded */
+            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+
+            if (!is_array($decoded)) {
+                $this->fail('tests/vectors/owner-decisions.json is not a JSON object');
+            }
+
+            self::$owner = $decoded;
+        }
+
+        return self::$owner;
+    }
+
+    /**
+     * The generated groups, then the hand-written ones. A group name may appear
+     * in both; run() walks every group of that name.
+     *
+     * @return list<array{fn: string, cases: list<array{name: string, input: array<string,mixed>, expected: mixed}>}>
+     */
     private function groups(): array
     {
         /** @var list<array{fn: string, cases: list<array{name: string, input: array<string,mixed>, expected: mixed}>}> $groups */
-        $groups = $this->data()['groups'];
+        $groups = array_merge($this->data()['groups'], $this->owner()['groups']);
 
         return $groups;
     }
@@ -571,7 +624,7 @@ final class PricingVectorsTest extends TestCase
     {
         if (!isset(self::$siteCache[$name])) {
             /** @var array<string,array<string,mixed>> $sites */
-            $sites = $this->data()['sites'];
+            $sites = $this->data()['sites'] + $this->owner()['sites'];
 
             if (!isset($sites[$name])) {
                 $this->fail('the vector file has no site called "' . $name . '"');

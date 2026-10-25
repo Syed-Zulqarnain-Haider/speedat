@@ -98,31 +98,44 @@ site either does not start or publishes its own configuration.
 
 ```
 /home/uXXXXXXXX/
-└── domains/speedat.com.pk/
+└── domains/speedat.co/
     ├── public_html/          ← THE ONLY directory the web serves
     │   ├── index.php             the front controller
     │   ├── .htaccess             rewrite + deny rules
     │   ├── .user.ini             SHIPS IN THE RELEASE (section 8)
     │   └── assets/               css, js, fonts, flags
-    ├── app/                  ← code.       NOT under public_html
-    ├── bin/                  ← cron.php.   NOT under public_html
-    ├── config/               ← config.php. NOT under public_html
-    ├── db/migrations/        ← the schema
-    ├── storage/              ← cache logs tmp uploads — writable
-    └── var/
+    ├── speedat_main/php/     ← THE APPLICATION. NOT under public_html
+    │   ├── app/                  code
+    │   ├── bin/                  cron.php, seed.php
+    │   ├── config/               config.php
+    │   ├── db/migrations/        the schema
+    │   ├── public/               a copy of public_html the code reads from
+    │   ├── storage/              cache logs tmp uploads — writable
+    │   └── var/
+    └── INSTALL.txt
 ```
 
-`public_html` and its siblings. **Not** `public_html/app`. The front controller
-resolves everything from `dirname(__DIR__)`, so:
+`public_html` and `speedat_main/php` side by side. **Not** `public_html/app`,
+and **not** `app/` straight beside `public_html`. The front controller looks for
+the application at `dirname(__DIR__)/speedat_main/php` and uses it whenever it
+exists, so:
 
-- extract one level too deep and the site answers *"This site is not configured
+- an `app/`, `config/` or `bin/` directly in `domains/<your-domain>/` is a tree
+  **nothing runs**. Older releases put the code there; on a
+  host that already had `speedat_main/php`, extracting one replaced
+  `public_html` and left the old code serving it, and every "fix" looked like an
+  OPcache problem. If you have such leftovers, delete them once the install in
+  `speedat_main/php` is proven, so nobody edits a `config.php` the site never
+  reads;
+- extract one level too deep and the site answers *"This site is not installed
   yet."* forever;
-- extract *into* `public_html` and `config/config.php` becomes
-  `https://your-domain/config/config.php`. The deny-all `.htaccess` in every
-  non-public directory exists to survive exactly that, but do not rely on it —
-  it is the second lock, not the first.
+- extract *into* `public_html` and `config/config.php` becomes reachable under
+  `https://your-domain/speedat_main/php/config/config.php`. The deny-all
+  `.htaccess` in every non-public directory exists to survive exactly that, but
+  do not rely on it — it is the second lock, not the first.
 
-The release zip already has this shape. **Extract it at
+**From here on, every path that is not under `public_html` is under
+`speedat_main/php/`.** The release zip already has this shape. **Extract it at
 `domains/<your-domain>/`.**
 
 ---
@@ -335,10 +348,16 @@ live quoting prices the owner had deliberately taken down.
 `domains/<your-domain>/`:
 
 ```
-app/   bin/   config/   db/   public_html/   storage/   var/   INSTALL.txt
+public_html/   speedat_main/   INSTALL.txt
 ```
 
-If instead you see `public_html/app/`, you extracted in the wrong place: delete
+and in `domains/<your-domain>/speedat_main/php/`:
+
+```
+app/   bin/   config/   db/   public/   storage/   var/
+```
+
+If instead you see `public_html/speedat_main/`, you extracted in the wrong place: delete
 what you extracted and start section 5 again. Do not try to move folders around —
 it is faster and safer to redo it.
 
@@ -346,7 +365,8 @@ it is faster and safer to redo it.
 
 ## 6. Fill in the configuration
 
-1. File Manager → `config/`. You will see `config.sample.php` and `.htaccess`.
+1. File Manager → `speedat_main/php/config/`. You will see `config.sample.php`
+   and `.htaccess`.
 2. Right-click `config.sample.php` → **Copy** → into the same directory, then
    rename the copy to **`config.php`**. (Copy-then-rename, not rename: keeping
    the sample means the next deploy has something to diff against.)
@@ -385,12 +405,14 @@ Leave `security.hsts` as `false` for now. Section 9 turns it on, once.
 
 File Manager → right-click → **Permissions** (or **CHMOD**).
 
+All under `speedat_main/php/` except `public_html/`.
+
 | Path | Mode | Why |
 |---|---|---|
 | `config/config.php` | **600** | owner read/write only. It holds every secret. |
 | `config/` | 700 | |
 | `storage/` and everything under it | **700** | the app writes here; nobody else needs to read it |
-| `app/`, `bin/`, `db/`, `public_html/` | 755 | |
+| `app/`, `bin/`, `db/`, `public/`, and `public_html/` | 755 | |
 | every file under them | 644 | |
 
 **Never 777.** LiteSpeed may refuse to execute world-writable PHP, and a
@@ -496,9 +518,13 @@ One entry. Everything scheduled happens inside it.
 - **Type**: Custom
 - **Command**:
   ```
-  /usr/bin/php /home/uXXXXXXXX/domains/<your-domain>/bin/cron.php
+  /usr/bin/php /home/uXXXXXXXX/domains/<your-domain>/speedat_main/php/bin/cron.php
   ```
 - **Schedule**: once an hour (`0 * * * *`)
+
+`speedat_main/php` is not optional in that path. A cron pointed at
+`domains/<your-domain>/bin/cron.php` boots a tree with no `config.php` (or an
+old one nobody maintains) and fails every hour without the site noticing.
 
 Four things about this field that will otherwise cost you an evening:
 
@@ -526,7 +552,7 @@ between the internet and the scheduled jobs.
 
 ### Confirm it ran
 
-After the first hour, File Manager → `storage/logs/app-<today>.log`. Look for a
+After the first hour, File Manager → `speedat_main/php/storage/logs/app-<today>.log`. Look for a
 `cron_run` line. **Read the PHP version it logs** — `/usr/bin/php` on the CLI is
 not documented to match the version the website runs on, and this is the one
 place that tells you.
@@ -557,8 +583,14 @@ SITE=https://your-domain
 
 curl -sS  $SITE/health                       # {"ok":true}
 curl -sSI $SITE/ | head -1                   # HTTP/2 200
-curl -sS "$SITE/health?token=$METRICS_TOKEN" # php version, env, database: up
+curl -sS -H "Authorization: Bearer $METRICS_TOKEN" $SITE/health
+                                             # php version, env, database: up
 ```
+
+The token goes in the **header**. `/health?token=…` is ignored — the route
+reads `Authorization: Bearer` and nothing else, so it answers the bare
+`{"ok":true}` and you never see the database line. `$METRICS_TOKEN` is
+`tokens.metrics` from `config.php`.
 
 `"database":"up"` in the detailed health answer is the single best check that
 section 2, 3 and 6 all agree with each other.
@@ -618,10 +650,19 @@ Decide this before you need it. It is two restores and they are independent.
 **To roll back the code:**
 
 1. File Manager → `domains/<your-domain>/`, upload the previous release zip.
-2. Extract **here**, overwriting.
-3. `config/config.php` is not in any release zip, so it survives untouched —
-   which is exactly why it is not in there.
-4. Reset OPcache (section 14) or wait out the revalidate window. Otherwise you
+2. Extract **here**, overwriting. The code lands in `speedat_main/php/`, which
+   is what the site runs. **Check the previous zip before you rely on it**:
+   open it on your computer, and its top level must hold `speedat_main/` beside
+   `public_html/` (its archive comment says *"The app lands in
+   speedat_main/php/"*). An older zip with `app/` at its top level does not roll
+   the code back: it puts `app/` beside `public_html`, where nothing runs it,
+   and only `public_html` changes. A date is not the check - the old builder
+   kept producing that layout after the audit that found it.
+3. `speedat_main/php/config/config.php` is not in any release zip, so it
+   survives untouched — which is exactly why it is not in there.
+4. Redo the permissions (section 7): an extract-over re-creates group-writable
+   modes on every file it replaces.
+5. Reset OPcache (section 14) or wait out the revalidate window. Otherwise you
    will be looking at a mixture of old and new code, which is worse than either.
 
 **To roll back the data:**
@@ -629,13 +670,23 @@ Decide this before you need it. It is two restores and they are independent.
 1. phpMyAdmin → your database → **Operations → Drop** every table, or import a
    dump that starts with `DROP TABLE IF EXISTS`.
 2. Import the pre-import dump.
-3. Re-check the counts and the price hold, as in section 4c.
+3. **Clear the site cache**: File Manager →
+   `speedat_main/php/storage/cache/site/` → delete the file `stamp` (or every
+   `*.json` there). The public pages and the hold are cached for up to five
+   minutes and only a publish or the admin hold switch expires them; an import
+   behind the application's back does neither.
+4. Re-check the counts and the price hold, as in section 4c.
 
 **Roll the code back first, data only if you must.** A newer schema usually
 tolerates older data; older code against newer data does not.
 
-**If you only need to stop the bleeding:** turn the price hold on. phpMyAdmin →
-SQL:
+**If you only need to stop the bleeding:** turn the price hold on **with the
+switch in the admin**. The switch clears the site cache as it saves, so the
+site stops quoting and shows the hold message on the next page load. That is a
+10-second fix for a wrong-prices incident, and it buys you time to do the real
+rollback calmly.
+
+Only if the admin itself is down, phpMyAdmin → SQL:
 
 ```sql
 UPDATE app_settings
@@ -643,9 +694,11 @@ UPDATE app_settings
  WHERE k = 'hold';
 ```
 
-The site stops quoting and shows the hold message instead. That is a 10-second
-fix for a wrong-prices incident, and it buys you time to do the real rollback
-calmly.
+**Then delete `speedat_main/php/storage/cache/site/stamp` in File Manager.**
+SQL does not touch the cache: without this step the site keeps serving the
+cached, un-held state for **up to five minutes**, customers keep seeing the
+wrong prices, and it looks as if the hold did not work. Deleting the stamp
+expires every cached page at once; the next request writes a fresh one.
 
 ---
 
@@ -663,8 +716,13 @@ Either wait out the revalidate window, or call the token-protected reset
 endpoint:
 
 ```bash
-curl -sS "https://your-domain/ops/opcache-reset?token=$CRON_TOKEN"
+curl -sS -H "Authorization: Bearer $CRON_TOKEN" https://your-domain/ops/opcache-reset
 ```
+
+Prefer the header. `?token=` still works on this one route (for the operator
+who cannot set a header), but it writes the cron secret into the access log
+and every such call is recorded as `ops_token_in_url`. Only `/health` and
+`/api/metrics` ignore a query-string token.
 
 (That route arrives with the phase that adds the admin. Until then, waiting is
 the only option — which is another reason not to deploy at 6pm.)
@@ -709,11 +767,12 @@ files; it does not help you if the account itself is the thing you have lost.
 
 | Symptom | Almost always |
 |---|---|
-| *"This site is not configured yet."* | `config/config.php` missing, or a required value is blank. The key's name is in the host's error log — **Files → Error Log**. |
+| *"This site is not installed yet."* | `speedat_main/php` is not beside `public_html`, or was extracted one level too deep. Section 1. |
+| *"This site is not configured yet."* | `speedat_main/php/config/config.php` missing, or a required value is blank. The key's name is in the host's error log — **Files → Error Log**. |
 | *"The database is unavailable."* | `db.name`/`db.user` are missing the `u123456789_` prefix, or the password is wrong. |
 | Blank page or 500 | Host error log. `display_errors` is Off on purpose; a visitor is never shown a stack trace. |
 | The site serves PHP source as text | Catastrophic: the server is ignoring `.htaccess` or the layout is wrong. Take the site down (rename `public_html/index.php`) and re-read section 1. |
-| Your fix did not take effect | OPcache. Section 14. |
+| Your fix did not take effect | **First check where it landed**: the site runs `speedat_main/php/app`, not an `app/` beside `public_html` (section 1). Then OPcache, section 14. |
 | 403 on one admin form only, nothing in the logs | ModSecurity ate the request before PHP saw it. hPanel → Advanced → ModSecurity; narrow the exception to that one path, never the whole site. |
 | Sign-in fails with `auth/unauthorized-domain` | Section 11. |
 | Sessions drop constantly | `session.save_path` on shared hosting. See the `.user.ini` sample. |

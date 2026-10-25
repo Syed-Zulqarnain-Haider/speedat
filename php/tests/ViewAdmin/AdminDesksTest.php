@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Speedat\Tests\ViewAdmin;
 
+use Speedat\Domain\Shipments\ShipmentStatus as Transitions;
 use Speedat\View\Admin\LoginPage;
 use Speedat\View\Admin\Routes;
+use Speedat\View\Admin\ShipmentPage;
 use Speedat\View\Admin\ShipmentStatus;
 
 /**
@@ -139,6 +141,30 @@ final class AdminDesksTest extends AdminViewTestCase
 
         $this->assertStringContains('No shipments here. Create one from a lead in the Inbox', $html);
         $this->assertStringNotContains('<table', $html);
+        $this->assertStringContains('id="shipfind"', $html, 'the search box stays: the shipment may be in another tab');
+    }
+
+    /**
+     * A search that finds nothing keeps the box, says what was searched for,
+     * and does not invite a second booking of a parcel that probably exists.
+     */
+    public function testASearchWithNoMatchKeepsTheBoxAndDoesNotSuggestCreatingIt(): void
+    {
+        $html = $this->view()->render('admin/shipments', [
+            'page'  => $this->shipmentsPage(['rows' => [], 'filter' => 'EK999', 'status' => 'open']),
+            'shell' => $this->shell('shipments'),
+        ]);
+
+        $this->assertStringContains('id="shipfind"', $html);
+        $this->assertStringContains('name="q" value="EK999"', $html, 'what was typed is still in the box');
+        $this->assertStringContains('No shipment matches &#8220;EK999&#8221;.', $html);
+        $this->assertStringContains('href="' . Routes::shipments('open') . '">Clear the search</a>', $html);
+        $this->assertStringContains('href="' . htmlspecialchars(Routes::shipments('all') . '&q=EK999') . '">look in All</a>', $html);
+        $this->assertStringNotContains('Create one from a lead', $html);
+        // The search goes to the server, which looks past the first page; a
+        // data-list-filter input has its submit cancelled by admin.js.
+        $this->assertStringNotContains('data-list-filter', $html);
+        $this->assertStringContains('>Find</button>', $html);
     }
 
     /* ---------------- the shipment desk ---------------- */
@@ -165,12 +191,58 @@ final class AdminDesksTest extends AdminViewTestCase
         $this->assertStringContains('action="' . Routes::SHIPMENT_EVENT . '"', $html);
         $this->assertStringContains('<span class="pill s-in_transit">In transit</span>', $html, 'what it is now');
         $this->assertStringContains('<option value="in_transit" selected>In transit</option>', $html, 'the select starts where it is');
-        foreach (ShipmentStatus::ALL as $status) {
-            $this->assertStringContains('value="' . $status . '"', $html, $status . ': not offered');
-        }
+        // Exactly the moves the transition table allows from In transit, and
+        // nothing the server would refuse: offering Delivered from here was a
+        // choice that always came back as an error.
+        preg_match('#<select name="status">(.*?)</select>#s', $html, $select);
+        preg_match_all('#<option value="([a-z_]+)"#', $select[1] ?? '', $offered);
+        $this->assertSame(Transitions::nextFrom('in_transit'), $offered[1], 'the select offers what the server accepts');
+        $this->assertSame(['in_transit', 'customs', 'out_for_delivery', 'exception'], $offered[1]);
         $this->assertStringContains('Note (included in the WhatsApp update)', $html);
         $this->assertStringContains('name="note" maxlength="1000"', $html);
         $this->assertStringContains('>Add update</button>', $html);
+    }
+
+    /** From Booked, Delivered is not on offer - it is what the server refuses. */
+    public function testABookedShipmentIsNotOfferedDelivered(): void
+    {
+        $base = $this->shipmentPage();
+        $page = new ShipmentPage(
+            shipment: ['status' => 'booked'] + $base->shipment,
+            events: $base->events,
+            companyName: $base->companyName,
+        );
+
+        $this->assertSame(Transitions::nextFrom('booked'), array_keys($page->statusOptions()));
+        $this->assertFalse(isset($page->statusOptions()['delivered']), 'Booked cannot go straight to Delivered');
+        $this->assertSame('Picked up', $page->statusOptions()['picked_up'], 'labelled as the admin reads them');
+    }
+
+    /**
+     * A refused update is an alert, not the green "Update added" box, and the
+     * note the office typed is still in the box.
+     */
+    public function testARefusedUpdateIsAnAlertAndKeepsTheNote(): void
+    {
+        $base = $this->shipmentPage();
+        $page = new ShipmentPage(
+            shipment: $base->shipment,
+            events: $base->events,
+            companyName: $base->companyName,
+            notice: 'A shipment that is Booked cannot go straight to Delivered.',
+            noticeKind: 'err',
+            note: 'Handed to Emirates "EK623"',
+        );
+        $html = $this->view()->render('admin/shipment', ['page' => $page, 'shell' => $this->shell('shipments')]);
+
+        $this->assertStringContains('<div class="notice err" role="alert">A shipment that is Booked cannot go straight to Delivered.</div>', $html);
+        $this->assertStringNotContains('class="notice ok"', $html);
+        $this->assertStringContains('name="note" maxlength="1000" value="Handed to Emirates &quot;EK623&quot;"', $html, 'the note survives, escaped');
+
+        // And a success is still the quiet green status line.
+        $ok = $this->view()->render('admin/shipment', ['page' => $this->shipmentPage(['notice' => 'Update added']), 'shell' => $this->shell('shipments')]);
+        $this->assertStringContains('<div class="notice ok" role="status">Update added</div>', $ok);
+        $this->assertStringContains('name="note" maxlength="1000" value=""', $ok, 'an empty box after a success');
     }
 
     /**

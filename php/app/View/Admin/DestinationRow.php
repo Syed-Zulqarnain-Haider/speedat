@@ -190,12 +190,16 @@ final class DestinationRow
      *
      *   - `low`:  a kilogram priced BELOW the one under it. The ladder runs
      *             backwards, so a heavier parcel is cheaper than a lighter one.
-     *   - `gap`:  a blank kilogram with priced kilograms on both sides. The
-     *             engine charges the next heavier priced box there. This is a
-     *             LEGITIMATE way to fill a ladder in - "3 and 4 kg go at the
-     *             5 kg price" - so it is shown quietly and never in the colour
-     *             of a fault. Marking twenty blanks in alarm orange on an
-     *             ordinary sparse ladder is how a warning gets ignored.
+     *   - `gap`:  a blank kilogram with priced kilograms on both sides. A
+     *             blank box is not a price (owner, 2026-09-28): the service is
+     *             NOT OFFERED at that weight and the customer is sent to
+     *             WhatsApp. It used to be charged at the next heavier priced
+     *             box, and the note still said so after the engine stopped -
+     *             which told the owner 3 and 4 kg were quoted when they were
+     *             not. It is still shown quietly and never in the colour of a
+     *             fault: a ladder left sparse on purpose is ordinary, and
+     *             marking twenty blanks in alarm orange is how a warning gets
+     *             ignored. The sentence says what the customer will see.
      *   - `edited`: the box differs from what the website is serving right now.
      *
      * Doing it here means the marks are on the page with JavaScript switched
@@ -294,10 +298,13 @@ final class DestinationRow
         }
 
         // The blanks are stated, not complained about: leaving them is a normal
-        // way to price, and the sentence says what the customer will be charged.
+        // way to price, and the sentence says what the customer will see. It
+        // must say NOT OFFERED: "charged at the next heavier price" was true
+        // before 2026-09-28 and has been false since, and admin.js paintNote()
+        // repaints this same sentence as the owner types - keep the two equal.
         if ($gap !== []) {
-            $parts[] = self::kgList($gap) . (count($gap) === 1 ? ' is' : ' are')
-                . ' blank, and charged at the next heavier price.';
+            $parts[] = self::kgList($gap) . (count($gap) === 1 ? ' is blank, so it is' : ' are blank, so they are')
+                . ' not offered (customers are sent to WhatsApp).';
         }
 
         return implode(' ', $parts);

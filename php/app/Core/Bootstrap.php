@@ -39,30 +39,82 @@ final class Bootstrap
         ]);
 
         /*
-         * COUNT THE LANDING, beside the line that already says a request
-         * happened - and after it, so a counter that cannot be written still
-         * leaves the request in the log.
+         * COUNT THE LANDING - on the way out, once the answer is known.
          *
-         * Every decision is PageViews': never an asset, never /admin, never an
-         * ops endpoint, never a bot - and never an exception either. It logs
-         * its own failures and swallows them, the way Core\Audit does. A
-         * visitor came here to read about courier rates, and must not meet an
-         * error page because a number could not be incremented.
+         * It used to happen right here, before routing, on the request alone,
+         * and so it counted things that were not pages: the 301 from
+         * `/services/` and then `/services` itself (one visit, two landings),
+         * every 404 a scanner with a browser User-Agent asked for, and so on
+         * (PageViews::countable() has the whole list, 2026-10-25). Only the
+         * response can say "this was a page somebody read", and the response
+         * is built by `Http\Kernel::run()`, which public/index.php calls
+         * after this method returns - so the count is a shutdown function that
+         * reads back what was actually sent: the status PHP reports and the
+         * Content-Type that went out. That covers Kernel and the older
+         * Bootstrap::run() alike, with no second call site to forget.
          *
-         * HEAD IS NOT A LANDING. It is a monitor or a link checker asking
-         * whether a page exists, and nobody read anything. Request::isGet()
-         * answers true for HEAD on purpose - a HEAD must produce the GET's own
-         * headers - so it is excluded here by name.
+         * Registered AFTER common(), so it runs after the fatal-error net:
+         * a fatal has already turned the status into a 500 by the time this
+         * asks, and a 500 is not counted.
+         *
+         * Every other decision is PageViews': never an asset, never /admin,
+         * never an ops endpoint, never a bot, never a click from one of the
+         * site's own pages - and never an exception either. It logs its own
+         * failures and swallows them, the way Core\Audit does. A visitor came
+         * here to read about courier rates, and must not meet an error page
+         * because a number could not be incremented.
          */
-        if ($request->isGet() && !$request->isHead()) {
+        register_shutdown_function(static function () use ($request): void {
+            self::countLanding($request);
+        });
+
+        return new App($request);
+    }
+
+    /**
+     * The landing counter's half of a finished web request; see web().
+     *
+     * http_response_code() is the status Response::send() set (it passes the
+     * code as header()'s third argument precisely so this reads back true),
+     * and headers_list() is what went out. Both are empty under the CLI, where
+     * nothing is counted, which is the right answer there too.
+     *
+     * The site's own hosts are `app.url`'s and the one this request arrived on:
+     * the first is the address the owner publishes, the second is the www/apex
+     * or staging name a misconfigured `app.url` would otherwise miss - the same
+     * pair Core\Csrf::originOk() accepts, for the same reason.
+     */
+    private static function countLanding(Request $request): void
+    {
+        try {
+            $status = http_response_code();
+            if (!is_int($status)) {
+                return;
+            }
+
+            $type = '';
+            foreach (headers_list() as $line) {
+                if (stripos($line, 'content-type:') === 0) {
+                    $type = trim(substr($line, strlen('content-type:')));
+                }
+            }
+
+            if (!PageViews::countable($request->method, $status, $type)) {
+                return;
+            }
+
             (new PageViews())->record(
                 $request->path,
                 $request->userAgent(),
-                $request->header('referer')
+                $request->header('referer'),
+                [Config::str('app.url'), $request->origin()],
             );
+        } catch (\Throwable $e) {
+            // record() already swallows its own failures; this is for anything
+            // around it, because an exception thrown out of a shutdown function
+            // has nowhere left to go but a blank line in the server log.
+            Log::exception('page_view_count_failed', $e, ['path' => $request->path]);
         }
-
-        return new App($request);
     }
 
     /**

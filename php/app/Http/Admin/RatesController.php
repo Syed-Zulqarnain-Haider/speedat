@@ -118,7 +118,7 @@ final class RatesController
             }
         }
 
-        return $this->toReview($app, $form->kept > 0 ? ['kept' => $form->kept] : [], $form->base);
+        return $this->toReview($app, ($form->kept > 0 ? ['kept' => $form->kept] : []) + ['noname' => $form->unnamed > 0], $form->base);
     }
 
     /**
@@ -143,6 +143,12 @@ final class RatesController
      * does not shift the header row that follows. It starts with `#`, which is
      * not one of the four characters Excel treats as a formula.
      *
+     * THE FILE STARTS WITH A UTF-8 BOM (`Csv::BOM`), because Windows Excel
+     * opens a double-clicked .csv as cp1252 without one and every en dash in
+     * a days cell, and the u-umlaut in "Türkiye", came out as mojibake in the
+     * file the owner keeps. The BOM is on the download only; the copy button's
+     * text is the same `Csv::document()` without it.
+     *
      * `Content-Disposition: attachment` and the formula guard are both in
      * `View\Admin\Csv`: a cell starting with `= + - @` is prefixed with an
      * apostrophe, because Excel executes such a cell and a carrier who names a
@@ -158,18 +164,14 @@ final class RatesController
             $base    = Repo::getDraft();
             $site    = Site::fromArray($base->data->toArray());
             $marker  = 'draft-from-v' . $base->baseVersion;
-            $comment = '# UNPUBLISHED DRAFT - these prices are not on the website'
-                . ' - branched from published version ' . $base->baseVersion
-                . ' - exported ' . Clock::utcNow()->format('Y-m-d H:i') . ' UTC';
+            $comment = Csv::draftComment($base->baseVersion, Clock::utcNow());
         } else {
             $site    = Site::fromArray($live->data->toArray() + [
                 'version'     => $live->version,
                 'publishedAt' => $live->publishedAt,
             ]);
             $marker  = 'v' . $live->version;
-            $comment = '# Speedat published rates - version ' . $live->version
-                . ' - published ' . $live->publishedAt
-                . ' - exported ' . Clock::utcNow()->format('Y-m-d H:i') . ' UTC';
+            $comment = Csv::liveComment($live->version, $live->publishedAt, Clock::utcNow());
         }
 
         Audit::log($admin->email, 'rates_exported', [
@@ -178,24 +180,10 @@ final class RatesController
             'rows'    => count($site->destinations()),
         ], $app->request);
 
-        return Response::text(self::comment($comment) . "\r\n" . Csv::render($site))
+        return Response::text(Csv::BOM . Csv::document($comment, $site))
             ->header('Content-Type', 'text/csv; charset=utf-8')
             ->header('Content-Disposition', 'attachment; filename="' . self::exportName($site, $marker) . '"')
             ->noStore();
-    }
-
-    /**
-     * The comment row, stripped of everything that would make it more than one
-     * cell or more than one line.
-     *
-     * Nothing a person typed reaches it - the version numbers and the timestamps
-     * are the database's - but it is built by concatenation, and a line that is
-     * built by concatenation gets its separators taken away from it rather than
-     * being trusted not to contain any.
-     */
-    private static function comment(string $text): string
-    {
-        return str_replace([',', '"', "\r", "\n"], ' ', $text);
     }
 
     /** `speedat-…-rates.csv` with the version (or the word draft) before the extension. */
@@ -270,7 +258,7 @@ final class RatesController
             ]);
         }
 
-        return $this->answer($app, ['saved' => true, 'kept' => $form->kept], '', $form->base, [], $saved);
+        return $this->answer($app, ['saved' => true, 'kept' => $form->kept, 'noname' => $form->unnamed > 0], '', $form->base, [], $saved);
     }
 
     /** POST /admin/rates/destination/add */
@@ -520,11 +508,15 @@ final class RatesController
         $roundTo  = self::number($app->request->post('roundTo', '', 12));
 
         if ($services === [] || $fields === []) {
-            return $this->toEditor($app, ['bulkerr' => 'services']);
+            // `#sec-bulk`: the refusal is printed in the Bulk adjust section,
+            // below the table, and a page that opened at the top showed the
+            // owner nothing at all - with JavaScript off, the only way he
+            // would know is by scrolling to look.
+            return $this->toEditor($app, ['bulkerr' => 'services'], '', null, 'sec-bulk');
         }
 
         if ($value === null || $value === 0.0) {
-            return $this->toEditor($app, ['bulkerr' => 'value']);
+            return $this->toEditor($app, ['bulkerr' => 'value'], '', null, 'sec-bulk');
         }
 
         $round   = $roundTo !== null && $roundTo >= 1 ? $roundTo : 1.0;
@@ -590,7 +582,10 @@ final class RatesController
             return $this->toEditor($app, ['err' => 'badshape']);
         }
 
-        return $this->toEditor($app, ['bulk' => $changed]);
+        // Same anchor: "275 prices changed in the editor" is in `#sec-bulk`,
+        // and an owner who lands at the top and sees nothing happen is an
+        // owner who presses +5% a second time.
+        return $this->toEditor($app, ['bulk' => $changed], '', null, 'sec-bulk');
     }
 
     /**
@@ -663,6 +658,15 @@ final class RatesController
      * nothing more: the owner still reviews and publishes, which is why the
      * button says "Restore into editor". The audit line names the version, the
      * same detail `restoreVersionAction` recorded.
+     *
+     * IT REPLACES THE WHOLE DRAFT, so it is treated like the save it is.
+     * `restoreform` carries the draft fingerprint the screen was drawn with
+     * (the same hidden field every other draft form carries), and a draft a
+     * colleague has saved since is refused with `draftmoved` instead of being
+     * overwritten - it used to run with no fingerprint at all. The button
+     * asks first when there are unpublished edits (`admin/partials/history`),
+     * and the toast says when it replaced some, because "Version 10 is back
+     * in the editor" read as if the thirty edits were still there beside it.
      */
     public function restore(App $app, AdminUser $admin): Response
     {
@@ -672,15 +676,22 @@ final class RatesController
             return $this->toEditor($app, ['err' => 'nodest']);
         }
 
-        $restored = Repo::restore($version, $admin->email);
+        $live     = Repo::getLatestVersion();
+        $replaced = $live !== null && Diff::of($live->data, Repo::getDraft()->data)->count > 0;
+
+        try {
+            $restored = Repo::restore($version, $admin->email, DraftForm::revision($app->request));
+        } catch (DraftConflict $e) {
+            return $this->refuseStaleDraft($app, $admin, 'restore', $e, null);
+        }
 
         if ($restored === null) {
             return $this->toEditor($app, ['err' => 'nodest']);
         }
 
-        Audit::log($admin->email, 'draft_restored', ['fromVersion' => $version], $app->request);
+        Audit::log($admin->email, 'draft_restored', ['fromVersion' => $version, 'replacedEdits' => $replaced], $app->request);
 
-        return $this->toEditor($app, ['restored' => $version]);
+        return $this->toEditor($app, ['restored' => $version, 'replaced' => $replaced]);
     }
 
     /**
@@ -722,32 +733,52 @@ final class RatesController
         // whether that version exists is answered by the confirming post, so a
         // hand-typed version number cannot be used to find out which versions
         // are real without also carrying a valid CSRF token and the owner role.
+        //
+        // `Routes::rollbackAsk()` and not a bare `?rollback=`: the card is in
+        // `#sec-history`, many screens below the top, and a redirect with no
+        // fragment opened the page at the top - so during a wrong-price
+        // incident the owner pressed Roll back and, as far as he could see,
+        // nothing happened.
         if (!$app->request->postBool('confirm')) {
-            return $this->toEditor($app, ['rollback' => $version]);
+            return Response::redirect($app->request->basePath . Routes::rollbackAsk($version), 303)->noStore();
         }
 
+        // THE LIVE VERSION THE QUESTION WAS ASKED ABOUT, from the card's own
+        // hidden field. Absent (an older page, a script) means "whatever is
+        // live now", the old behaviour; a value that is not a whole number is
+        // treated as absent rather than as version 0, which would refuse.
+        $expectedLive = $app->request->postInt('expectedLive', -1);
+
         try {
-            $published = Repo::rollbackTo($version, $admin->email, $app->request);
+            $published = Repo::rollbackTo($version, $admin->email, $app->request, $expectedLive >= 0 ? $expectedLive : null);
         } catch (RollbackRefused $e) {
             Log::warn('rollback_refused', ['by' => $admin->email, 'version' => $version, 'reason' => $e->reason]);
 
+            // `#reviewbox`, where `EditorPage::outcome()` prints the refusal -
+            // the same place the success sentence lands.
             return $this->toEditor($app, ['err' => match ($e->reason) {
                 RollbackRefused::NO_SUCH_VERSION => 'norollback',
                 RollbackRefused::NO_CHANGE       => 'rollsame',
                 default                          => 'rollstale',
-            }]);
+            }], '', null, 'reviewbox');
         } catch (PublishConflict $e) {
             // Somebody published while the owner was reading the question, so
             // the version being undone is not the one that is live any more.
             // Refusing is the only safe answer: the roll-back was aimed at a
             // publish that is no longer the top of the pile.
+            //
+            // It used to redirect with `?conflict=N`, which only the REVIEW
+            // card prints - so on the editor the refusal said nothing at all.
+            // `rollmoved` is a sentence the editor prints, and the question is
+            // drawn again against the version that is live now, so answering
+            // it is one press rather than starting over.
             Log::warn('rollback_conflict', ['by' => $admin->email, 'version' => $version, 'live' => $e->live]);
 
-            return $this->toEditor($app, ['conflict' => $e->live]);
+            return $this->toEditor($app, ['err' => 'rollmoved', 'rollback' => $version], '', null, 'sec-history');
         } catch (\InvalidArgumentException | \RuntimeException $e) {
             Log::exception('rollback_failed', $e, ['version' => $version]);
 
-            return $this->toEditor($app, ['err' => 'publish']);
+            return $this->toEditor($app, ['err' => 'publish'], '', null, 'reviewbox');
         }
 
         // `Repo::rollbackTo()` writes the audit line itself - who put the old
@@ -777,11 +808,31 @@ final class RatesController
      *      exact sentence the TypeScript used.
      *   5. the audit line carries the version, the summary and the change list,
      *      so "what went live at 14:05" is answerable a year later.
+     *
+     * AND THE DRAFT HAS TO BE THE ONE THE CARD LISTED. `expectedBase` only
+     * says the live version has not moved; the draft was re-read here and
+     * published whatever it held, so a colleague's twenty autosaved prices
+     * went live under a review card that listed three. The card now carries
+     * the draft fingerprint it was drawn from (`revision`, the same
+     * `data-revision` field admin.js keeps current after the owner's OWN
+     * autosaves), and a different one is refused with `reviewmoved` and the
+     * card redrawn. An absent field skips the check, as `DraftForm::revision()`
+     * reads it everywhere else; `Repo::publishVersion()` asks again with the
+     * draft row locked, so a save landing between here and the write is
+     * caught too.
      */
     public function publish(App $app, AdminUser $admin): Response
     {
         $draft = Repo::getDraft();
         $live  = Repo::getLatestVersion() ?? PublishedVersion::sample();
+
+        $revision = DraftForm::revision($app->request);
+
+        if ($revision !== null && !hash_equals($draft->revision, $revision)) {
+            Log::warn('publish_draft_moved', ['by' => $admin->email, 'current' => $draft->revision]);
+
+            return $this->toReview($app, ['err' => 'reviewmoved']);
+        }
 
         $goLive = $app->request->postBool('goLive');
         $resume = $app->request->postBool('resume');
@@ -814,11 +865,19 @@ final class RatesController
                 changeCount: $diff->count,
                 expectedBase: $expected >= 0 ? $expected : null,
                 liftHold: $lift,
+                expectedRevision: $revision,
             ));
         } catch (PublishConflict $e) {
             Log::warn('publish_conflict', ['live' => $e->live, 'expected' => $expected]);
 
             return $this->toReview($app, ['conflict' => $e->live]);
+        } catch (DraftConflict $e) {
+            // Before the generic catch below: DraftConflict is a
+            // RuntimeException, and "could not be published, try again" is
+            // the wrong sentence for "the draft changed - read it again".
+            Log::warn('publish_draft_moved', ['by' => $admin->email, 'current' => $e->current->revision]);
+
+            return $this->toReview($app, ['err' => 'reviewmoved']);
         } catch (\InvalidArgumentException | \RuntimeException $e) {
             // The schema refused the document, or another publish holds the
             // lock. Nothing was written either way, and the reason is in the log
@@ -912,6 +971,10 @@ final class RatesController
 
         if ($form->kept > 0) {
             $codes['kept'] = $form->kept;
+        }
+
+        if ($form->unnamed > 0) {
+            $codes['noname'] = true;
         }
 
         return $this->toEditor($app, $codes, $open, $form->base);
@@ -1091,6 +1154,11 @@ final class RatesController
             // which is how admin.js knows to take the warning back down.
             'kept'    => $kept,
             'message' => Notice::keptText($kept),
+            // A country saved with an empty name box. Its own field and its
+            // own sentence, NOT part of `kept`: counted there it read as "a
+            // box did not hold a number" over prices that had all saved.
+            'noname'  => ($codes['noname'] ?? false) === true,
+            'nonameMessage' => ($codes['noname'] ?? false) === true ? Notice::nonameText() : '',
         ])->noStore();
     }
 

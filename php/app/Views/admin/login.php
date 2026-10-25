@@ -27,6 +27,13 @@ declare(strict_types=1);
  * page is the password form and nothing else: no dead button, no "or" line
  * pointing at a way in that is not there.
  *
+ * AND THE PASSWORD FORM IS ONLY THERE WHEN PASSWORDS ARE ON. With
+ * `auth.allow_password_login` false (the sample config's default) it used to
+ * render anyway and refuse every submit, and when Google's script failed it was
+ * the only thing on the page. A Google-only deployment now renders the Google
+ * button and one sentence for when that button cannot appear; the script hides
+ * that sentence once the button is shown.
+ *
  * Refusals are worded identically whichever half failed, so nothing here can
  * be used to find out which addresses are admins.
  *
@@ -114,10 +121,30 @@ $this->layout('admin/layouts/plain', [
             <input type="hidden" name="idToken" value="" data-google-token>
             <button class="btn outline big" type="submit">Continue with Google</button>
           </form>
+          <?php if ($page->passwordsEnabled) { ?>
           <p class="login-or">or with email and password</p>
+          <?php } ?>
         </div>
+        <?php if ($page->googleOnly() && $firebase === '') { ?>
+        <?php /* googleReady looks only at the project id; the script and its
+                 config block below need all four browser values. With one of
+                 them missing the button can never appear, and the browser
+                 sentence that follows would send the owner off to toggle
+                 JavaScript and reload - which cannot help (review,
+                 2026-10-25). This is a config fix, so it names the file and
+                 the keys. Same hook as the browser sentence: nothing runs to
+                 hide it, and that is correct, because it stays true until
+                 someone edits the config. */ ?>
+        <p class="login-step" data-google-fallback>Sign-in here is with Google only, and the Continue with Google button cannot appear yet: config/config.php has auth.firebase_project_id set but is missing auth.firebase_api_key, auth.firebase_auth_domain or auth.firebase_app_id. Copy all four from the Firebase console (Project settings - Your apps - Web app), then reload this page.</p>
+        <?php } elseif ($page->googleOnly()) { ?>
+        <?php /* Visible until js/firebase-signin.js has shown the button, which
+                 covers JavaScript off and a Google CDN that never answered -
+                 the two cases where this card would otherwise be empty. */ ?>
+        <p class="login-step" data-google-fallback>Sign-in here is with Google only. If no Continue with Google button appears, this browser has JavaScript switched off or cannot reach Google - turn JavaScript on, check the connection, and reload this page.</p>
         <?php } ?>
-        <form method="post" action="<?= e($this->url(Routes::LOGIN_PASSWORD)) ?>">
+        <?php } ?>
+        <?php if ($page->passwordsEnabled) { ?>
+        <form method="post" action="<?= e($this->url(Routes::LOGIN_PASSWORD)) ?>" data-password-form>
           <?= $csrf->field() ?>
           <label class="field">
             <span>Email</span>
@@ -129,6 +156,7 @@ $this->layout('admin/layouts/plain', [
           </label>
           <button class="btn primary big" type="submit">Sign in</button>
         </form>
+        <?php } ?>
         <?php if ($page->error !== '') { ?>
         <div class="notice err" role="alert"><?= e($page->error) ?></div>
         <?php } ?>

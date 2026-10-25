@@ -20,20 +20,33 @@ Manager, phpMyAdmin, or `curl` from your own machine.
 │   ├── .htaccess        rewrite + deny rules
 │   ├── .user.ini        PHP limits (pasted by hand, see §9)
 │   └── assets/          css, js, fonts, flags
-├── app/             ← code
-├── bin/             ← cron.php
-├── config/          ← config.php  (600, the only copy of every secret)
-├── db/migrations/   ← the schema
-├── storage/         ← cache/ logs/ tmp/ uploads/   (700, writable)
-└── var/
+└── speedat_main/php/ ← THE APPLICATION. The site runs from here.
+    ├── app/             ← code
+    ├── bin/             ← cron.php
+    ├── config/          ← config.php  (600, the only copy of every secret)
+    ├── db/migrations/   ← the schema
+    ├── public/          ← a copy of public_html the code reads from
+    ├── storage/         ← cache/ logs/ tmp/ uploads/   (700, writable)
+    └── var/
 ```
 
-`app/`, `bin/`, `config/`, `db/`, `storage/` and `var/` are **siblings** of
-`public_html`, not inside it, so no URL reaches them. Each also ships an
-`.htaccess` with `Require all denied` as a second lock. If you ever see them
-*inside* `public_html`, stop: `config/config.php` is being published. Rename
+**Every path in this runbook that is not under `public_html` is under
+`speedat_main/php/`** — `config/config.php` means
+`domains/<domain>/speedat_main/php/config/config.php`.
+
+`speedat_main/php` is the **sibling** of `public_html`, not inside it, so no URL
+reaches it. Each directory in it also ships an `.htaccess` with
+`Require all denied` as a second lock. If you ever see it *inside*
+`public_html`, stop: `config/config.php` is being published. Rename
 `public_html/index.php` to take the site down and redo
 [`deploy-hostinger.md`](./deploy-hostinger.md) §5.
+
+`public_html/index.php` runs the application from `speedat_main/php` whenever
+that folder exists. An `app/`, `config/` or `bin/` lying directly in
+`domains/<domain>/` — what older releases produced — is a
+tree **nothing runs**: a fix uploaded there never executes, and an edit to a
+`config.php` there changes nothing. Delete such leftovers once you have
+confirmed the live install is the one in `speedat_main/php`.
 
 | What | Where |
 |---|---|
@@ -76,12 +89,15 @@ it to see what happens.
    you roll back to.
 2. Keep the **previous** release zip somewhere you can find it in two minutes.
 3. File Manager → `domains/<domain>/` (the level with `public_html`, **not**
-   inside it) → **Upload** the zip.
+   inside it) → **Upload** the zip. It carries `public_html/` and
+   `speedat_main/php/` and replaces the files in both.
 4. Compare the uploaded size with what the builder printed. File Manager
    truncates large uploads on a flaky connection and says nothing.
 5. Right-click the zip → **Extract** → **here**, overwriting.
 6. Delete the zip from the server. It is a complete copy of the application
-   sitting above the web root.
+   sitting above the web root. Then **redo the permissions**
+   ([`deploy-hostinger.md`](./deploy-hostinger.md) §7): an extract-over
+   re-creates group-writable modes on every file it replaces.
 7. **Reset OPcache** (§9). Skipping this is how you end up debugging a mixture of
    old and new code.
 8. Smoke test (§4). Two minutes.
@@ -102,22 +118,37 @@ Two restores, independent. **Code first; data only if you must** — a newer sch
 usually tolerates older data, older code against newer data does not.
 
 **Code** (about three minutes): upload the previous release zip to
-`domains/<domain>/`, extract **here** overwriting, delete the zip, reset OPcache
-(§9), smoke test.
+`domains/<domain>/`, extract **here** overwriting, delete the zip, redo the
+permissions, reset OPcache (§9), smoke test. The previous zip must be one that
+writes `speedat_main/php/`: its top level holds `speedat_main/` beside
+`public_html/`, and its archive comment says "The app lands in
+speedat_main/php/". Check the zip, not its build date. An older zip has `app/`
+at its top level and puts it beside `public_html`, so extracting it rolls back `public_html` and
+leaves the running code exactly where it was.
 
 **Data**: phpMyAdmin → your database → drop the tables (or import a dump that
-starts with `DROP TABLE IF EXISTS`) → import the pre-deploy dump → re-check the
-counts and the `hold` row (§6).
+starts with `DROP TABLE IF EXISTS`) → import the pre-deploy dump → **delete
+`storage/cache/site/stamp`** in File Manager → re-check the counts and the
+`hold` row (§6). The public pages and the hold are cached for up to five
+minutes, and an import behind the application's back does not expire them;
+deleting the stamp does.
 
 **To stop the bleeding in ten seconds** — prices are wrong and you are not ready
-to do either of the above. Put the site on hold from the admin (*Rates* → *Hold
-prices*), or, if the admin itself is the problem, phpMyAdmin → SQL:
+to do either of the above. Put the site on hold **from the admin** (*Rates* →
+*Hold prices*). The switch clears the site cache as it saves, so the next page
+load is held.
+
+Only if the admin itself is the problem, phpMyAdmin → SQL:
 
 ```sql
 UPDATE app_settings
    SET v = JSON_SET(v, '$.on', TRUE), updated_at = UTC_TIMESTAMP(), updated_by = 'rollback'
  WHERE k = 'hold';
 ```
+
+**and then delete `storage/cache/site/stamp`** in File Manager. SQL does not
+touch the cache: without that step the site keeps serving the cached, un-held
+state for **up to five minutes**, and it looks as if the hold did not work.
 
 The site stops quoting and shows the hold message instead. Customers can still
 reach you on WhatsApp. Then do the rollback calmly.
@@ -133,10 +164,15 @@ editor* → *Review and publish*. Every publish is kept as an immutable row in
 ```bash
 SITE=https://your-domain
 
-curl -sS  $SITE/health                            # {"ok":true}
-curl -sS "$SITE/health?token=$METRICS_TOKEN"      # the detail
+curl -sS  $SITE/health                                         # {"ok":true}
+curl -sS -H "Authorization: Bearer $METRICS_TOKEN" $SITE/health      # the detail
 curl -sS -H "Authorization: Bearer $METRICS_TOKEN" $SITE/api/metrics
 ```
+
+The token goes in the **header** for both. `/health?token=…` is ignored — the
+route reads `Authorization: Bearer` and nothing else — so it answers the bare
+`{"ok":true}` and never shows `"database"`. `$METRICS_TOKEN` is
+`tokens.metrics`.
 
 `/health` answers the same status code either way, so an uptime monitor calling
 the public form still goes red. Point one at it every five minutes.
@@ -188,8 +224,10 @@ release you uploaded, and §9 tells you what to do about OPcache meanwhile.
 - hPanel → Advanced → Cron Jobs, **hourly** (`0 * * * *`)
 - Command:
   ```
-  /usr/bin/php /home/uXXXXXXXX/domains/<domain>/bin/cron.php
+  /usr/bin/php /home/uXXXXXXXX/domains/<domain>/speedat_main/php/bin/cron.php
   ```
+  Without `speedat_main/php` in that path the cron boots a tree with no
+  `config.php` (or an abandoned one) and fails every hour, silently.
 
 Four things about that field, each of which costs an evening:
 
@@ -320,11 +358,17 @@ an upload the server can keep serving the previous version of a `.php` file for
 up to `opcache.revalidate_freq` seconds — indefinitely if `validate_timestamps`
 is off. You upload a fix, reload, and nothing changes.
 
-**Do not start editing files at random.** Either:
+**First check the upload landed where the site runs**: the code is
+`speedat_main/php/app/`, not an `app/` beside `public_html` (§1). A fix in the
+wrong tree never executes, and it looks exactly like this. Then, **do not
+start editing files at random.** Either:
 
 ```bash
-curl -sS "https://your-domain/ops/opcache-reset?token=$CRON_TOKEN"
+curl -sS -H "Authorization: Bearer $CRON_TOKEN" https://your-domain/ops/opcache-reset
 ```
+
+(prefer the header: `?token=` still works on this route, but it writes the cron
+secret into the access log and is recorded as `ops_token_in_url`)
 
 or wait out the revalidate window. That route arrives with the `Domain\Ops`
 routes; while it answers 404, waiting is the only option — which is the other

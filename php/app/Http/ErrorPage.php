@@ -10,6 +10,7 @@ use Speedat\Core\HttpError;
 use Speedat\Core\Log;
 use Speedat\Core\Response;
 use Speedat\Domain\Seo\Url;
+use Speedat\View\Admin\Routes as AdminRoutes;
 use Speedat\View\ErrorView;
 
 /**
@@ -83,7 +84,7 @@ final class ErrorPage
 
         $response = self::wantsJson($app)
             ? Response::json(['error' => ['code' => self::code($status, $error), 'message' => $message]], $status)
-            : self::designed($app, $status, $message);
+            : self::designed($app, $status, $message, $error);
 
         $response->noStore();
 
@@ -103,18 +104,37 @@ final class ErrorPage
     /**
      * The designed page, with the two fallbacks behind it.
      *
-     * 404 gets "Page not found"; everything else gets "Something went wrong" -
-     * including 405, 419 and 429, because `ErrorView` has two states and
-     * inventing a third here would put copy in a controller. The status is what
-     * distinguishes them to a machine, and the sentence a visitor needs in all
-     * three cases is the same: this did not work, here are two ways to reach us.
+     * 404 gets "Page not found"; everything else gets "Something went wrong",
+     * because `ErrorView` has two states and inventing a third here would put
+     * copy in a controller.
+     *
+     * THE LINE UNDER IT IS THE ERROR'S OWN WHEN THE SITE MEANT THE REFUSAL. It
+     * used to be ERROR_LINE for every status, on the reasoning that the sentence
+     * a visitor needs is always "this did not work, here are two ways to reach
+     * us". That holds for a 500 and fails for every 4xx an `HttpError` carries:
+     * an owner whose admin tab outlived its 12 h CSRF token pressed Publish and
+     * got "This page did not load" plus "Get a price" - and the Guard's "make
+     * the change in two halves", the hold's owner-only refusal and the 429's
+     * "please wait" were all thrown away the same way. Those sentences are the
+     * public half of the error by construction (rule 2 still holds: a caught
+     * `Throwable` passes no error and keeps ERROR_LINE), so they are shown. 404
+     * keeps its own fixed copy and any 5xx keeps ERROR_LINE.
+     *
+     * Under `/admin` the view also carries a way back to the editor, because
+     * the person reading an admin refusal is the owner, not a customer.
      */
-    private static function designed(App $app, int $status, string $message): Response
+    private static function designed(App $app, int $status, string $message, ?HttpError $error): Response
     {
         try {
             $notFound = $status === 404;
             $page     = Page::forError($app, $notFound ? ErrorView::NOT_FOUND_TITLE : ErrorView::ERROR_TITLE);
-            $view     = $notFound ? ErrorView::notFound($page) : ErrorView::failed($page);
+            $view     = $notFound
+                ? ErrorView::notFound($page)
+                : ErrorView::failed(
+                    $page,
+                    $error !== null && $status >= 400 && $status < 500 ? $message : ErrorView::ERROR_LINE,
+                    self::isAdmin($app) ? AdminRoutes::RATES : '',
+                );
 
             return $app->page('site/error', ['view' => $view], $status);
         } catch (\Throwable $e) {
@@ -129,6 +149,14 @@ final class ErrorPage
         }
 
         return Response::text($message . "\n", $status);
+    }
+
+    /** Under `/admin`, normalised the same way wantsJson() reads `/api`. */
+    private static function isAdmin(App $app): bool
+    {
+        $path = Url::normalise($app->request->path);
+
+        return $path === AdminRoutes::RATES || str_starts_with($path, AdminRoutes::RATES . '/');
     }
 
     /**

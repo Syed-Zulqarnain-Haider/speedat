@@ -300,7 +300,7 @@ final class RatesPage
 
         return 'Prices are what the customer pays, before any tax you set in Settings. '
             . "Open \u{201c}Prices\u{201d} on a country to enter its price for every kilogram from 1 kg to " . $top . ' kg '
-            . '(the cargo threshold in Settings); a parcel is charged at the next whole kilogram up, and a blank kilogram uses the next heavier priced one. '
+            . '(the cargo threshold in Settings); a parcel is charged at the next whole kilogram up, and a blank kilogram is not offered at that weight. '
             . 'Changed rows are marked on the left; Undo restores the live version of that row.';
     }
 

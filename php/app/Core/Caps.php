@@ -301,10 +301,19 @@ final class Caps
      * Cut a machine-generated value down to the column. For anything a person
      * typed use problems() instead - silently losing the end of somebody's
      * address is worse than telling them it is too long.
+     *
+     * SCRUBBED BEFORE IT IS CUT. fit() is the call made where refusing is wrong
+     * - the audit line, the page-view path - so a malformed byte must not be
+     * allowed to turn it into a 1366 out of PDO either: that would lose the very
+     * row fit() exists to keep. Core\Request already scrubs every header and
+     * field on the way in; this is the backstop for a value that reached a write
+     * from anywhere else (a percent-decoded path such as `/%E9` is one). Scrub
+     * first, for the reason Request::clean() gives: mb_strlen() on malformed
+     * input is a guess, and the cut must count characters that exist.
      */
     public static function fit(string $column, ?string $value): string
     {
-        return Str::limit((string) $value, self::of($column));
+        return Str::limit(mb_scrub((string) $value, 'UTF-8'), self::of($column));
     }
 
     /**

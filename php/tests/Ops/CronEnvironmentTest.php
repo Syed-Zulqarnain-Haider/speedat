@@ -29,6 +29,15 @@ use Speedat\Tests\TestCase;
  * The job is run as a CHILD process, not required into this one: it calls
  * exit(), it writes to the log, and the whole point is what a separate `php
  * bin/cron.php` prints.
+ *
+ * THE CHILD STOPS AFTER THE ENVIRONMENT LINES. It cannot see the suite's
+ * database - bin/test.php switches to *_test in-process, and a child's
+ * Bootstrap::cli reads config/config.php afresh and lands on the DEV database.
+ * Since bin/cron.php runs the whole of Cron::run() (2026-10-25), letting the
+ * child carry on meant every suite run took the real day's alert slot and, on
+ * an "smtp" box, mailed the office a stale-rates alert. So the child is started
+ * with SPEEDAT_CRON_ENVIRONMENT_ONLY=1 and the jobs are tested in-process by
+ * CronTest, against the test database (review, 2026-10-25).
  */
 final class CronEnvironmentTest extends TestCase
 {
@@ -102,7 +111,8 @@ final class CronEnvironmentTest extends TestCase
             [PHP_BINARY, $script],
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
-            Paths::root()
+            Paths::root(),
+            ['SPEEDAT_CRON_ENVIRONMENT_ONLY' => '1'] + $this->inheritedEnvironment()
         );
 
         if (!is_resource($process)) {
@@ -116,5 +126,47 @@ final class CronEnvironmentTest extends TestCase
         proc_close($process);
 
         return $out . $err;
+    }
+
+    public function testUnderTheSuiteTheCronStopsBeforeAnyJobTouchesTheDatabase(): void
+    {
+        // The child would run against the DEV database (see the class
+        // docblock), so no job may start: no rates-stale or long-hold check, no
+        // alert slot taken, no mail. The jobs' own names never appear.
+        $out = $this->runCron();
+
+        $this->assertStringContains(
+            'environment only',
+            $out,
+            'bin/cron.php ran past the environment lines under the test suite, so the jobs ran against '
+            . 'the dev database the child is configured for'
+        );
+        foreach (['rates', 'hold', 'counts', 'sessions'] as $job) {
+            $this->assertTrue(
+                strpos($out, $job) === false,
+                'bin/cron.php started the "' . $job . '" job from inside the test suite'
+            );
+        }
+    }
+
+    /**
+     * The real process environment plus nothing else, for proc_open().
+     *
+     * An env array REPLACES the child's environment, so it is carried across
+     * from getenv() - not $_SERVER, which earlier tests replace - exactly as
+     * tests/Core/BootstrapCliTest does.
+     *
+     * @return array<string,string>
+     */
+    private function inheritedEnvironment(): array
+    {
+        $environment = [];
+        foreach (getenv() as $key => $value) {
+            if (is_string($key) && is_string($value)) {
+                $environment[$key] = $value;
+            }
+        }
+
+        return $environment;
     }
 }

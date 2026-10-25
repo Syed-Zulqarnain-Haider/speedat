@@ -14,10 +14,55 @@
  *   nothing moves                   the page must not scroll itself to show
  *                                   the price; the slot was already there.
  *   the message carries everything  the person on WhatsApp has no screen.
+ *
+ * And one for the owner's numbers: a price that stays on screen is logged as
+ * SHOWN before anyone taps Book (audit B6, 2026-10-25). The log used to fire
+ * from the Book button only, so "prices shown" equalled "pressed Book" and
+ * the WhatsApp share read 100% whatever happened.
  */
 
 const contract = require("../contract.cjs");
 const steps = require("../steps.cjs");
+
+/** How long calculator.js waits before a price counts as shown (SHOWN_MS), plus room. */
+const SHOWN_WAIT_MS = 1500 + 2500;
+
+/**
+ * Every POST to the quote log from now until stop(), and a wait for the first
+ * one that passes `want`. steps.watchQuoteLog() stops at the FIRST post of any
+ * kind; this flow now sees two kinds (shown, then booked) and has to tell them
+ * apart, so it keeps its own listener.
+ */
+function quotePosts(page, url = steps.SEL.quoteUrl) {
+  const seen = [];
+  const onRequest = (req) => {
+    if (req.method() !== "POST" || !req.url().includes(url)) return;
+    let body = null;
+    try {
+      body = JSON.parse(req.postData() || "null");
+    } catch (e) {
+      body = { unparseable: String(req.postData() || "").slice(0, 200) };
+    }
+    seen.push({ body: body || {}, at: Date.now() });
+  };
+  page.on("request", onRequest);
+  return {
+    seen,
+    async first(want, { timeout = 4000 } = {}) {
+      const until = Date.now() + timeout;
+      for (;;) {
+        const hit = seen.find((p) => want(p.body));
+        if (hit || Date.now() >= until) return hit || null;
+        // eslint-disable-next-line no-await-in-loop
+        await page.waitForTimeout(100);
+      }
+    },
+    stop() {
+      page.off("request", onRequest);
+      return seen;
+    },
+  };
+}
 
 module.exports = {
   name: "quick-rate-desktop",
@@ -31,6 +76,10 @@ module.exports = {
     await t.page.waitForTimeout(400);
 
     let quote = null;
+    let shown = null;
+    // Listening from before the first tap: the shown-log can leave while the
+    // checks below are still measuring the price.
+    const log = quotePosts(t.page);
 
     await t.check("the calculator is on the page and built its tiles", async () => {
       const { tiles } = await steps.requireCalculator(t);
@@ -136,6 +185,29 @@ module.exports = {
       return 'target="_blank" rel="' + attrs.rel + '"';
     });
 
+    await t.check("a price left on screen is logged as shown, before any booking", async () => {
+      t.need(quote, "no price was produced");
+      const hit = await log.first((b) => b.booked === false, { timeout: SHOWN_WAIT_MS });
+      if (!hit) {
+        throw new Error(
+          "the price stayed on screen and nothing was logged - only a Book tap logs a quote, so the owner's " +
+            "\"prices shown\" is really \"pressed Book\" and every WhatsApp share reads 100%",
+        );
+      }
+      const early = log.seen.filter((p) => p.body.booked === false);
+      if (early.some((p) => p.body.id !== hit.body.id)) {
+        throw new Error(
+          "more than one quote was logged as shown for one price on screen: " + early.map((p) => p.body.id).join(", ") +
+            " - the prices tapped through on the way were logged too",
+        );
+      }
+      for (const key of ["id", "destId", "serviceId", "total", "billableG"]) {
+        if (!(key in hit.body)) throw new Error("the shown-log has no " + key + ": " + JSON.stringify(hit.body).slice(0, 200));
+      }
+      shown = hit.body;
+      return "logged as shown: " + shown.id + " (booked: false, mode: " + shown.mode + ")";
+    });
+
     await t.check("the quote is logged, and the server does not trust our number", async () => {
       t.need(quote, "no price was produced");
 
@@ -146,7 +218,7 @@ module.exports = {
       });
       t.need(probe.ok && probe.status !== 404, steps.SEL.quoteUrl + " answers 404 - Domain\\Quotes has not shipped");
 
-      const watcher = steps.watchQuoteLog(t);
+      const before = log.seen.length;
       await t.page.evaluate((sel) => {
         const a = document.querySelector(sel);
         if (!a) return;
@@ -174,12 +246,23 @@ module.exports = {
         document.addEventListener("click", (e) => e.preventDefault(), { capture: true, once: true });
         a.click();
       }, steps.SEL.book);
-      const posts = await watcher.wait({ timeout: 4000 });
+      // The booked POST specifically: a shown-log may already be in the list.
+      const hit = await log.first((b) => b.booked === true, { timeout: 4000 });
+      const posted = log.seen.slice(before);
 
-      if (!posts.length) {
-        throw new Error("booking sent no POST to " + steps.SEL.quoteUrl + " - the quote was never logged");
+      if (!hit) {
+        throw new Error(
+          "booking sent no booked POST to " + steps.SEL.quoteUrl + " - the quote was never logged as booked" +
+            (posted.length ? " (saw " + posted.length + " other POST(s): " + JSON.stringify(posted[0].body).slice(0, 160) + ")" : ""),
+        );
       }
-      const sent = posts[0].body || {};
+      const sent = hit.body;
+      // One quote, one id: the shown row is the one the booking turns into
+      // "booked". A new id here would leave the shown row as a view nobody
+      // booked and count this one twice.
+      if (shown && shown.id !== sent.id) {
+        throw new Error("the booking logged id " + sent.id + " but the price on screen was logged as " + shown.id + " - one quote became two rows");
+      }
       for (const key of ["destId", "service", "total", "billableG"]) {
         if (!(key in sent)) throw new Error("the logged quote has no " + key + ": " + JSON.stringify(sent).slice(0, 200));
       }
@@ -286,6 +369,8 @@ module.exports = {
       }
       return JSON.stringify(said);
     });
+
+    log.stop();
 
     await t.check("the browser stayed quiet over the whole flow", async () => contract.noConsoleErrors(t));
   },

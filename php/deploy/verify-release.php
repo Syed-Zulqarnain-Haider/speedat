@@ -18,7 +18,9 @@ declare(strict_types=1);
  *
  *   * is there a config.php, an .env, a .git, a test, a log, a dump?
  *   * does every non-public directory have a deny-all .htaccess?
- *   * does public_html have its rewrite, and does app/ sit BESIDE it, not in it?
+ *   * does public_html have its rewrite, and does the application sit BESIDE
+ *     it in speedat_main/php/ - the folder index.php actually runs - and not
+ *     in it, or in an app/ next to it that nothing on the host would run?
  *   * does every .php file in the archive actually parse?
  *   * is there anything that would escape the extraction directory?
  *
@@ -32,6 +34,18 @@ declare(strict_types=1);
 const EXIT_OK     = 0;
 const EXIT_FAILED = 1;
 const EXIT_USAGE  = 2;
+
+/**
+ * Where the application sits inside the archive - the same constant as
+ * bin/build-release.php, and the folder public/index.php looks in first.
+ *
+ * Every path check below is written against this, because the old layout (app/,
+ * config/ and the rest straight beside public_html) passed every one of these
+ * checks and still never ran: the live front controller finds speedat_main/php
+ * and serves whatever is in it, so a release that only replaced public_html left
+ * the old code running under new CSS (audit, 2026-10-23).
+ */
+const APP = 'speedat_main/php';
 
 $arguments = array_slice($argv, 1);
 $zipPath   = '';
@@ -165,8 +179,9 @@ $forbidden = [
     // A blanket "(^|/)config\.php$" plus the /i flag refused app/Core/Config.php
     // - the class that READS configuration and holds none of it - so no archive
     // could pass while check 2 of this same script demanded that file be present.
-    'no real configuration in config/'      => '#^config/(?!config\.sample\.php$).*\.php$#i',
-    'no config.php in the web root'         => '#^public_html/(.*/)?config\.php$#i',
+    'no real configuration in config/'      => '#^' . APP . '/config/(?!config\.sample\.php$).*\.php$#i',
+    'no real configuration at the old root' => '#^config/.*\.php$#i',
+    'no config.php in the web root'         => '#^(public_html|' . APP . '/public)/(.*/)?config\.php$#i',
     'no *.local.php override'               => '#\.local\.php$#i',
     'no .env file'                          => '#(^|/)\.env#',
     'no .git directory'                     => '#(^|/)\.git(/|$)#',
@@ -209,7 +224,7 @@ check('no dotfiles except .htaccess/.user.ini', $dotfiles === [], implode(', ', 
 // dump dropped into that directory would otherwise ship the customer list.
 $stray = array_values(array_filter(
     matching($files, '#\.sql$#i'),
-    static fn (string $f): bool => preg_match('#^db/migrations/\d{4}_[a-z0-9_]+\.sql$#i', $f) !== 1,
+    static fn (string $f): bool => preg_match('#^' . APP . '/db/migrations/\d{4}_[a-z0-9_]+\.sql$#i', $f) !== 1,
 ));
 check('only numbered migrations carry .sql', $stray === [], implode(', ', $stray));
 
@@ -224,12 +239,16 @@ $required = [
     // limits are the host's defaults - on Hostinger, post_max_size 128M at a
     // site whose largest honest request is a few hundred text fields.
     'public_html/.user.ini',
-    'app/Core/Bootstrap.php',
-    'app/Core/Config.php',
-    'app/routes.php',
-    'bin/cron.php',
-    'config/config.sample.php',
-    'db/migrations/0001_init.sql',
+    APP . '/app/Core/Autoloader.php',
+    APP . '/app/Core/Bootstrap.php',
+    APP . '/app/Core/Config.php',
+    APP . '/app/routes.php',
+    APP . '/bin/cron.php',
+    APP . '/config/config.sample.php',
+    APP . '/db/migrations/0001_init.sql',
+    // The bundled copy Paths::publicDir() reads: the icon sprite is inlined
+    // from here, not from public_html.
+    APP . '/public/assets/img/icons.svg',
     'INSTALL.txt',
 ];
 foreach ($required as $entry) {
@@ -238,12 +257,13 @@ foreach ($required as $entry) {
 
 $writable = ['storage', 'storage/cache', 'storage/logs', 'storage/tmp', 'storage/uploads', 'var'];
 foreach ($writable as $directory) {
-    check("has the $directory directory", is_dir($temp . '/' . $directory));
+    check('has the ' . APP . "/$directory directory", is_dir($temp . '/' . APP . '/' . $directory));
 }
 
 // Empty means empty of DATA. A guard file is not data.
 foreach (['storage/cache', 'storage/logs', 'storage/tmp', 'storage/uploads'] as $directory) {
-    $contents = array_values(array_diff(scandir($temp . '/' . $directory) ?: [], ['.', '..', '.htaccess', 'index.html']));
+    $directory = APP . '/' . $directory;
+    $contents  = array_values(array_diff(scandir($temp . '/' . $directory) ?: [], ['.', '..', '.htaccess', 'index.html']));
     check("$directory carries no runtime data", $contents === [], implode(', ', $contents));
 }
 
@@ -251,16 +271,28 @@ foreach (['storage/cache', 'storage/logs', 'storage/tmp', 'storage/uploads'] as 
 echo "\n3. The layout\n";
 
 check(
-    'app/ is BESIDE public_html, not inside it',
-    is_dir($temp . '/app') && !is_dir($temp . '/public_html/app'),
+    APP . '/app is BESIDE public_html, not inside it',
+    is_dir($temp . '/public_html') && is_dir($temp . '/' . APP . '/app')
+        && !is_dir($temp . '/public_html/app') && !is_dir($temp . '/public_html/speedat_main'),
 );
 check(
-    'config/ is BESIDE public_html, not inside it',
-    is_dir($temp . '/config') && !is_dir($temp . '/public_html/config'),
+    APP . '/config is BESIDE public_html, not inside it',
+    is_dir($temp . '/' . APP . '/config') && !is_dir($temp . '/public_html/config'),
 );
 check(
-    'storage/ is BESIDE public_html, not inside it',
-    is_dir($temp . '/storage') && !is_dir($temp . '/public_html/storage'),
+    APP . '/storage is BESIDE public_html, not inside it',
+    is_dir($temp . '/' . APP . '/storage') && !is_dir($temp . '/public_html/storage'),
+);
+
+// The old layout's tell. An app/ (or config/, storage/ ...) straight beside
+// public_html is a second application nobody runs: index.php prefers
+// speedat_main/php whenever it exists, so a fix shipped there never executes.
+$topLevel = array_values(array_diff(scandir($temp) ?: [], ['.', '..']));
+sort($topLevel);
+check(
+    'the top level is public_html, speedat_main and INSTALL.txt, nothing else',
+    $topLevel === ['INSTALL.txt', 'public_html', 'speedat_main'],
+    implode(', ', $topLevel),
 );
 check(
     'public_html holds the site itself, not a nested public/',
@@ -277,7 +309,8 @@ echo "\n4. The .htaccess guards\n";
 
 foreach (['app', 'bin', 'config', 'db', 'db/migrations', 'storage',
     'storage/cache', 'storage/logs', 'storage/tmp', 'storage/uploads', 'var'] as $directory) {
-    $guard = $temp . '/' . $directory . '/.htaccess';
+    $directory = APP . '/' . $directory;
+    $guard     = $temp . '/' . $directory . '/.htaccess';
     $body  = is_file($guard) ? (string) file_get_contents($guard) : '';
     check(
         "$directory/.htaccess denies everything",
@@ -360,7 +393,7 @@ foreach ($php as $file) {
 check(count($php) . ' .php file(s) parse under ' . PHP_VERSION, $brokenPhp === [], implode('; ', array_slice($brokenPhp, 0, 3)));
 
 // config.sample.php must return an array and must not have been filled in.
-$sample = require $temp . '/config/config.sample.php';
+$sample = require $temp . '/' . APP . '/config/config.sample.php';
 check('config.sample.php returns an array', is_array($sample));
 check('config.sample.php has no application key in it', ($sample['app']['key'] ?? '') === '');
 check('config.sample.php has no database password in it', ($sample['db']['pass'] ?? '') === '');

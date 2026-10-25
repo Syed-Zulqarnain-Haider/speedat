@@ -1233,10 +1233,11 @@ section.block .desc {
   border-color: var(--warn);
   background: var(--warn-soft);
 }
-/* A BLANK RUNG between two priced ones is not a fault - the next heavier price
-   is charged there, which is a normal way to fill a ladder in. It is drawn
-   quietly: a dashed edge, the colour of any other hint. Twenty orange boxes on
-   an ordinary sparse ladder would teach the owner to ignore orange. */
+/* A BLANK RUNG between two priced ones is not a fault - that weight is simply
+   not offered (a blank box is not a price, owner 2026-09-28), which is a normal
+   way to leave a ladder sparse. It is drawn quietly: a dashed edge, the colour
+   of any other hint. Twenty orange boxes on an ordinary sparse ladder would
+   teach the owner to ignore orange. */
 .admin-app .grid-box.is-gap input {
   border-style: dashed;
   border-color: var(--dash);

@@ -60,6 +60,10 @@ final class Notice
     private const FLAGS = [
         'saved', 'added', 'removed', 'undone', 'sorted', 'filled', 'discarded', 'resumed', 'nochange',
         'enrol', 'created', 'totpon', 'totpoff', 'held', 'resumedprices', 'updated', 'event',
+        // `replaced`: a Restore landed on top of unpublished edits, which it
+        // threw away - the toast has to say so. `noname`: a country's name box
+        // arrived empty, and the stored name was kept.
+        'replaced', 'noname',
     ];
 
     /** `err=<word>` and the sentence each word means. */
@@ -99,6 +103,17 @@ final class Notice
         // transaction that would have done the writing.
         'draftmoved' => 'Somebody else changed the draft while this page was open, so nothing was saved. '
             . 'Reload the page to see their version, then make your change again.',
+        // The draft changed between drawing the review card and pressing
+        // Publish - a colleague's autosave, most often. Nothing went live:
+        // publishing what the card did not list is the one thing it must
+        // never do. The card is redrawn under this sentence.
+        'reviewmoved' => 'The draft changed after this review was drawn, so nothing was published. '
+            . 'Read the updated list below and publish again.',
+        // The live version moved between asking the roll-back question and
+        // confirming it. The question card is drawn again under this, against
+        // the version that is live now.
+        'rollmoved'  => 'Another version was published while you were deciding, so nothing was rolled back. '
+            . 'Check the history, then answer the question again if you still need to.',
         // The three ways Repo::rollbackTo() refuses. Each is a fact about the
         // version asked for, never about the person asking.
         'norollback' => 'That version was never published, so there is nothing to go back to.',
@@ -128,7 +143,11 @@ final class Notice
 
         $restored = self::number($q, 'restored');
         if ($restored > 0) {
-            return 'Version ' . $restored . ' is back in the editor';
+            // A restore REPLACES the draft. When there were unpublished edits
+            // in it, "is back in the editor" alone read as if they were still
+            // there alongside it.
+            return 'Version ' . $restored . ' is back in the editor'
+                . (self::flag($q, 'replaced') ? ' - it replaced your earlier unpublished edits' : '');
         }
 
         $rolledBack = self::number($q, 'rolledback');
@@ -208,8 +227,15 @@ final class Notice
     /**
      * The confirmation sentence itself, so the words live here with every other
      * sentence the admin says rather than in a template.
+     *
+     * `$draftChanges` is how many unpublished changes the editor is holding.
+     * A roll-back re-bases the draft onto what it publishes
+     * (`Repo::publishVersion()`), so those edits are REPLACED - and the
+     * sentence used to promise "nothing is lost" over the top of them. With
+     * edits in the draft that promise is only true of the published history,
+     * so it says exactly that, and says what happens to the rest.
      */
-    public static function rollbackQuestion(App $app): string
+    public static function rollbackQuestion(App $app, int $draftChanges = 0): string
     {
         $version = self::rollbackAsked($app);
 
@@ -217,8 +243,18 @@ final class Notice
             return '';
         }
 
-        return 'Put version ' . $version . ' back on the website now? '
-            . 'Customers see its prices immediately, and it is published as a new version, '
+        $question = 'Put version ' . $version . ' back on the website now? '
+            . 'Customers see its prices immediately, and it is published as a new version, ';
+
+        if ($draftChanges > 0) {
+            return $question
+                . 'so every published version is kept and it can be undone the same way. '
+                . 'Your ' . $draftChanges . ' unpublished change' . ($draftChanges === 1 ? '' : 's')
+                . ' in the editor will be replaced by version ' . $version . '. '
+                . 'If prices are on hold they stay on hold.';
+        }
+
+        return $question
             . 'so nothing is lost and it can be undone the same way. '
             . 'If prices are on hold they stay on hold.';
     }
@@ -327,6 +363,26 @@ final class Notice
         return $kept . ' box' . ($kept === 1 ? '' : 'es') . ' did not hold a number, so ' . ($kept === 1 ? 'it was' : 'they were')
             . ' left exactly as ' . ($kept === 1 ? 'it was' : 'they were') . '. Check '
             . ($kept === 1 ? 'it' : 'them') . ' and save again.';
+    }
+
+    /**
+     * A country saved with its name box empty.
+     *
+     * It used to be counted with the price boxes that did not hold a number,
+     * so the owner who keyed a new country's prices before naming it was
+     * told on every save that a number box had not saved - although every
+     * price had - and went back to re-key correct numbers. The name is its
+     * own sentence now, about the name.
+     */
+    public static function noname(App $app): string
+    {
+        return self::flag($app->request, 'noname') ? self::nonameText() : '';
+    }
+
+    /** The same sentence for the autosave, which never sees the URL. */
+    public static function nonameText(): string
+    {
+        return 'A country in the table has no name, so its name was left as it was. Give it one and save again.';
     }
 
     public static function flag(Request $request, string $name): bool

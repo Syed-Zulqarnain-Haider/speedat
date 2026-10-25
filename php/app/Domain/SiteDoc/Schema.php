@@ -295,8 +295,9 @@ final class Schema
             $key = (string) $kg;
 
             // The key pattern is the contract with the engine: whole kilograms,
-            // 1 to 999. A "2.5" box would never be found by gridPrice and the
-            // customer would be quoted the next heavier kilogram instead.
+            // 1 to 999. A "2.5" box would never be found by gridPrice, so the
+            // price typed into it would never be charged: a blank box is not a
+            // price (owner, 2026-09-28) and that weight would get none at all.
             if (preg_match(self::GRID_KEY, $key) !== 1) {
                 $issues[] = new SchemaIssue($at . '.grid.' . $key, 'Invalid key in record');
                 continue;

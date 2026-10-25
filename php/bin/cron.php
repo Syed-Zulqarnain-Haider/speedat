@@ -34,22 +34,14 @@ declare(strict_types=1);
  * never happen.
  */
 
-use Speedat\Core\Audit;
 use Speedat\Core\Autoloader;
 use Speedat\Core\Bootstrap;
 use Speedat\Core\Log;
-use Speedat\Core\Paths;
-use Speedat\Core\RateLimit;
-use Speedat\Core\Session;
 
 $root = dirname(__DIR__);
 require $root . '/app/Core/Autoloader.php';
 Autoloader::register($root . '/app');
 Bootstrap::cli($root);
-
-$startedAt = microtime(true);
-$results   = [];
-$failures  = 0;
 
 /*
  * ---------------------------------------------------------------------------
@@ -115,63 +107,62 @@ if (!extension_loaded('pdo_mysql')) {
         . "under PHP Configuration.\n");
 }
 
-/**
- * @var array<string,Closure():string> $jobs
+/*
+ * ---------------------------------------------------------------------------
+ * UNDER THE TEST SUITE, STOP HERE.
+ * ---------------------------------------------------------------------------
+ * tests/Ops/CronEnvironmentTest starts this file as a child to read the
+ * environment line above. The child does NOT see the suite's database: bin/
+ * test.php switches to *_test in-process, through Config::set, and a child's
+ * Bootstrap::cli reads config/config.php afresh - so it lands on the DEV
+ * database. When this file ran only the sweeps, that cost a few deleted
+ * session rows. Once it ran Cron::run() (2026-10-25) every suite run also ran
+ * the stale-rates and long-hold checks against the real database: it took
+ * today's real "alerts" slot (so the real hourly run then said "already
+ * alerted today"), wrote rates_stale / hold_long / notify_skipped audit rows,
+ * and on a box with mail.transport "smtp" - config.sample.php ships "smtp" -
+ * mailed the office a real alert from a test run (review, 2026-10-25).
  *
- * Phase 2 adds the intake mailbox poll and the stale-rates alert here; both
- * are ports of src/lib/alerts.ts and src/lib/import/intake.ts.
+ * So a child started by the suite says which PHP it is and stops. Either flag
+ * does it: SPEEDAT_TEST_SUITE is what bin/test.php putenv()s and every child
+ * inherits, SPEEDAT_CRON_ENVIRONMENT_ONLY is what the test sets itself, so it
+ * holds however the test is started. Neither is ever set on the hPanel entry,
+ * and the jobs themselves are tested in-process by tests/Ops/CronTest against
+ * the test database.
  */
-$jobs = [
-    // Expired and idle logins. Session enforces both on read as well, so this
-    // is housekeeping rather than security.
-    'sessions' => static fn (): string => Session::sweep() . ' expired session(s) removed',
-
-    // Rate-limit windows nobody will ask about again.
-    'rate_limits' => static fn (): string => RateLimit::sweep() . ' old window(s) removed',
-
-    // Logs older than 30 days. Shared hosting has a disk quota, and a disk that
-    // fills up takes the site down long before anyone reads the logs.
-    'logs' => static fn (): string => pruneLogs(30) . ' log file(s) removed',
-];
-
-foreach ($jobs as $name => $job) {
-    try {
-        $summary        = $job();
-        $results[$name] = $summary;
-        echo '  ok  ' . str_pad($name, 14) . $summary . PHP_EOL;
-    } catch (Throwable $e) {
-        $failures++;
-        $results[$name] = 'FAILED: ' . $e->getMessage();
-        Log::exception('cron_job_failed', $e, ['job' => $name]);
-        fwrite(STDERR, '  FAIL ' . str_pad($name, 14) . $e->getMessage() . PHP_EOL);
-    }
+if (getenv('SPEEDAT_TEST_SUITE') === '1' || getenv('SPEEDAT_CRON_ENVIRONMENT_ONLY') === '1') {
+    echo '  --   environment only: the jobs are not run from a test suite' . PHP_EOL;
+    exit(0);
 }
 
-$elapsedMs = (int) round((microtime(true) - $startedAt) * 1000);
-
-Log::info('cron_run', ['jobs' => $results, 'ms' => $elapsedMs, 'failures' => $failures]);
-
+/*
+ * ---------------------------------------------------------------------------
+ * THE JOBS ARE Domain\Ops\Cron's, NOT A LIST OF THIS FILE'S OWN.
+ * ---------------------------------------------------------------------------
+ * This file used to carry its own three jobs - sessions, rate-limit windows,
+ * logs - and never called Cron::run(). So on the hourly entry the docs tell the
+ * owner to set up, the stale-rates and long-hold checks, the cache sweep and
+ * the day's numbers never ran: rates published 2026-10-11 went stale on the
+ * 18th and no mail said so (found 2026-10-25). /api/cron, meanwhile, ran all of
+ * those and pruned no logs. Now there is one list, in Cron, and both doors run
+ * it; this file is the CLI wrapper around it and nothing more.
+ *
+ * Cron::run() wraps each job itself, logs `cron_run` and writes the one audit
+ * row - so neither is written here, or every run would be recorded twice. The
+ * try/catch below is for what happens before any job starts: building the
+ * cron reads config and the notifier, and a throw there must still exit
+ * non-zero with a line that says why, not a stack trace into hPanel's mailbox.
+ */
 try {
-    Audit::log('system', 'cron_run', ['jobs' => $results, 'ms' => $elapsedMs]);
-} catch (Throwable) {
-    // Audit never throws, but the database may have been what failed.
+    $result = \Speedat\Domain\Ops\Cron::fromConfig()->run();
+} catch (Throwable $e) {
+    Log::exception('cron_job_failed', $e, ['job' => 'startup']);
+    fwrite(STDERR, '  FAIL startup        ' . $e->getMessage() . PHP_EOL);
+    exit(1);
 }
 
-echo PHP_EOL . 'Finished in ' . $elapsedMs . 'ms with ' . $failures . " failure(s).\n";
-exit($failures === 0 ? 0 : 1);
+// One line per job, the reason for any failure, and the total - the same
+// text the run's own cron_run log line summarises.
+echo $result->text();
 
-/** Delete app-YYYY-MM-DD.log files older than $days. */
-function pruneLogs(int $days): int
-{
-    $cutoff  = time() - $days * 86400;
-    $removed = 0;
-
-    foreach (glob(Paths::logs() . '/app-*.log') ?: [] as $file) {
-        $modified = @filemtime($file);
-        if ($modified !== false && $modified < $cutoff && @unlink($file)) {
-            $removed++;
-        }
-    }
-
-    return $removed;
-}
+exit($result->exitCode());

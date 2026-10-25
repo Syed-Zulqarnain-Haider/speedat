@@ -49,8 +49,20 @@ cd /d/speedat/php
 ```
 
 `build-release.php` writes a zip whose top level **is** the contents of
-`~/domains/<site>/`: `public_html/`, `app/`, `bin/`, `config/config.sample.php`,
-`db/migrations/`, empty guarded `storage/` and `var/`, and an `INSTALL.txt`.
+`~/domains/<site>/`: `public_html/`, `INSTALL.txt`, and the application in
+`speedat_main/php/` — `app/`, `bin/`, `config/config.sample.php`,
+`db/migrations/`, a copy of the web root as `public/`, and empty guarded
+`storage/` and `var/`.
+
+`speedat_main/php` is not a naming preference. It is the folder
+`public_html/index.php` runs the application from, and it is preferred whenever
+it exists. The zip used to put `app/`, `config/` and the rest straight beside
+`public_html`: extracting it replaced the web root and wrote a second
+application next to it that nothing ran, so new CSS and JS were served against
+the old code, a cron pointed at `domains/<site>/bin/cron.php` had no config, and
+rolling back by extracting an older zip changed nothing that executes (audit,
+2026-10-23). The cron path is
+`/home/uXXX/domains/<site>/speedat_main/php/bin/cron.php`.
 
 It builds from an explicit manifest, refuses anything on a deny list, and then —
 the part that actually matters — **re-checks the deny list against the entries
@@ -61,7 +73,9 @@ cannot ship a secret; it can only fail the build.
 `verify-release.php` starts from the zip instead, unpacks it the way File Manager
 will, and asks a different set of questions of the result: no `config.php`, no
 `.env`, no `.git`, no tests, no logs, no dumps, no keys; every non-public
-directory guarded; `app/` beside `public_html` and not inside it; every shipped
+directory guarded; `speedat_main/php/app` beside `public_html` and not inside
+it, and nothing else at the top level — an `app/` straight beside `public_html`
+is refused as the tree nothing runs; every shipped
 `.php` parses; and a grep for anything shaped like a private key. Sixty-odd
 checks, non-zero exit on any failure.
 

@@ -37,6 +37,14 @@ final class BuildReleaseTest extends TestCase
     private const CANARY_KEY  = 'CANARY-APP-KEY-ZZZZZZZZZZZZZZZZZZZZZZZZ';
     private const CANARY_PASS = 'CANARY-DB-PASSWORD-ZZZZZZZZZZZZ';
 
+    /**
+     * Where the application sits in the archive: domains/<site>/speedat_main/php,
+     * the folder public/index.php runs. Every application path below is written
+     * through this, so an assertFalse on an entry cannot pass merely because the
+     * entry now lives under a prefix the test forgot about.
+     */
+    private const APP = 'speedat_main/php/';
+
     private string $tree = '';
 
     private string $out = '';
@@ -83,19 +91,38 @@ final class BuildReleaseTest extends TestCase
 
         // What must be there.
         foreach ([
-            'public_html/index.php', 'public_html/.htaccess', 'app/Core/Bootstrap.php',
-            'app/Core/Config.php', 'app/Core/Router.php', 'app/routes.php',
-            'config/config.sample.php', 'db/migrations/0001_init.sql',
-            'db/migrations/0002_session_csrf_secret.sql', 'db/migrations/0003_page_views.sql',
-            'INSTALL.txt', 'bin/cron.php',
+            'public_html/index.php', 'public_html/.htaccess', 'INSTALL.txt',
+            self::APP . 'app/Core/Bootstrap.php',
+            self::APP . 'app/Core/Config.php', self::APP . 'app/Core/Router.php', self::APP . 'app/routes.php',
+            self::APP . 'config/config.sample.php', self::APP . 'db/migrations/0001_init.sql',
+            self::APP . 'db/migrations/0002_session_csrf_secret.sql', self::APP . 'db/migrations/0003_page_views.sql',
+            self::APP . 'bin/cron.php',
+            // The bundled copy Paths::publicDir() reads.
+            self::APP . 'public/index.php', self::APP . 'public/assets/img/icons.svg',
         ] as $wanted) {
             $this->assertTrue(in_array($wanted, $entries, true), $wanted . ' must be in the release');
         }
 
-        // What must not.
-        foreach (['config/config.php', 'public_html/router.php', 'bin/build-release.php', 'bin/test.php'] as $banned) {
+        // What must not - in this layout's spelling and in the old one's.
+        foreach ([
+            'config/config.php', self::APP . 'config/config.php',
+            'public_html/router.php', self::APP . 'public/router.php',
+            self::APP . 'bin/build-release.php', self::APP . 'bin/test.php',
+        ] as $banned) {
             $this->assertFalse(in_array($banned, $entries, true), $banned . ' must not be in the release');
         }
+
+        // THE LAYOUT. Nothing at the top but the web root, the application folder
+        // and the install notes. The old archive put app/, config/ and the rest
+        // here, beside public_html, where the live index.php never looks - every
+        // code fix in that zip was uploaded and never ran (audit, 2026-10-23).
+        $tops = [];
+        foreach ($entries as $entry) {
+            $tops[explode('/', $entry)[0]] = true;
+        }
+        $tops = array_keys($tops);
+        sort($tops);
+        $this->assertSame(['INSTALL.txt', 'public_html', 'speedat_main'], $tops, 'the archive top level');
 
         // app/Core is application code, all of it - so all of it ships. This is
         // the invariant that would have caught the case-folding mistake that
@@ -103,7 +130,7 @@ final class BuildReleaseTest extends TestCase
         // and "the dev-server router" while still reporting success.
         $onDisk = [];
         foreach (glob($this->tree . '/app/Core/*.php') ?: [] as $class) {
-            $onDisk[] = 'app/Core/' . basename($class);
+            $onDisk[] = self::APP . 'app/Core/' . basename($class);
         }
         $this->assertTrue($onDisk !== [], 'the copied tree has app/Core in it');
         foreach ($onDisk as $class) {
@@ -141,11 +168,11 @@ final class BuildReleaseTest extends TestCase
         $entries = $this->entriesOf($this->out . '/cased.zip');
 
         foreach ($planted as $path => $why) {
-            $this->assertFalse(in_array($path, $entries, true), $path . ' shipped - ' . $why);
+            $this->assertFalse(in_array(self::APP . $path, $entries, true), $path . ' shipped - ' . $why);
         }
 
         // And the class whose name the rule must NOT match is still there.
-        $this->assertTrue(in_array('app/Core/Config.php', $entries, true), 'app/Core/Config.php is a class, not a config file');
+        $this->assertTrue(in_array(self::APP . 'app/Core/Config.php', $entries, true), 'app/Core/Config.php is a class, not a config file');
     }
 
     /**
@@ -177,16 +204,16 @@ final class BuildReleaseTest extends TestCase
 
         $migrations = array_values(array_filter(
             $all,
-            static fn (string $e): bool => str_starts_with($e, 'db/migrations/') && str_ends_with($e, '.sql')
+            static fn (string $e): bool => str_starts_with($e, self::APP . 'db/migrations/') && str_ends_with($e, '.sql')
         ));
         sort($migrations);
 
         $this->assertSame(
             [
-                'db/migrations/0001_init.sql',
-                'db/migrations/0002_session_csrf_secret.sql',
-                'db/migrations/0003_page_views.sql',
-                'db/migrations/0099_a_real_one.sql',
+                self::APP . 'db/migrations/0001_init.sql',
+                self::APP . 'db/migrations/0002_session_csrf_secret.sql',
+                self::APP . 'db/migrations/0003_page_views.sql',
+                self::APP . 'db/migrations/0099_a_real_one.sql',
             ],
             $migrations,
             'a data dump in db/migrations is still a data dump'
@@ -195,12 +222,12 @@ final class BuildReleaseTest extends TestCase
         // Spelled out, because this is the one the report found in a release it
         // built and the one no name rule can refuse.
         $this->assertFalse(
-            in_array('db/migrations/9999_customer_dump.sql', $migrations, true),
+            in_array(self::APP . 'db/migrations/9999_customer_dump.sql', $migrations, true),
             'a dump named like a migration must still be caught, by its contents'
         );
 
         $this->assertFalse(
-            in_array('db/migrations/README.txt', $all, true),
+            in_array(self::APP . 'db/migrations/README.txt', $all, true),
             'and nothing else in that directory ships either'
         );
     }
@@ -223,7 +250,7 @@ final class BuildReleaseTest extends TestCase
         $this->assertSame(0, $build['code'], $build['err']);
 
         $this->assertTrue(
-            in_array('db/migrations/0004_seed_settings.sql', $this->entriesOf($this->out . '/seeded.zip'), true),
+            in_array(self::APP . 'db/migrations/0004_seed_settings.sql', $this->entriesOf($this->out . '/seeded.zip'), true),
             'a handful of INSERTs is a seed, not a dump'
         );
     }
@@ -279,9 +306,12 @@ final class BuildReleaseTest extends TestCase
         foreach ([
             'public_html/index.php~',
             'public_html/index.php.save',
-            'app/routes.php.rej',
-            'app/routes.php.orig',
+            self::APP . 'app/routes.php.rej',
+            self::APP . 'app/routes.php.orig',
             'public_html/Router.PHP',
+            // ... and none of them in the bundled copy of the web root either.
+            self::APP . 'public/index.php~',
+            self::APP . 'public/Router.PHP',
         ] as $banned) {
             $this->assertFalse(in_array($banned, $entries, true), $banned . ' would be served as source');
         }

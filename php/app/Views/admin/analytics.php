@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 /**
- * The analytics screen. Landings, countries, weights, services, WhatsApp.
+ * The analytics screen. Landings and how they arrived, countries, weights,
+ * services, WhatsApp.
  *
  * NO CHART LIBRARY, AND NOT BECAUSE OF THE CONTENT SECURITY POLICY. The CSP
  * does forbid an external script, so a CDN was never an option - but the bars
@@ -155,30 +156,23 @@ $bars     = $page->bars();
   </details>
   <?php } ?>
 
-  <?php /* --------------------------------------------- what people asked for */ ?>
-  <h2 class="an-h">What people asked for</h2>
-  <?php if (!$quotes['has']) { ?>
-  <p class="hint empty">No data yet for these dates. The calculator showed no prices between
-    <?= e(Format::fmtDate($page->fromInput())) ?> and <?= e(Format::fmtDate($page->toInput())) ?>,
-    so there is no country, weight or service to rank.</p>
-  <?php } else { ?>
-  <div class="an-cols">
-    <?php
-    /*
-     * Three lists, one shape. The bars are a comparison and the share is the
-     * number: `pct` is of the biggest row so the widest bar fills the column,
-     * `share` is the true proportion of every quote in the range - including
-     * the countries past the twentieth, which is why the shares in the first
-     * list need not add up to 100%.
-     */
-    $blocks = [
-        ['Top countries', 'Where people wanted to send something, most asked first.', $page->countriesRanked(), ''],
-        ['Weight chosen', 'The weight buttons on the calculator. A band is everything up to it: a 4 kg parcel is counted under 5 kg, because that is the price it was shown.', $page->bandsInOrder(), 'Every band is listed, including the ones nobody picked.'],
-        ['Service chosen', 'Which service the price was taken for.', $page->servicesRanked(), ''],
-    ];
-
-    foreach ($blocks as [$heading, $lede, $rows, $foot]) {
-        ?>
+  <?php
+  /*
+   * One ranked block: heading, lede, the rows, an optional footnote. Written
+   * once and used by both groups below, because the arrivals lists (added
+   * 2026-10-25) are the same shape as the quote lists and a second copy of
+   * this markup is a second place for a share to lose its escaping.
+   *
+   * The bars are a comparison and the share is the number: `pct` is of the
+   * biggest row so the widest bar fills the column, `share` is the true
+   * proportion of the whole range - including the rows past the cap, which is
+   * why the shares in a capped list (countries, referring sites) need not add
+   * up to 100%.
+   *
+   * @param list<array{label:string,n:int,share:string,pct:int}> $rows
+   */
+  $block = static function (string $heading, string $lede, array $rows, string $foot): void {
+      ?>
     <section class="an-block">
       <h3><?= e($heading) ?></h3>
       <p class="hint"><?= e($lede) ?></p>
@@ -200,8 +194,38 @@ $bars     = $page->bars();
       <p class="meta"><?= e($foot) ?></p>
       <?php } ?>
     </section>
+      <?php
+  };
+  ?>
+
+  <?php /* --------------------------------------------------- how they arrived */ ?>
+  <?php if ($landings['has']) { ?>
+  <?php /* Only under a landings figure that means something: with nothing
+           counted, the empty-state sentence above already says so once, and
+           three more "Nothing in these dates" would be the same news four
+           times. */ ?>
+  <h2 class="an-h">How people arrived</h2>
+  <div class="an-cols">
     <?php
-    }
+    $block('Where they came from', 'The site that sent them here. A click from one of our own pages is not a landing, so it is not in this list.', $page->referrersRanked(), 'Busiest ten. Shares are of every landing, so they need not add up to 100%.');
+    $block('Phone or computer', 'The kind of screen they arrived on.', $page->devicesRanked(), '');
+    $block('First page seen', 'The page they arrived on.', $page->pagesRanked(), '');
+    ?>
+  </div>
+  <?php } ?>
+
+  <?php /* --------------------------------------------- what people asked for */ ?>
+  <h2 class="an-h">What people asked for</h2>
+  <?php if (!$quotes['has']) { ?>
+  <p class="hint empty">No data yet for these dates. The calculator showed no prices between
+    <?= e(Format::fmtDate($page->fromInput())) ?> and <?= e(Format::fmtDate($page->toInput())) ?>,
+    so there is no country, weight or service to rank.</p>
+  <?php } else { ?>
+  <div class="an-cols">
+    <?php
+    $block('Top countries', 'Where people wanted to send something, most asked first.', $page->countriesRanked(), '');
+    $block('Weight chosen', 'The weight buttons on the calculator. A band is everything up to it: a 4 kg parcel is counted under 5 kg, because that is the price it was shown.', $page->bandsInOrder(), 'Every band is listed, including the ones nobody picked.');
+    $block('Service chosen', 'Which service the price was taken for.', $page->servicesRanked(), '');
     ?>
   </div>
   <?php } ?>

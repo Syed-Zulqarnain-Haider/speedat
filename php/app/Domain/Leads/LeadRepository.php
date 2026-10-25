@@ -44,6 +44,15 @@ final class LeadRepository
 
     private const MAX_LIMIT = 500;
 
+    /**
+     * How many words of a search are used. Each is one more AND in the WHERE,
+     * and nobody finds a lead by typing a sentence.
+     */
+    private const MAX_SEARCH_WORDS = 6;
+
+    /** A search with fewer digits than this is not a phone number. */
+    private const MIN_PHONE_DIGITS = 4;
+
     /** Every column, in one place, so a SELECT never drifts from Lead::fromRow(). */
     private const COLUMNS = 'id, created_at, updated_at, kind, quote_id, name, phone, email,
                              message, dest_id, weight_g, status, notes, updated_by, ip_hash';
@@ -157,26 +166,199 @@ final class LeadRepository
     /**
      * The inbox list, newest first. Port of `listLeads`.
      *
+     * `$offset` is how the inbox reaches past its first screen: the badge on a
+     * tab counts every lead in it, and a list that only ever showed the newest
+     * 200 left the rest unreachable (fixed 2026-10-25).
+     *
      * @param string $status one of LeadStatus::ALL, or LeadStatus::ANY for all
      * @return list<Lead>
      */
-    public function list(string $status = LeadStatus::ANY, int $limit = 200): array
+    public function list(string $status = LeadStatus::ANY, int $limit = 200, int $offset = 0): array
     {
-        $limit = max(1, min(self::MAX_LIMIT, $limit));
+        return $this->search($status, '', [], $limit, $offset);
+    }
 
-        if ($status === LeadStatus::ANY) {
-            $rows = Db::all(
-                'SELECT ' . self::COLUMNS . ' FROM leads ORDER BY created_at DESC, id DESC LIMIT ?',
-                [$limit],
-            );
-        } else {
-            $rows = Db::all(
-                'SELECT ' . self::COLUMNS . ' FROM leads WHERE status = ? ORDER BY created_at DESC, id DESC LIMIT ?',
-                [self::status($status), $limit],
-            );
-        }
+    /**
+     * The inbox list narrowed by what the office typed into "Find a lead",
+     * newest first.
+     *
+     * WHY THIS IS SQL AND NOT A FILTER OVER THE LIST (fixed 2026-10-25). The
+     * search used to run in PHP over the newest 200 rows of the tab, so a
+     * customer from three months ago was "Nothing here." on a tab whose badge
+     * said 340. Every row the tab holds is searched now.
+     *
+     * HOW IT MATCHES, so the server finds what admin.js finds as it filters
+     * the loaded cards:
+     *
+     *   - The search is cut into words the way `Str::nameKey` cuts it, and
+     *     EVERY word must appear in SOME column: name, phone, email, quote id,
+     *     destination id - or the destination's name, which is not in this
+     *     table, so the caller passes the ids whose names match (`$destIds`,
+     *     word => ids). The columns are utf8mb4_unicode_ci, so LIKE is already
+     *     blind to case and accents, the same as nameKey.
+     *   - A search that is mostly digits is ALSO compared, digits to digits,
+     *     against the phone with everything but digits taken out, in both the
+     *     0-form and the 92-form. "03001234567" finds "+92 300 1234567".
+     *
+     * Every value is bound; the words reach the SQL text only as `?`.
+     *
+     * @param array<string,list<string>> $destIds word => destination ids whose name contains it
+     * @return list<Lead>
+     */
+    public function search(string $status, string $q, array $destIds = [], int $limit = 200, int $offset = 0): array
+    {
+        $limit  = max(1, min(self::MAX_LIMIT, $limit));
+        $offset = max(0, $offset);
+
+        [$where, $params] = self::where($status, $q, $destIds);
+
+        $rows = Db::all(
+            'SELECT ' . self::COLUMNS . ' FROM leads' . $where . ' ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?',
+            [...$params, $limit, $offset],
+        );
 
         return array_map(Lead::fromRow(...), $rows);
+    }
+
+    /**
+     * How many leads `search()` would find with no limit, for "Showing 1-200
+     * of 340".
+     *
+     * @param array<string,list<string>> $destIds
+     */
+    public function total(string $status, string $q = '', array $destIds = []): int
+    {
+        [$where, $params] = self::where($status, $q, $destIds);
+
+        $n = Db::value('SELECT COUNT(*) FROM leads' . $where, $params, 0);
+
+        return is_numeric($n) ? (int) $n : 0;
+    }
+
+    /**
+     * The words a search is matched on: `Str::nameKey`'s, so "Ali-Khan" and
+     * "ali khan" are the same search. A search with no Latin letters or digits
+     * in it - a name typed in Urdu - is matched whole instead of not at all.
+     *
+     * @return list<string>
+     */
+    public static function searchWords(string $q): array
+    {
+        $key = Str::nameKey($q);
+
+        if ($key === '') {
+            $whole = Str::squish($q);
+
+            return $whole === '' ? [] : [Str::limit($whole, 80)];
+        }
+
+        return array_slice(array_values(array_unique(explode(' ', $key))), 0, self::MAX_SEARCH_WORDS);
+    }
+
+    /**
+     * The WHERE for a tab and a search, and what it binds.
+     *
+     * @param array<string,list<string>> $destIds
+     * @return array{0:string,1:list<mixed>}
+     */
+    private static function where(string $status, string $q, array $destIds): array
+    {
+        $clauses = [];
+        $params  = [];
+
+        if ($status !== LeadStatus::ANY) {
+            $clauses[] = 'status = ?';
+            $params[]  = self::status($status);
+        }
+
+        $words = self::searchWords($q);
+
+        if ($words !== []) {
+            $all = [];
+            foreach ($words as $word) {
+                $like  = '%' . self::escapeLike($word) . '%';
+                $any   = [];
+                foreach (['name', 'phone', 'email', 'quote_id', 'dest_id'] as $column) {
+                    $any[]    = $column . " LIKE ? ESCAPE '!'";
+                    $params[] = $like;
+                }
+
+                $ids = array_values(array_filter(
+                    $destIds[$word] ?? [],
+                    static fn (mixed $id): bool => is_string($id) && $id !== '',
+                ));
+                if ($ids !== []) {
+                    $any[]  = 'dest_id IN (' . implode(', ', array_fill(0, count($ids), '?')) . ')';
+                    $params = [...$params, ...$ids];
+                }
+
+                $all[] = '(' . implode(' OR ', $any) . ')';
+            }
+
+            $match = '(' . implode(' AND ', $all) . ')';
+
+            $forms = self::phoneForms($q);
+            if ($forms !== []) {
+                $phone = [];
+                foreach ($forms as $form) {
+                    $phone[]  = "REGEXP_REPLACE(phone, '[^0-9]', '') LIKE ?";
+                    $params[] = '%' . $form . '%';
+                }
+                $match = '(' . $match . ' OR ' . implode(' OR ', $phone) . ')';
+            }
+
+            $clauses[] = $match;
+        }
+
+        return [$clauses === [] ? '' : ' WHERE ' . implode(' AND ', $clauses), $params];
+    }
+
+    /**
+     * A search that reads as a phone number, as the digit strings to look for
+     * in a stored phone: "0300 1234567" gives ["03001234567", "923001234567"].
+     * Anything with letters in it, or fewer than four digits, gives none.
+     *
+     * The same prefixes `View\Admin\Wa::digits` undoes, in both directions:
+     * a stored number may be in either form, and a digits-in-digits LIKE only
+     * finds the form it was given.
+     *
+     * @return list<string>
+     */
+    public static function phoneForms(string $q): array
+    {
+        $q = trim($q);
+
+        if (preg_match('/^[0-9 +().\-]+$/', $q) !== 1) {
+            return [];
+        }
+
+        $digits = preg_replace('/[^0-9]/', '', $q) ?? '';
+
+        if (strlen($digits) < self::MIN_PHONE_DIGITS) {
+            return [];
+        }
+
+        if (str_starts_with($digits, '00')) {
+            $digits = substr($digits, 2);
+        }
+        if (str_starts_with($digits, '920')) {
+            $digits = '92' . substr($digits, 3);
+        }
+
+        $forms = [$digits];
+        if (str_starts_with($digits, '0') && strlen($digits) > 1) {
+            $forms[] = '92' . substr($digits, 1);
+        } elseif (str_starts_with($digits, '92') && strlen($digits) > 2) {
+            $forms[] = '0' . substr($digits, 2);
+        }
+
+        return array_values(array_unique(array_filter($forms, static fn (string $f): bool => $f !== '')));
+    }
+
+    /** LIKE's two wildcards and the escape character, escaped with "!". */
+    private static function escapeLike(string $s): string
+    {
+        return str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $s);
     }
 
     /** One lead, or null. Port of `getLead`. */

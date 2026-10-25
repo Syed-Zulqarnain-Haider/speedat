@@ -43,26 +43,64 @@
 
   var toastEl = null;
   var toastTimer = 0;
+  var toastSay = null;
+  var toastSayTimer = 0;
+
+  /**
+   * The screen-reader half of the toast: one visually hidden role="status"
+   * node, put in the body ONCE at ready() and never removed (audit B6,
+   * 2026-10-25). A live region is only watched once it is in the document; the
+   * old toast was the live region itself and was re-appended ALREADY FILLED
+   * after each 2.4 s removal, which most screen readers treat as a new node
+   * with nothing changed - so "Quote copied" was said sometimes and not
+   * others. Created empty and only ever has its text changed, it is said every
+   * time.
+   */
+  function initToastVoice() {
+    if (toastSay || !document.body) return;
+    toastSay = document.createElement("div");
+    toastSay.className = "sr";
+    toastSay.setAttribute("role", "status");
+    document.body.appendChild(toastSay);
+  }
 
   /**
    * A short confirmation that clears itself after 2400ms, exactly as
    * useToast does. One element is reused: a second message replaces the
    * first rather than stacking, which is what the React version does too
    * (one piece of state).
+   *
+   * The visible pill is for the eye only (aria-hidden), so nothing is read
+   * twice; the words are spoken by the persistent node above. That node is
+   * emptied first and refilled a moment later, so the SAME message twice in a
+   * row ("Quote copied", "Quote copied") is still a change and still said. It
+   * is emptied again with the pill, so a screen-reader user browsing later
+   * does not find a stale "Quote copied" at the end of the page - and nothing
+   * empty is left visible either: the pill is removed, as before.
    */
   function toast(message) {
     if (!message) return;
     if (!toastEl) {
       toastEl = document.createElement("div");
       toastEl.className = "toast";
-      toastEl.setAttribute("role", "status");
+      toastEl.setAttribute("aria-hidden", "true");
     }
     toastEl.textContent = String(message);
     if (!toastEl.parentNode) document.body.appendChild(toastEl);
+    initToastVoice();
+    if (toastSay) {
+      toastSay.textContent = "";
+      if (toastSayTimer) clearTimeout(toastSayTimer);
+      toastSayTimer = setTimeout(function () {
+        toastSayTimer = 0;
+        toastSay.textContent = String(message);
+      }, 60);
+    }
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(function () {
       toastTimer = 0;
       if (toastEl && toastEl.parentNode) toastEl.parentNode.removeChild(toastEl);
+      if (toastSay) toastSay.textContent = "";
     }, 2400);
   }
 
@@ -250,6 +288,7 @@
   window.Speedat.setTheme = setTheme;
 
   ready(function () {
+    initToastVoice();
     initThemeToggle();
     initScrollNav();
     initAnchors();

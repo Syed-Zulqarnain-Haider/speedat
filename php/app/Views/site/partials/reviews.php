@@ -8,7 +8,8 @@ declare(strict_types=1);
  * The reviews are REAL ones the owner picks from his Google Business profile and
  * pastes into the admin; the site never invents one, a rating or a count. Each
  * review carries its own "show on site" switch, so this prints only the ones the
- * owner has left switched on (`Reviews::shown()`), in the order he arranged them.
+ * owner has left switched on (`Reviews::shown()`, which never includes the
+ * seed's "Sample review" placeholders), in the order he arranged them.
  *
  * WHEN THERE IS NOTHING TO SHOW, NOTHING IS PRINTED. A fresh site, or one where
  * the owner has hidden every review, renders no section at all - not an empty
@@ -54,7 +55,15 @@ $max = \Speedat\Domain\SiteDoc\Review::RATING_MAX;
 ?>
 <section class="reviews" aria-labelledby="reviews-title">
   <h2 id="reviews-title" class="reviews-title">What customers say</h2>
-  <p class="reviews-lede">Real reviews from customers we have shipped for.</p>
+<?php
+/*
+ * Neutral on purpose. It used to say "Real reviews from customers", which the
+ * page could not vouch for - the seed's placeholders printed under it on a
+ * fresh site (found 2026-10-25). The owner's own words go in the cards; the
+ * lede claims nothing about them.
+ */
+?>
+  <p class="reviews-lede">A few words from people we have shipped for.</p>
   <ul class="review-list" aria-label="Customer reviews">
 <?php foreach ($reviews as $review) { ?>
 <?php

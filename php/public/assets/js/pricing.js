@@ -70,6 +70,19 @@
 
   /* --------------------------------------------------------- rate cards */
 
+  /** The heaviest shipment priced with no cargo threshold: one tonne, as on the server. */
+  var NO_LIMIT_MAX_G = 1000000;
+
+  /**
+   * The cargo threshold in effect, in kg: maxKg, or one tonne when it is 0.
+   * Text that names the threshold beside an overmax result prints this, not
+   * maxKg, or a "no limit" card says "Shipments over 0 kg get a cargo rate"
+   * (review, 2026-10-25). Engine::cargoLimitKg() is the same function.
+   */
+  function cargoLimitKg(settings) {
+    return settings.maxKg > 0 ? settings.maxKg : NO_LIMIT_MAX_G / 1000;
+  }
+
   function isGrid(settings) {
     return settings.pricingMode === "grid";
   }
@@ -164,7 +177,12 @@
       actualG: actualG,
       volG: volG,
       chargeG: chargeG,
-      billableG: Math.max(firstG, Math.ceil(chargeG / stepG) * stepG),
+      // Steps counted FROM THE FIRST SLAB, as priceService charges them. The
+      // TypeScript's max(first, ceil(c / step) * step) only agrees when the
+      // first slab is a multiple of the step: 0.5 kg first / 1 kg steps billed
+      // a 0.5 kg parcel as 1 kg with one step. Engine::computeWeights() is the
+      // server half; tests/vectors/owner-decisions.json pins both.
+      billableG: chargeG <= firstG ? firstG : firstG + Math.ceil((chargeG - firstG) / stepG) * stepG,
       volumetricWins: chargeG > actualG,
       lines: lines
     };
@@ -239,8 +257,16 @@
     if (!rows.length) return { ok: false, reason: "weight" };
 
     var weights = computeWeights(card.settings, rows);
-    var maxG = card.settings.maxKg > 0 ? kgToG(card.settings.maxKg) : 0;
-    if (maxG && weights.billableG > maxG) return { ok: false, reason: "overmax", dest: dest, weights: weights };
+    // A threshold of 0 is "no limit" to the owner, but the server will not log
+    // a quote over a tonne (QuoteInput::MAX_GRAMS), so without this a 3 x 400
+    // kg shipment was priced here with a Book link whose POST was refused.
+    // Engine::NO_LIMIT_MAX_G is the same number on the server.
+    var maxG = card.settings.maxKg > 0 ? kgToG(card.settings.maxKg) : NO_LIMIT_MAX_G;
+    // limitKg rides on the result so the status line can say "over 1000 kg"
+    // without re-deriving the rule. The vectors do not compare it (the PHP
+    // PriceResult has no such field; Engine::cargoLimitKg() is its twin).
+    if (weights.billableG > maxG)
+      return { ok: false, reason: "overmax", dest: dest, weights: weights, limitKg: cargoLimitKg(card.settings) };
 
     // `input.type` is ignored: the TypeScript branched on it for the document
     // rate, which left the product on 2026-09-27 (owner). A caller that still
@@ -261,6 +287,9 @@
     var out = [];
     var all = String(text == null ? "" : text).split(/\r?\n/);
     for (var i = 0; i < all.length; i++) {
+      // String.prototype.trim strips U+00A0 and the other Unicode spaces;
+      // Engine::jsTrim() is the server's copy of exactly this set, so a pasted
+      // "Delivery | 1000 | on" with a trailing no-break space is ON in both.
       var t = all[i].trim();
       if (t) out.push(t);
     }
@@ -604,6 +633,19 @@
   function weightSentence(w, settings) {
     var txt = "Charged on " + gToKg(w.billableG) + " kg" + (w.pieces > 1 ? " for " + w.pieces + " pieces" : "");
 
+    // Mixed pieces (some on volume, some on scale weight): the sum is neither
+    // weight, so it is not called "volumetric weight". QuoteText twin.
+    if (w.volumetricWins) {
+      var byVolume = false;
+      var byScale = false;
+      for (var n = 0; n < w.lines.length; n++) {
+        if (w.lines[n].volumetricWins) byVolume = true;
+        else byScale = true;
+      }
+      if (byVolume && byScale)
+        return txt + " - each piece is charged at the greater of its actual and volumetric weight (" + gToKg(w.actualG) + " kg actual in total).";
+    }
+
     if (w.volumetricWins) {
       return txt + " - volumetric weight (" + gToKg(w.chargeG) + " kg) is higher than actual (" + gToKg(w.actualG) + " kg).";
     }
@@ -611,7 +653,10 @@
     if (w.billableG !== w.chargeG) {
       var eff = effectiveSteps(settings);
       var stepG = kgToG(eff.stepKg);
-      var byMinimum = Math.ceil(w.chargeG / stepG) * stepG < kgToG(eff.firstKg);
+      var firstG = kgToG(eff.firstKg);
+      // Anchored as computeWeights bills: lifted to the first slab, and plain
+      // step rounding would not have landed there (QuoteText twin).
+      var byMinimum = stepG > 0 && w.chargeG < firstG && Math.ceil(w.chargeG / stepG) * stepG !== firstG;
       return (
         txt +
         " (" +
@@ -639,13 +684,37 @@
     return t;
   }
 
+  /** The longest add-on label a booking carries; QuoteText::ADDON_LABEL_MAX. */
+  var ADDON_LABEL_MAX = 80;
+
+  /**
+   * What two add-on labels are compared by: control characters gone, every
+   * whitespace run one space, trimmed, cut to 80 characters and trimmed again
+   * (a cut that lands on a space must not decide the match). The server
+   * squishes and cuts the labels it is posted, so an exact comparison dropped
+   * "Pickup  and packing" (two spaces) and any label over 80 characters from
+   * the stored total. QuoteText::labelKey() is the same function, with the
+   * same whitespace set (JavaScript's \s plus NEL and U+180E, which PHP's /u
+   * \s also has).
+   */
+  function labelKey(label) {
+    var s = String(label == null ? "" : label)
+      .replace(/[\x00-\x08\x0E-\x1F\x7F]+/g, "")
+      .replace(/[\s\u0085\u180E]+/g, " ")
+      .replace(/^ +| +$/g, "");
+    var chars = Array.from(s);
+    return chars.length <= ADDON_LABEL_MAX ? s : chars.slice(0, ADDON_LABEL_MAX).join("").replace(/ +$/, "");
+  }
+
   /** Add-on amounts always come from the document, never from the browser's copy. */
   function resolveAddons(settings, labels) {
     if (!labels || !labels.length) return [];
+    var want = {};
+    for (var j = 0; j < labels.length; j++) want[labelKey(labels[j])] = true;
     var all = addonsList(settings);
     var out = [];
     for (var i = 0; i < all.length; i++) {
-      if (labels.indexOf(all[i].label) >= 0) out.push(all[i]);
+      if (Object.prototype.hasOwnProperty.call(want, labelKey(all[i].label))) out.push(all[i]);
     }
     return out;
   }
@@ -661,11 +730,15 @@
     out.push("Packages: " + q.piecesText);
     out.push("Charged on: " + gToKg(q.billableG) + " kg");
 
+    // "Courier", as the on-site breakdown says it (owner, 2026-10-05), and no
+    // line for an add-on left on at 0. QuoteText::quoteText() is the twin.
     var addons = ctx.addons || [];
-    if (addons.length) {
-      out.push("Shipping: " + fmtMoney(q.total, ctx.currency));
-      for (var i = 0; i < addons.length; i++) out.push(addons[i].label + ": " + fmtMoney(addons[i].amount, ctx.currency));
-      out.push("Total: " + fmtMoney(bookedTotal(q.total, addons), ctx.currency));
+    var paid = [];
+    for (var a = 0; a < addons.length; a++) if (addons[a].amount > 0) paid.push(addons[a]);
+    if (paid.length) {
+      out.push("Courier: " + fmtMoney(q.total, ctx.currency));
+      for (var i = 0; i < paid.length; i++) out.push(paid[i].label + ": " + fmtMoney(paid[i].amount, ctx.currency));
+      out.push("Total: " + fmtMoney(bookedTotal(q.total, paid), ctx.currency));
     } else {
       out.push("Price: " + fmtMoney(q.total, ctx.currency));
     }
@@ -907,7 +980,7 @@
                   " (" +
                   gaps.slice(0, 6).join(", ") +
                   (gaps.length > 6 ? "…" : "") +
-                  " kg) - those parcels are charged at the next heavier priced kg."
+                  " kg) - customers at those weights get no price on the site and are sent to WhatsApp."
               );
 
             if (above.length)
@@ -956,6 +1029,8 @@
     gridWeights: gridWeights,
     effectiveSteps: effectiveSteps,
     gridPrice: gridPrice,
+    cargoLimitKg: cargoLimitKg,
+    NO_LIMIT_MAX_G: NO_LIMIT_MAX_G,
     computeWeights: computeWeights,
     priceService: priceService,
     priceAll: priceAll,
@@ -993,6 +1068,7 @@
     weightSentence: weightSentence,
     midSentence: midSentence,
     bookedTotal: bookedTotal,
+    labelKey: labelKey,
     resolveAddons: resolveAddons,
     quoteText: quoteText,
     leadSummary: leadSummary,

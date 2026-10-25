@@ -50,7 +50,7 @@ final class LoginController
     /** Attempts per account per window. The per-address bucket is this times four. */
     private const ACCOUNT_ATTEMPTS = 10;
 
-    /** How many six-digit codes may be tried against one pending login. */
+    /** How many six-digit codes may be tried against one ACCOUNT per window. */
     private const CODE_ATTEMPTS = 6;
 
     private const WINDOW = 900;
@@ -90,7 +90,7 @@ final class LoginController
     {
         $app->csrf()->assert($app->request);
 
-        if (!Config::bool('auth.allow_password_login', false)) {
+        if (!$this->passwordsEnabled()) {
             // Not a refusal about this account: a fact about the deployment,
             // and one the person in front of the screen can act on.
             return $this->refuse($app, 'Password sign-in is switched off on this deployment. Use Continue with Google.');
@@ -141,7 +141,8 @@ final class LoginController
      *
      * WITH JAVASCRIPT OFF there is no token to post, because only the browser
      * can get one from Google. The button still submits, and the answer says so
-     * and points at the password form, which does work without JavaScript.
+     * and - where password sign-in is on - points at the password form, which
+     * does work without JavaScript.
      */
     public function google(App $app): Response
     {
@@ -160,17 +161,33 @@ final class LoginController
         if ($idToken === '') {
             return $this->refuse(
                 $app,
-                'Continue with Google needs JavaScript in this browser. Sign in with your email and password below.',
+                'Continue with Google needs JavaScript in this browser.'
+                . ($this->passwordsEnabled() ? ' Sign in with your email and password below.' : ' Turn it on and try again.'),
             );
         }
 
         try {
-            $verifier = new FirebaseToken($project, new GoogleCertificates(Paths::cache() . '/google-certs'));
+            // The app's own public/ is named as a web root because on Hostinger
+            // it is NOT the DOCUMENT_ROOT (public_html is), and a cache under
+            // either would be served by somebody's misconfigured vhost.
+            $certs    = new GoogleCertificates(Paths::cache() . '/google-certs', webRoots: [Paths::publicDir()]);
+            $verifier = new FirebaseToken($project, $certs);
             $email    = Str::email($verifier->verifiedEmailFrom($idToken));
         } catch (FirebaseTokenError $e) {
             Log::warn('login_google_refused', ['reason' => $e->getMessage()]);
 
-            return $this->refuse($app, 'That Google sign-in was refused. Try again, or use your email and password.');
+            return $this->refuse($app, $this->googleRefused());
+        }
+
+        // The per-account cap the password path has had all along. Without it
+        // the Google path was capped only per address (forty in fifteen
+        // minutes), and every pass through here mints a fresh pending login -
+        // so anybody holding the owner's Google account could work through
+        // second-factor codes four times faster than with the password. Counted
+        // only once Google has vouched for the address: an unverified token
+        // must not be able to spend the owner's allowance.
+        if ($email !== '') {
+            RateLimit::enforceKey('login_account', $email, $this->accountAttempts(), self::WINDOW);
         }
 
         $row = $email === '' ? null : Admins::row($email);
@@ -180,7 +197,7 @@ final class LoginController
             // Google account cannot learn whether that address is an admin.
             Log::warn('login_google_refused', ['reason' => 'not_an_admin', 'email' => Str::maskEmail($email)]);
 
-            return $this->refuse($app, 'That Google sign-in was refused. Try again, or use your email and password.');
+            return $this->refuse($app, $this->googleRefused());
         }
 
         return $this->firstFactorPassed($app, $row, PendingLogin::BY_GOOGLE);
@@ -197,10 +214,15 @@ final class LoginController
             return $this->toLogin($app, ['err' => 'expired']);
         }
 
-        // Per pending login, not per address: this bucket exists to stop a
-        // million guesses at six digits, and the pending record is the thing
-        // being guessed at.
-        RateLimit::enforceKey('login_code', $pending['id'], self::CODE_ATTEMPTS, self::WINDOW);
+        // Per ACCOUNT, not per pending login and not per address. This bucket
+        // exists to stop a million guesses at six digits, and it used to be
+        // keyed on the pending record - but a fresh record is minted on every
+        // first-factor success, so redoing the password reset the count: about
+        // sixty codes per fifteen minutes with the password, two hundred and
+        // forty through Google, roughly a 40% chance of a correct code within a
+        // month and no lockout anywhere (review, 2026-10-23). The secret being
+        // guessed belongs to the account, so the account is what is counted.
+        RateLimit::enforceKey('login_code', (string) $pending['email'], self::CODE_ATTEMPTS, self::WINDOW);
 
         $typed = $app->request->post('code', '', 12);
 
@@ -366,6 +388,23 @@ final class LoginController
         RateLimit::enforce('login', $app->request, $this->accountAttempts() * 4, self::WINDOW);
     }
 
+    private function passwordsEnabled(): bool
+    {
+        return Config::bool('auth.allow_password_login', false);
+    }
+
+    /**
+     * The one Google refusal, worded the same for a bad token and for a
+     * stranger's good one. It points at the password form only when there is
+     * one: a Google-only deployment that says "or use your email and password"
+     * sends the owner to a form that does not exist.
+     */
+    private function googleRefused(): string
+    {
+        return 'That Google sign-in was refused. '
+            . ($this->passwordsEnabled() ? 'Try again, or use your email and password.' : 'Try again.');
+    }
+
     private function accountAttempts(): int
     {
         return max(3, Config::int('limits.login_per_15min', self::ACCOUNT_ATTEMPTS));
@@ -395,7 +434,7 @@ final class LoginController
         $company = $doc->data->company;
 
         $googleReady = Str::squish(Config::str('auth.firebase_project_id')) !== '';
-        $passwords   = Config::bool('auth.allow_password_login', false);
+        $passwords   = $this->passwordsEnabled();
 
         // THE TWO SENTENCES THAT USED TO END AN INSTALL.
         //
@@ -426,6 +465,7 @@ final class LoginController
             email: $step === LoginPage::STEP_CREDENTIALS ? $email : '',
             googleReady: $googleReady,
             configWarning: $warning,
+            passwordsEnabled: $passwords,
         );
 
         return $app->page('admin/login', [

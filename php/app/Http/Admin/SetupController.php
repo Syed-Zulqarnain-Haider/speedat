@@ -6,7 +6,9 @@ namespace Speedat\Http\Admin;
 
 use Speedat\Core\App;
 use Speedat\Core\Audit;
+use Speedat\Core\Clock;
 use Speedat\Core\Config;
+use Speedat\Core\Db;
 use Speedat\Core\HttpError;
 use Speedat\Core\Ip;
 use Speedat\Core\Log;
@@ -123,8 +125,11 @@ final class SetupController
      */
     private const MIN_TOKEN = 24;
 
-    /** Attempts at the key, per address, per window. */
+    /** Attempts at the key, per address, per window. Wrong keys only - see refundAttempt(). */
     private const ATTEMPTS = 5;
+
+    /** The `Core\RateLimit` bucket the attempts are counted in. */
+    private const BUCKET = 'admin_setup';
 
     private const WINDOW = 900;
 
@@ -153,7 +158,11 @@ final class SetupController
         // Per address, and it fails CLOSED when the counter is unreachable -
         // `Core\RateLimit`'s allow-list does not carry this bucket, which is the
         // right direction for a door that only needs to open once.
-        RateLimit::enforce('admin_setup', $app->request, self::ATTEMPTS, self::WINDOW);
+        //
+        // Counted BEFORE the key is compared, so a caller past the limit is
+        // refused without learning whether this guess was the right one. The
+        // hit is handed back below when the key matches: see refundAttempt().
+        RateLimit::enforce(self::BUCKET, $app->request, self::ATTEMPTS, self::WINDOW);
 
         $supplied = $app->request->post('setup_key', '', 200);
 
@@ -163,6 +172,13 @@ final class SetupController
 
             return $this->render($app, self::REFUSED, 401);
         }
+
+        // The right key. From here on every refusal is about the form - a
+        // password the policy rejects, two that differ - and the measured
+        // failure was an operator who HAD the key failing the policy five
+        // times and getting a 429 for fifteen minutes. The limit is on guesses
+        // at the key, so a request that did not guess gives its hit back.
+        self::refundAttempt($app);
 
         $method = self::method();
 
@@ -291,6 +307,43 @@ final class SetupController
             Log::exception('setup_seed_version_failed', $e);
 
             return false;
+        }
+    }
+
+    /**
+     * Take back the hit enforce() just counted, because the key was right.
+     *
+     * WHY A REFUND AND NOT "COUNT ONLY IN THE WRONG-KEY BRANCH". Counting only
+     * after the comparison means a caller already past the limit still has his
+     * guess compared, and a right guess would sail through while a wrong one
+     * got the 429 - the limit would refuse the answers and leak the question.
+     * `Core\RateLimit` has no way to read a count without adding to it, so the
+     * hit is taken first, as before, and returned here.
+     *
+     * The row is addressed exactly as `RateLimit::hit()` addresses it: bucket,
+     * ':', `Ip::hash()` of the address, and the start of the fixed window. If
+     * that ever drifts this UPDATE matches nothing and the page behaves as it
+     * did before the refund existed - over-counting, never under-counting -
+     * which is the only safe direction for a mismatch to fail. `count > 0`
+     * keeps a refund racing a window boundary from going negative, and a
+     * database that cannot be reached is logged and ignored for the same
+     * reason: a hit that is not returned is a stricter limit, not a looser one.
+     */
+    private static function refundAttempt(App $app): void
+    {
+        $windowMs = self::WINDOW * 1000;
+        $startMs  = intdiv(Clock::millis(), $windowMs) * $windowMs;
+
+        try {
+            Db::exec(
+                'UPDATE rate_limits SET count = count - 1 WHERE k = ? AND window_start = ? AND count > 0',
+                [
+                    self::BUCKET . ':' . Ip::hash($app->request->ip()),
+                    Clock::sql(new \DateTimeImmutable('@' . intdiv($startMs, 1000))),
+                ],
+            );
+        } catch (\Throwable $e) {
+            Log::exception('setup_rate_refund_failed', $e);
         }
     }
 

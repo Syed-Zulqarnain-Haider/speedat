@@ -330,13 +330,20 @@
 .instrument select.ctile-more {
   min-width: 0;
   min-height: var(--i-tile);
-  padding: 0 26px 0 12px; /* the chevron sits 8–22px from the right edge */
+  /* The chevron sits 8–22px from the right edge, so 24px clears it; the left side gives up 4px so the 16px label
+     below keeps fitting (2026-10-25). */
+  padding: 0 24px 0 8px;
   border: 1.5px solid var(--i-edge);
   border-radius: var(--r3);
   background-color: var(--surface);
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: var(--i-small); /* "More countries" (98px) fits the narrowest cell: 141px at 1200, 143px on a 360px phone */
+  /* 16px, not --i-small (14.9px): iOS Safari zooms the page into any form control under 16px when it is tapped and
+     stays zoomed, cutting off the tiles and the price bar until the visitor pinches back out (2026-10-25). A px
+     literal, not 1rem (17px), because 16 is the threshold and every pixel is room the label needs: "More countries"
+     is ~105px here and the narrowest cell (141px at 1200, 143px on a 360px phone) leaves 141 - 32 padding - 3
+     border = 106px for it. Ellipsis stays as the guard below that. */
+  font-size: 16px;
   line-height: 1.2;
   letter-spacing: 0;
   color: var(--ink);

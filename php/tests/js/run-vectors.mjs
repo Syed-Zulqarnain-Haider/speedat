@@ -10,6 +10,10 @@
  *
  * The vectors were generated in Asia/Karachi and two of the formatters print a
  * wall-clock date, so the runner pins the zone before it touches a Date.
+ *
+ * tests/vectors/owner-decisions.json is run too: hand-written answers for
+ * decisions the TypeScript predates (2026-10-25), held to both engines exactly
+ * like the generated ones. tests/PricingVectorsTest.php reads the same file.
  */
 process.env.TZ = "Asia/Karachi";
 
@@ -24,6 +28,7 @@ const root = join(here, "..", "..");
 /* ------------------------------------------------------------- load the two files */
 
 const vectorsFile = join(root, "tests", "vectors", "pricing.json");
+const ownerFile = join(root, "tests", "vectors", "owner-decisions.json");
 const engineFile = join(root, "public", "assets", "js", "pricing.js");
 
 let data;
@@ -34,6 +39,31 @@ try {
   console.error("Regenerate it - see php/docs/engine-parity.md.");
   process.exit(2);
 }
+
+let owner;
+try {
+  owner = JSON.parse(readFileSync(ownerFile, "utf8"));
+} catch (e) {
+  console.error(`Cannot read ${ownerFile}: ${e.message}`);
+  process.exit(2);
+}
+
+for (const name of Object.keys(owner.sites)) {
+  if (data.sites[name]) {
+    console.error(`owner-decisions.json reuses the site name "${name}" from pricing.json.`);
+    process.exit(2);
+  }
+}
+
+const ownerCount = owner.groups.reduce((n, g) => n + g.cases.length, 0);
+if (ownerCount !== owner.count) {
+  console.error(`owner-decisions.json says it holds ${owner.count} cases and holds ${ownerCount}.`);
+  process.exit(2);
+}
+
+// One fixture namespace, and the hand-written groups after the generated ones.
+data.sites = Object.assign({}, data.sites, owner.sites);
+data.groups = data.groups.concat(owner.groups);
 
 const sandbox = { window: {}, console };
 vm.createContext(sandbox);

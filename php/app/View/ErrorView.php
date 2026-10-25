@@ -17,6 +17,15 @@ namespace Speedat\View;
  * `reset()`. There is nothing to reset in PHP - the way to try again is to ask
  * for the page again - so the 500 renders the same two buttons as the 404 and
  * no dead control.
+ *
+ * THE LINE UNDER "Something went wrong" IS NOT ALWAYS ERROR_LINE. A refusal
+ * the site meant - an expired form token, an owner-only action, a 429, a body
+ * too large - carries a sentence written for the person who caused it, and
+ * `Http\ErrorPage` hands that sentence in here. Before it did, an owner whose
+ * admin tab outlived its CSRF token pressed Publish and was told "This page did
+ * not load" under the marketing buttons, with the one instruction that would
+ * have fixed it ("Please reload the page and try again") thrown away. Only
+ * `Core\HttpError`'s public message ever arrives here, never an exception's.
  */
 final class ErrorView
 {
@@ -31,6 +40,14 @@ final class ErrorView
         public readonly string $line,
         /** "" hides the green button - a document with no WhatsApp number. */
         public readonly string $waHref,
+        /**
+         * Site-relative path back into the admin, or "" on a customer page.
+         *
+         * Set only when the request was under `/admin`: the person reading an
+         * admin refusal wants the editor back, not "Get a price". Relative so
+         * the template prefixes it with `$this->url()` like every other link.
+         */
+        public readonly string $adminHref = '',
     ) {
     }
 
@@ -39,9 +56,21 @@ final class ErrorView
         return new self($page, self::NOT_FOUND_TITLE, self::NOT_FOUND_LINE, self::wa($page->doc));
     }
 
-    public static function failed(PageView $page): self
+    /**
+     * @param string $line      the sentence under the heading. ERROR_LINE unless
+     *                          the caller has an `HttpError` public message
+     *                          that says what to do; "" falls back to it.
+     * @param string $adminHref see the property.
+     */
+    public static function failed(PageView $page, string $line = self::ERROR_LINE, string $adminHref = ''): self
     {
-        return new self($page, self::ERROR_TITLE, self::ERROR_LINE, self::wa($page->doc));
+        return new self(
+            $page,
+            self::ERROR_TITLE,
+            $line !== '' ? $line : self::ERROR_LINE,
+            self::wa($page->doc),
+            $adminHref,
+        );
     }
 
     private static function wa(Doc $doc): string

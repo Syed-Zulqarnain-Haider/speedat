@@ -70,10 +70,13 @@ Three rules worth knowing, because they are how customers get quoted:
 
 1. **A parcel is charged at the next whole kilogram up.** 1.2 kg pays the 2 kg
    price.
-2. **A blank box means that weight is charged at the next heavier box.** Leave
-   the top boxes blank and that weight is simply not carried, and the customer
-   is asked to message on WhatsApp. Never type `0` to mean "no price" — `0`
-   means free.
+2. **A blank box means that weight is not offered.** A customer whose parcel
+   lands on a blank box is told there is no rate for that weight and asked to
+   message on WhatsApp — the site never borrows the next heavier box's price
+   (owner, 2026-09-28; it used to, and charged numbers nobody had typed). So
+   leave a box blank only when you really do not carry that weight, and fill
+   every weight you do. **`0` means the same as blank**, not free: the site
+   never shows a price of 0.
 3. **A service with no boxes at all is not offered to that country.**
 
 ### The keyboard, so you never reach for the mouse
@@ -142,7 +145,8 @@ added**. That is the number on the website, not the number in the box.
 
 It reads the values in *Settings* on this same page, so it can never be
 describing settings you have since changed. It also answers the question a blank
-box raises — at 7 kg with 7 kg blank it says "charged at the 8 kg box".
+box raises — at 7 kg with 7 kg blank it says that weight is not offered and the
+customer is sent to WhatsApp, not a price borrowed from 8 kg.
 
 ### When something is wrong, it says so in place
 
@@ -152,9 +156,10 @@ marked:
 - **Orange — a price lower than the kilogram below it.** "9 kg is priced below
   the kilogram underneath, so a heavier parcel costs less." This is almost
   always a typo and it is the one you must fix.
-- **Quiet grey — a gap.** "4 and 6 kg are blank, and charged at the next heavier
-  price." Sometimes that is exactly what you want, so it is stated, not alarmed
-  about.
+- **A gap — a blank box (or a `0`) between priced kilograms.** Those weights
+  are not offered: a customer at 4 kg with 4 kg blank is told there is no rate
+  and sent to WhatsApp. Sometimes that is exactly what you want; more often it
+  is a box you meant to fill, so read the sentence and decide.
 - **Orange — not a number.** The box is left alone and the stored price is kept.
 
 The counter beside each service — "18 of 25 priced", or "all 25 priced" — is how

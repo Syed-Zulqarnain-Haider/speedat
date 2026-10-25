@@ -466,7 +466,13 @@ final class RatesEditorTest extends AdminViewTestCase
 
         // The sentence, in place, pointing at the weights.
         $this->assertStringContains('6 kg is priced below the kilogram underneath, so a heavier parcel costs less.', $html);
-        $this->assertStringContains('are blank, and charged at the next heavier price.', $html);
+        // A blank box is not a price (owner, 2026-09-28): the note says the
+        // weight is not offered, never the old "charged at the next heavier
+        // price", which told the owner a customer was quoted when he was not.
+        $this->assertStringContains('3 and 4 kg are blank, so they are not offered (customers are sent to WhatsApp).', $html);
+        $this->assertStringNotContains('charged at the next heavier price', $html, 'the ladder note no longer promises it');
+        $this->assertStringNotContains('uses the next heavier priced one', $html, 'nor does the lede');
+        $this->assertStringContains('a blank kilogram is not offered at that weight.', $html, 'the lede says what happens instead');
 
         // Every flagged box points at that sentence for a screen reader.
         $this->assertStringContains('aria-invalid="true" aria-describedby="ladder-tr-exp"', $html);

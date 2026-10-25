@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Speedat\View\Admin;
 
 use Speedat\Core\Clock;
+use Speedat\Domain\Analytics\PageViews;
 use Speedat\Domain\Analytics\QuoteStats;
 use Speedat\Domain\Pricing\Format;
 
@@ -58,6 +59,9 @@ final class AnalyticsPage
      * @param list<array{label:string,n:int}>   $countries     ranked, names already resolved
      * @param list<array{label:string,n:int}>   $services      ranked, names already resolved
      * @param array<string,int>                 $bands         QuoteStats band key => quotes
+     * @param array<string,int>                 $referrers     PageViews::byReferrer(), "" for direct, capped
+     * @param array<string,int>                 $devices       PageViews::byDevice()
+     * @param array<string,int>                 $pages         PageViews::byPath()
      */
     public function __construct(
         /** The range the owner is looking at, in the site's own time zone. */
@@ -80,6 +84,17 @@ final class AnalyticsPage
         public readonly string $countingFrom = '',
         /** Set when the dates asked for were adjusted, and why. "" when they were taken as given. */
         public readonly string $rangeNotice = '',
+        /*
+         * Where landings came from, on what screen, and on which page
+         * (2026-10-25). The counter has stored all three on every row since
+         * the day it shipped and nothing ever showed them: the owner could not
+         * see whether people were arriving from WhatsApp, Facebook or Google,
+         * or on phones, without phpMyAdmin. Raw `label => views`, labelled
+         * here and not in the domain, for the reason byReferrer() gives.
+         */
+        public readonly array $referrers = [],
+        public readonly array $devices = [],
+        public readonly array $pages = [],
     ) {
     }
 
@@ -326,7 +341,8 @@ final class AnalyticsPage
      */
     public function countriesRanked(): array
     {
-        return $this->ranked($this->countries);
+        // Of every quote in the range, not of the twenty printed - see ranked().
+        return $this->ranked($this->countries, true, $this->quotesTotal);
     }
 
     /** @return list<array{label:string,n:int,share:string,pct:int}> */
@@ -366,6 +382,80 @@ final class AnalyticsPage
     public static function bandLabel(string $key): string
     {
         return $key === QuoteStats::OVER ? 'over 25 kg' : $key . ' kg';
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Landings: where from, on what, which page
+     * ------------------------------------------------------------------ */
+
+    /**
+     * Referring sites, busiest first, as a share of EVERY landing.
+     *
+     * The list is capped by the controller, so the share is of
+     * `landingsTotal` and not of the rows - the same rule as the countries.
+     * The empty host is a typed address, a bookmark, or an app that sends no
+     * Referer, and it is worded as exactly that rather than as a bare "Direct"
+     * that reads like a channel somebody chose.
+     *
+     * @return list<array{label:string,n:int,share:string,pct:int}>
+     */
+    public function referrersRanked(): array
+    {
+        $rows = [];
+        foreach ($this->referrers as $host => $n) {
+            $rows[] = ['label' => $host === '' ? 'Direct, or an app that does not say' : (string) $host, 'n' => $n];
+        }
+
+        return $this->ranked($rows, true, $this->landingsTotal);
+    }
+
+    /**
+     * Phone or desktop. "Desktop" says "or tablet" because PageViews::device()
+     * counts a tablet there, and the label should not claim a precision the
+     * count does not have.
+     *
+     * @return list<array{label:string,n:int,share:string,pct:int}>
+     */
+    public function devicesRanked(): array
+    {
+        $rows = [];
+        foreach ($this->devices as $device => $n) {
+            $rows[] = [
+                'label' => match ((string) $device) {
+                    PageViews::PHONE   => 'Phone',
+                    PageViews::DESKTOP => 'Computer or tablet',
+                    default            => (string) $device,
+                },
+                'n' => $n,
+            ];
+        }
+
+        return $this->ranked($rows);
+    }
+
+    /**
+     * The page each landing arrived on. The address is the label - it is what
+     * the owner types and what a shared link shows - except for the home page
+     * and for PageViews::OTHER, whose "/other" is a bucket and not an address
+     * anybody could visit.
+     *
+     * @return list<array{label:string,n:int,share:string,pct:int}>
+     */
+    public function pagesRanked(): array
+    {
+        $rows = [];
+        foreach ($this->pages as $path => $n) {
+            $rows[] = [
+                'label' => match ((string) $path) {
+                    '/'               => 'Home page',
+                    PageViews::OTHER  => 'Any other address',
+                    default           => (string) $path,
+                },
+                'n' => $n,
+            ];
+        }
+
+        return $this->ranked($rows, true, $this->landingsTotal);
     }
 
     /* ------------------------------------------------------------------ *
@@ -457,6 +547,13 @@ final class AnalyticsPage
      * The share is of the WHOLE total the caller counted, not of the rows
      * printed: a top-twenty list of two hundred countries whose shares add up
      * to 100% is a list that has quietly dropped the other hundred and eighty.
+     * A list that is CAPPED therefore has to be handed that whole total as
+     * `$of` - summing the rows it was given is only right for a list that is
+     * already complete (the bands, the services). It was not, for countries:
+     * with thirty countries quoted, the UK at 50 of 400 read 14.3% of the top
+     * twenty instead of its true 12.5% (fixed 2026-10-25). A `$of` smaller than
+     * the rows' own sum is not believed, so a stale total can never print a
+     * share over 100%.
      *
      * `pct` is of the biggest row so the bars use the full width; `share` is the
      * real proportion and is the number the owner reads. Keeping them apart is
@@ -464,15 +561,20 @@ final class AnalyticsPage
      * jobs badly.
      *
      * @param  list<array{label:string,n:int}>                          $rows
+     * @param  ?int                                                     $of   the whole total, when $rows is capped
      * @return list<array{label:string,n:int,share:string,pct:int}>
      */
-    private function ranked(array $rows, bool $dropEmpty = true): array
+    private function ranked(array $rows, bool $dropEmpty = true, ?int $of = null): array
     {
         $total = 0;
         $top   = 0;
         foreach ($rows as $row) {
             $total += $row['n'];
             $top = max($top, $row['n']);
+        }
+
+        if ($of !== null) {
+            $total = max($total, $of);
         }
 
         $out = [];

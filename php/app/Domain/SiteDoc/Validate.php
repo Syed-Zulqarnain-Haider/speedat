@@ -223,9 +223,13 @@ final class Validate
                         }
                     }
 
-                    // Priced as the engine reads it: a blank box below a priced one
-                    // is billed at the next heavier priced kg, but above the last
-                    // priced kg there is no such kg and no price at all.
+                    // Priced as the engine reads it: a blank box is not a price
+                    // (owner, 2026-09-28), below the last priced kg or above it,
+                    // and a customer at that weight is sent to WhatsApp. The two
+                    // warnings differ only in how the weights are named. This one
+                    // used to say a gap was "charged at the next heavier priced
+                    // kg" - the rule that went - so an owner could publish a gap
+                    // on purpose, believing it was priced.
                     $priced  = [];
                     $missing = [];
 
@@ -246,7 +250,7 @@ final class Validate
                         if ($gaps !== []) {
                             $shown = implode(', ', array_slice($gaps, 0, 6));
                             $w[]   = $label . ': no price for ' . count($gaps) . ' weight' . (count($gaps) === 1 ? '' : 's')
-                                . ' (' . $shown . (count($gaps) > 6 ? "\u{2026}" : '') . " kg) - those parcels are charged at the next heavier priced kg.";
+                                . ' (' . $shown . (count($gaps) > 6 ? "\u{2026}" : '') . " kg) - customers at those weights get no price on the site and are sent to WhatsApp.";
                         }
 
                         if ($above !== []) {
