@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Speedat International Courier - Lahore to United Kingdom, United States, Canada and 7 more countries.">
+  <title>Speedat International Courier - Lahore to United Kingdom, United States, Canada and 7 more countries.</title>
+  <defs>
+    <pattern id="ogstripes" patternUnits="userSpaceOnUse" width="67.656" height="26.286" patternTransform="rotate(45)">
+      <rect x="0" y="0" width="23.421" height="26.286" fill="#ea580c"/>
+      <rect x="23.421" y="0" width="10.409" height="26.286" fill="#ffffff"/>
+      <rect x="33.83" y="0" width="23.417" height="26.286" fill="#0a1a33"/>
+      <rect x="57.247" y="0" width="10.409" height="26.286" fill="#ffffff"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="#0a1a33"/>
+  <rect x="0" y="618" width="1200" height="12" fill="#ea580c"/>
+  <rect x="72" y="64" width="92" height="92" rx="18" fill="url(#ogstripes)" stroke="#e6e1d8" stroke-width="2"/>
+  <text x="192" y="126" font-family="&apos;Big Shoulders Display&apos;,&apos;Barlow&apos;,system-ui,&apos;Segoe UI&apos;,sans-serif" font-size="40" font-weight="600" fill="#f5f0e7">Speedat International Courier</text>
+  <text x="72" y="246" font-family="&apos;Barlow&apos;,system-ui,&apos;Segoe UI&apos;,sans-serif" font-size="25" font-weight="600" letter-spacing="2.4" fill="#f97316">SPEED AGAINST TIME</text>
+  <text x="72" y="330" font-family="&apos;Big Shoulders Display&apos;,&apos;Barlow&apos;,system-ui,&apos;Segoe UI&apos;,sans-serif" font-size="60" font-weight="600" fill="#f5f0e7">Lahore to United Kingdom, United</text>
+  <text x="72" y="401" font-family="&apos;Big Shoulders Display&apos;,&apos;Barlow&apos;,system-ui,&apos;Segoe UI&apos;,sans-serif" font-size="60" font-weight="600" fill="#f5f0e7">States, Canada and 7 more</text>
+  <text x="72" y="472" font-family="&apos;Big Shoulders Display&apos;,&apos;Barlow&apos;,system-ui,&apos;Segoe UI&apos;,sans-serif" font-size="60" font-weight="600" fill="#f5f0e7">countries.</text>
+  <rect x="72" y="524" width="148" height="7" fill="#f97316"/>
+  <text x="72" y="582" font-family="&apos;Barlow&apos;,system-ui,&apos;Segoe UI&apos;,sans-serif" font-size="26" fill="#b9b5ad">speedat.com.pk</text>
+</svg>

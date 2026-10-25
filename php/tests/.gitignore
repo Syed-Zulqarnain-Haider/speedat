@@ -1,0 +1,38 @@
+# Speedat PHP port - things that must never reach the repository.
+#
+# The root .gitignore already covers .env*; this file covers the PHP tree.
+
+# Real configuration. Only config.sample.php is committed.
+/config/config.php
+/config/*.local.php
+
+# Anything Google hands out as a key file.
+*-service-account*.json
+firebase-adminsdk*.json
+*.pem
+*.key
+*.p12
+
+# Runtime state written by the app. The directories are kept (see .gitkeep),
+# their contents are not - except the guards, which are part of the defence
+# and must be deployed with the tree.
+/storage/cache/*
+/storage/logs/*
+/storage/tmp/*
+/storage/uploads/*
+/var/*
+!/storage/cache/.gitkeep
+!/storage/logs/.gitkeep
+!/storage/tmp/.gitkeep
+!/storage/uploads/.gitkeep
+!/var/.gitkeep
+!/storage/*/index.html
+
+# Database dumps. A dump of the live site contains customer leads.
+*.sql.gz
+/dumps/
+
+# Local editor / OS droppings
+.DS_Store
+Thumbs.db
+*.swp

@@ -1,0 +1,301 @@
+# Speedat - Apache/LiteSpeed configuration for the web root (Hostinger public_html).
+#
+# Everything that is not an existing file or directory is routed to index.php.
+# Application code, config, storage and logs live OUTSIDE this directory and
+# are therefore not served at all; the deny rules below are the second lock,
+# for the day somebody copies a file in here by mistake or a control panel
+# "repairs" the document root.
+#
+# TWO RULES THIS FILE IS WRITTEN UNDER
+#   1. Every mod_* directive sits inside <IfModule>. Hostinger runs LiteSpeed,
+#      .htaccess is the only configuration surface, and an unsupported
+#      directive is a hard 500 that takes the whole site down.
+#   2. Every deny is written TWICE - once for mod_authz_core (Apache 2.4,
+#      which is what LiteSpeed emulates) and once for mod_access_compat
+#      (2.2). With only the 2.4 block, a host that authorises through
+#      mod_access_compat parses `Require all denied`, denies nothing, and
+#      answers 200 - a silent no-op, which is the worst kind of security
+#      rule. A host with NEITHER module gets neither block, which is why
+#      nothing sensitive is in this directory in the first place;
+#      tests/Core/HtaccessTest.php fails if anything sensitive lands here.
+#
+# php/public/.htaccess is the file the release ships as public_html/.htaccess.
+# deploy/htaccess/public_html.htaccess is the annotated copy carrying the
+# optional blocks; keep the two in step.
+
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+
+# --- the web server's own body cap ------------------------------------------
+# 2 MiB, refused a layer EARLIER than everything else on this site.
+#
+# post_max_size (in .user.ini beside this file) stops a giant body before the
+# application sees it, but PHP still has to be started, handed the request and
+# asked to read it. LimitRequestBody is the web server refusing the body with a
+# 413 before a PHP worker is engaged at all, which on a one-core shared plan is
+# the difference between a refusal costing nothing and a refusal costing a
+# worker for as long as the sender cares to keep sending.
+#
+# THE SIZE IS FOR A SITE WITH NO UPLOADS, WHICH IS WHAT THIS SITE IS. Not one
+# form carries enctype="multipart/form-data" - the Excel rate sheet was removed
+# (owner, 2026-09-27) - so the largest honest request is the rates editor's few
+# hundred text fields, tens of kilobytes. 2 MiB is roughly fifty times that and
+# sits UNDER post_max_size (3M) on purpose: whichever layer a host honours, the
+# web server's cheaper refusal fires first and the PHP-side cap stays the
+# backstop rather than the front line.
+#
+# WHY IT IS WRAPPED, WHEN LimitRequestBody IS CORE APACHE AND NOT A mod_*.
+# Because rule 1 above is absolute: an unsupported directive here is a hard 500
+# that takes the whole site down, and "core Apache" is a statement about
+# Apache, not about LiteSpeed's .htaccess subset. `core.c` is the module
+# identifier Apache itself answers to. A host that does not know that name gets
+# the second block, which asks for the same cap on any server already proving
+# it parses <IfModule> by giving us mod_rewrite - without which this site has
+# no front controller and serves nothing at all.
+#
+# A host matching NEITHER sets no cap here and does not 500, and post_max_size
+# in .user.ini still refuses the body. That is the correct direction to fail:
+# a missing optimisation, never a missing site.
+<IfModule core.c>
+    LimitRequestBody 2097152
+</IfModule>
+<IfModule !core.c>
+    <IfModule mod_rewrite.c>
+        LimitRequestBody 2097152
+    </IfModule>
+</IfModule>
+
+# --- put the Authorization header back where PHP can see it ------------------
+# MEASURED, not assumed. On the staging host (Apache 2.4.68, mod_php 8.2.34) a
+# request carrying `Authorization: Bearer <token>` reached PHP with the header
+# present in apache_request_headers() and with NOTHING in $_SERVER - no
+# HTTP_AUTHORIZATION, no anything. mod_php builds $_SERVER from Apache's
+# subprocess_env, and ap_add_common_vars() deliberately leaves Authorization and
+# Proxy-Authorization out of it unless CGIPassAuth is on, so that a CGI script
+# cannot read credentials for a request it is not itself authenticating. The
+# effect here was that /api/metrics answered 401 to a CORRECT bearer token while
+# accepting the same secret in a query string - so the only shape that worked
+# was the one that writes the secret into every access log between the caller
+# and this site.
+#
+# SetEnvIf RATHER THAN CGIPassAuth. CGIPassAuth is the directive meant for this
+# and is the right one on a host that has it - but it only exists from Apache
+# 2.4.13, it is CORE rather than a mod_*, and rule 1 at the top of this file is
+# absolute: a directive the server does not know is a hard 500, and a 500 here
+# is the whole site. <IfModule> can ask "do you have this module", never "do you
+# know this directive", and core.c answers yes on 2.4.10 too. mod_setenvif is
+# ancient, universally present, and wrapped anyway.
+#
+# THIS IS THE CHEAP LAYER AND NOT THE ONLY ONE.
+# Core\Request::authorizationHeader() reads the value back from
+# REDIRECT_HTTP_AUTHORIZATION - which is where the rewrite below re-exposes what
+# this line sets - AND from apache_request_headers() directly, so a host that
+# ignores this file entirely still authenticates.
+<IfModule mod_setenvif.c>
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Hostinger serves the site from the account's document root.
+    RewriteBase /
+
+    # Never rewrite something that really exists.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Everything else is the application's problem.
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# --- deny everything that is not meant to be downloaded ---------------------
+# The two blocks below deny exactly the same five things. They are kept
+# character-for-character identical in their patterns so that a change to one
+# is obviously a change to the other:
+#
+#   A. ^\.                        dotfiles: .env, .git*, .htpasswd, .user.ini
+#   B. \.(sql|md|log|ini|...)$    source, dumps, configuration, backups, keys
+#   C. (~|\.(save|rej|...))$      editor droppings with no known extension
+#   D. ^(config|secrets|...)\.json  credentials that arrive as .json
+#   E. router.php                 the dev server's rewrite, never used here
+#
+# EVERY PATTERN STARTS WITH (?i), AND THAT IS NOT DECORATION. <FilesMatch> is
+# case-sensitive by default, the host filesystem is Linux, and Linux is
+# case-sensitive too - so `Config.PHP`, `DUMP.SQL` and `Secrets.JSON` are three
+# different filenames that the case-sensitive versions of these patterns served
+# as plain text. A release builder with the same bug shipped a file containing
+# the whole production configuration under the name `Settings.LOCAL.php`
+# (audit round 1, finding 7), which is what the name rules here are the second
+# lock for.
+#
+# Apache 2.4 / LiteSpeed: mod_authz_core.
+<IfModule mod_authz_core.c>
+    <FilesMatch "(?i)^\.">
+        Require all denied
+    </FilesMatch>
+    <FilesMatch "(?i)\.(sql|sqlite|sqlite3|db|md|log|ini|yml|yaml|lock|sh|bak|dist|sample|twig|tpl|pem|key|p12|pfx)$">
+        Require all denied
+    </FilesMatch>
+    # Editor and merge droppings whose name ends in something that is not an
+    # extension at all: index.php~, config.php.save, routes.php.rej,
+    # index.php.orig~. None of these matched the extension list above and none
+    # of them starts with a dot, so LiteSpeed served them as plain text - the
+    # source of a file whose live version PHP would have executed.
+    <FilesMatch "(?i)(~|\.(save|rej|tmp|temp|old|copy|orig|swp|swo))$">
+        Require all denied
+    </FilesMatch>
+    # config.json / credentials.json style files, but not the site manifests.
+    <FilesMatch "(?i)^(config|secrets|credentials|firebase|service-account).*\.json$">
+        Require all denied
+    </FilesMatch>
+    # <Files> matches a literal name, so it used to miss Router.PHP. FilesMatch
+    # with (?i) is the same rule spelled in a way the host's case-sensitivity
+    # cannot walk around.
+    <FilesMatch "(?i)^router\.php$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+# Apache 2.2 syntax, for a host whose authorisation is mod_access_compat. The
+# inner <IfModule> matters as much as the outer one: on a host with neither
+# module a bare `Order` line is a 500, and a 500 here is the whole site.
+<IfModule !mod_authz_core.c>
+    <IfModule mod_access_compat.c>
+        <FilesMatch "(?i)^\.">
+            Order allow,deny
+            Deny from all
+        </FilesMatch>
+        <FilesMatch "(?i)\.(sql|sqlite|sqlite3|db|md|log|ini|yml|yaml|lock|sh|bak|dist|sample|twig|tpl|pem|key|p12|pfx)$">
+            Order allow,deny
+            Deny from all
+        </FilesMatch>
+        <FilesMatch "(?i)(~|\.(save|rej|tmp|temp|old|copy|orig|swp|swo))$">
+            Order allow,deny
+            Deny from all
+        </FilesMatch>
+        <FilesMatch "(?i)^(config|secrets|credentials|firebase|service-account).*\.json$">
+            Order allow,deny
+            Deny from all
+        </FilesMatch>
+        <FilesMatch "(?i)^router\.php$">
+            Order allow,deny
+            Deny from all
+        </FilesMatch>
+    </IfModule>
+</IfModule>
+
+# --- security headers -------------------------------------------------------
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    # DENY, matching app/Core/App.php and the CSP's `frame-ancestors 'none'`.
+    # This copy is the one that answers on a request that dies before PHP sets
+    # its own headers, so a weaker value here is not a duplicate - it is the
+    # only header that static file, that 500 and that directory index carry.
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Cross-Origin-Opener-Policy "same-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), interest-cohort=()"
+
+    # HSTS: only meaningful once the domain is HTTPS-only. Hostinger issues a
+    # free certificate and forces https, so this is safe there. It is commented
+    # out until the PHP site is actually the live site, because a wrong HSTS
+    # header is remembered by browsers and is painful to undo.
+    # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # PHP's own version banner (expose_php is also Off in php.ini).
+    Header always unset X-Powered-By
+</IfModule>
+
+# --- MIME + compression -----------------------------------------------------
+# woff2's registered media type is `font/woff2` (RFC 8081). This line used to
+# declare `application/font-woff2` - a pre-RFC name - while the expiry block
+# below gave its year to `font/woff2`, so the two never referred to the same
+# thing and every self-hosted font fell through to ExpiresDefault "access plus 0
+# seconds": refetched on every page, on the mobile target this site is built for,
+# with nothing visibly wrong (audit round 1, finding 18). The registered name is
+# declared here and BOTH names are given the year below, because a host may
+# already know the legacy one and win.
+<IfModule mod_mime.c>
+    AddDefaultCharset UTF-8
+    AddType font/woff2 .woff2
+    AddType font/woff .woff
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json image/svg+xml
+</IfModule>
+
+# --- static asset caching ---------------------------------------------------
+# HTML is never cached: prices change and a stale quote page is a wrong quote.
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 0 seconds"
+    ExpiresByType text/html "access plus 0 seconds"
+    ExpiresByType text/css "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+    ExpiresByType image/svg+xml "access plus 30 days"
+    ExpiresByType image/webp "access plus 30 days"
+    ExpiresByType image/png "access plus 30 days"
+    ExpiresByType image/jpeg "access plus 30 days"
+    # Both spellings of the same file type - see the mod_mime block above.
+    ExpiresByType font/woff2 "access plus 365 days"
+    ExpiresByType application/font-woff2 "access plus 365 days"
+    ExpiresByType font/woff "access plus 365 days"
+    ExpiresByType application/font-woff "access plus 365 days"
+</IfModule>
+
+# --- PHP settings the host may allow us to set ------------------------------
+# On Hostinger these are normally set in hPanel's PHP configuration or in
+# .user.ini (see deploy/htaccess/user.ini.sample) instead. php_flag/php_value
+# only work under mod_php; LiteSpeed/PHP-FPM ignores them silently, which is
+# why they are wrapped and why nothing depends on them.
+#
+# 2M / 3M, AND THE SMALLNESS IS THE POINT.
+# These were 8M/9M, sized for the Excel rate sheet. That feature was removed
+# (owner, 2026-09-27) and NOTHING on this site uploads a file any more, so the
+# largest legitimate body is the rates editor's few hundred text fields - tens
+# of kilobytes. A 12 MB POST at the public contact form is not a big enquiry,
+# it is somebody making a 1-core shared plan read and buffer twelve megabytes
+# before a single line of application code decides anything. This is the layer
+# that refuses it: PHP discards an over-sized body before the app is reached,
+# which costs nothing, whereas every cap inside the application is spent after
+# the bytes have already arrived.
+#
+# POST_MAX_SIZE STAYS LARGER THAN UPLOAD_MAX_FILESIZE, for the reason it always
+# was: post_max_size caps the WHOLE body - a file, plus its multipart
+# boundaries and headers, plus every other field, plus the CSRF token. With the
+# two equal, a file at exactly the documented limit makes a body slightly over
+# it and PHP throws the lot away: empty $_POST, empty $_FILES, no upload error
+# to report, and a form that appears to have done nothing. 1M of headroom is
+# hundreds of times what this site posts. Core\Upload::problem() says so in
+# plain words if it ever happens anyway.
+#
+# max_input_vars 4000, the same number .user.ini sets. It is HERE as well as
+# there because a host reads one file or the other and never says which: if the
+# two disagree, the site's real limit is an accident of this host's SAPI rather
+# than a number anybody chose. The largest form on the site is one country row
+# in the rates editor - 98 named controls, measured 2026-09-29 against the real
+# document - so 4000 is roughly forty times the worst honest case, which is the
+# margin asked for because a body PHP cut short is not an error: $_POST simply
+# ends early. (Http\Admin\DraftForm catches that and refuses the save, so this
+# is headroom, not a dependency.) The reasoning in full is in the .user.ini.
+#
+# php_flag/php_value only work under mod_php; LiteSpeed/PHP-FPM ignores them
+# silently. The file that actually applies on Hostinger is .user.ini - see
+# deploy/htaccess/user.ini.sample, which carries the same values.
+<IfModule mod_php.c>
+    php_flag display_errors Off
+    php_flag expose_php Off
+    php_value upload_max_filesize 2M
+    php_value post_max_size 3M
+    php_value max_input_vars 4000
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag display_errors Off
+    php_flag expose_php Off
+    php_value upload_max_filesize 2M
+    php_value post_max_size 3M
+    php_value max_input_vars 4000
+</IfModule>

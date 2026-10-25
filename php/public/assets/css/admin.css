@@ -1,0 +1,2933 @@
+/* =====================================================================
+   admin.css — owner: ADMIN
+   The admin app, scoped under `.admin-app` (the shell every signed-in
+   page renders) or `.login` (the sign-in screen). Same paper, ink and
+   one orange as the site; a product, not a form. Zero decorative motion:
+   only --t-fast hover/focus colour changes, inside the block at the end.
+   Element selectors (table, th, td, input, details…) are always scoped.
+   Shared skins (.btn, .tag, .notice, .field, inputs, .panel) live in
+   tokens.css and are only overridden here under .admin-app / .login.
+   ===================================================================== */
+
+/* ---------- the admin's own type floor: NOTHING UNDER 14px ----------
+   tokens.css raises the customer-facing floor to --fs-small (14.9px) inside
+   `.site` and leaves :root at the smaller values, so the admin quietly
+   inherited 0.7-0.82rem on .tag, .count, .meta and every eyebrow. Measured on
+   the rates page at 1366px: 95 leaf elements under 14px, on the screen the
+   owner keys prices into all day.
+
+   The floor is set HERE, scoped to the admin, and NOT by moving a :root token
+   that the public site also reads - the site has its own floor and its own
+   scale, and this must not disturb either. 0.83rem = 14.1px at the 17px root;
+   the sizes the ladder itself uses (0.875rem) were already above it. */
+.admin-app,
+.login {
+  --fs-eyebrow: 0.83rem;
+}
+.admin-app .tag,
+.admin-app .count,
+.admin-app .meta,
+.login .tag,
+.login .meta {
+  font-size: 0.83rem;
+}
+
+/* ---------- admin palette: depth, the brand plate, nav states ----------
+   New tokens, scoped to the admin — NEVER tokens.css :root, which the public
+   site reads. The admin keeps the owner's white page and cream sidebar; what it
+   gains is real depth (cards lift off the page instead of being hairline
+   outlines) and one confident use of the brand yellow. Yellow appears ONLY as a
+   fill in three places — the brand plate, the publish CTA and the login panel —
+   and is constant in both themes, because it is the brand and a dark-ink mark on
+   it reads 10.6:1 either way. Orange keeps its earned meaning: "this changed /
+   look here". Green = live, amber = price-leak, red = destructive. */
+.admin-app,
+.login {
+  --shadow-card: 0 1px 2px rgba(10, 26, 51, 0.05), 0 8px 20px -12px rgba(10, 26, 51, 0.18);
+  --shadow-card-hover: 0 2px 6px rgba(10, 26, 51, 0.08), 0 16px 32px -14px rgba(10, 26, 51, 0.24);
+}
+.admin-app {
+  /* "Review and publish" becomes brand YELLOW with navy ink: the one
+     unmistakable action, yellow-on-navy on the publish bar. --book-ink is
+     already #0a1a33 and constant, so it survives the theme flip. */
+  --book: var(--brand-yellow);
+  --book-hover: var(--brand-yellow-dark);
+  /* The "you are here" sidebar pill. The active bar is navy in light (a yellow
+     bar on cream is ~1.2:1 and invisible) and brand-yellow in dark (where it
+     pops on the lighter-navy pill). Orange is left to mean "changed". */
+  --nav-active-bg: #ffffff;
+  --nav-active-bar: var(--ink);
+}
+:root[data-theme="dark"] .admin-app,
+:root[data-theme="dark"] .login {
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px -14px rgba(0, 0, 0, 0.65);
+  --shadow-card-hover: 0 2px 8px rgba(0, 0, 0, 0.5), 0 18px 38px -14px rgba(0, 0, 0, 0.75);
+}
+:root[data-theme="dark"] .admin-app {
+  --nav-active-bg: #1c2a44;
+  --nav-active-bar: var(--brand-yellow);
+}
+
+/* The brand plate: the yellow seat the real logo sits on in the sidebar and the
+   mobile top bar. Yellow in both themes (never redeclared under dark), so the
+   dark-ink artwork stays legible on the dark sidebar. The logo IS the wordmark
+   and carries the tagline, so no company name is printed beside it. */
+.brand-plate {
+  display: inline-flex;
+  align-items: center;
+  background: var(--brand-yellow);
+  border-radius: var(--r3);
+  padding: 9px 13px;
+}
+.admin-side .brand-logo {
+  height: 30px;
+  width: auto;
+}
+.admin-top .brand-plate {
+  padding: 7px 10px;
+}
+.admin-top .brand-logo {
+  height: 24px;
+  width: auto;
+}
+
+/* ---------- shell: sidebar (>= 1024) / top bar (below) ---------- */
+.admin-app {
+  min-height: 100dvh;
+}
+.admin-main {
+  min-width: 0;
+  /* Room under the last block for the fixed publish bar: on phones it stacks its
+     state and buttons (~146px tall, 16px off the bottom), so 150px left the end of
+     the page — the review card's buttons — under it even at maximum scroll. */
+  padding: 16px 16px 200px;
+}
+.admin-side {
+  display: none;
+}
+.admin-top {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  --gap: var(--surface);
+}
+.admin-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 0 16px;
+}
+.admin-top .brand-link {
+  min-height: 0;
+  gap: 10px;
+}
+.admin-top-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.admin-top .btn {
+  white-space: nowrap;
+  flex: none;
+}
+.admin-top-user .admin-email {
+  max-width: 44vw;
+}
+@media (min-width: 720px) {
+  .admin-main {
+    padding: 24px 24px 150px;
+  }
+  .admin-top-row {
+    padding: 0 24px;
+  }
+}
+@media (min-width: 1024px) {
+  .admin-app {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  }
+  .admin-main {
+    padding: 32px 40px 150px;
+    max-width: 1320px;
+  }
+  .admin-top {
+    display: none;
+  }
+  .admin-side {
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    overflow-y: auto;
+    background: var(--paper-2);
+    border-right: 1px solid var(--line);
+    padding: 20px 16px;
+    --gap: var(--paper-2);
+  }
+}
+.admin-side .brand-link {
+  min-height: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 4px 10px;
+}
+/* The "Admin" eyebrow sits under the plate, quiet and in the muted ink rather
+   than the orange the section kickers use. */
+.admin-side .brand-link .eyebrow,
+.admin-top .brand-link .eyebrow {
+  color: var(--muted);
+}
+.admin-email {
+  font-size: 0.83rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-user {
+  margin-top: auto;
+  padding: 16px 8px 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.admin-user .tag {
+  margin-left: 0;
+  align-self: flex-start;
+  /* A role label, not a status: a quiet neutral chip rather than the green
+     success skin .tag carries by default. */
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.admin-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ---------- admin nav: .anav-side (sidebar list) / .anav-top (scrollable row) ---------- */
+.anav {
+  display: flex;
+}
+.anav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+.anav .count {
+  margin-left: auto;
+}
+.anav-side {
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 28px;
+}
+.anav-side > a {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--r2);
+}
+/* Three clearly distinct states on the cream sidebar. Hover: a white lift, no
+   bar. Active ("you are here"): a white (light) or lighter-navy (dark) pill, a
+   navy/brand-yellow left bar and a soft card shadow — calm and high-contrast,
+   and deliberately NOT orange, which means "changed" everywhere else. */
+.anav-side > a:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+.anav-side > a[aria-current="page"] {
+  color: var(--ink);
+  background: var(--nav-active-bg);
+  font-weight: 700;
+  box-shadow:
+    inset 3px 0 0 var(--nav-active-bar),
+    var(--shadow-card);
+}
+.anav-sub {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 0 0 0 14px;
+  display: flex;
+  flex-direction: column;
+}
+.anav-sub a {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 0.83rem;
+  letter-spacing: var(--ls-mono);
+  color: var(--muted);
+  border-left: 1px solid var(--line);
+}
+.anav-sub a:hover {
+  color: var(--ink);
+  border-left-color: var(--ink);
+}
+.anav-n {
+  color: var(--orange-ink);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.anav-top {
+  flex-direction: row;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0 8px;
+  border-top: 1px solid var(--line);
+}
+.anav-top::-webkit-scrollbar {
+  display: none;
+}
+.anav-top > a {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 14px 10px;
+}
+.anav-top .count {
+  margin-left: 6px;
+}
+.anav-top > a:hover {
+  color: var(--ink);
+}
+.anav-top > a[aria-current="page"] {
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--hot-a);
+}
+@media (min-width: 720px) {
+  .anav-top {
+    padding: 0 16px;
+  }
+}
+
+/* ---------- page header ---------- */
+.admin h1,
+.admin-app h1 {
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-h2);
+  letter-spacing: var(--ls-h2);
+}
+.admin-app h1.mono-h1 {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.topbar h1 {
+  margin-top: 8px;
+}
+.topbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  margin-left: auto;
+}
+.topbar-right .meta {
+  font-size: 0.83rem;
+}
+/* The price hold lives in the page header: a small button beside the pills; the notice or the dialog takes a full row. */
+.hold-bar {
+  display: flex;
+  justify-content: flex-end;
+}
+.topbar .hold-bar.on,
+.topbar .hold-bar.open {
+  flex: 1 1 100%;
+  justify-content: stretch;
+}
+.admin-app .hold-bar .notice {
+  flex: 1 1 100%;
+  margin: 8px 0 0;
+}
+
+/* Status pills: mono, 26px, one dot. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.83rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  background: var(--paper-2);
+  color: var(--muted);
+}
+.pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.pill.live {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.pill.hold,
+.pill.sample {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.pill.draft {
+  background: var(--blue-soft);
+  color: var(--orange-ink);
+}
+/* Shipment status pills share the timeline's colour per status. */
+.pill.s-delivered {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.pill.s-exception {
+  background: var(--blue-soft);
+  color: var(--orange-ink);
+}
+.pill.s-customs,
+.pill.s-in_transit,
+.pill.s-out_for_delivery {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.pill.s-booked,
+.pill.s-picked_up {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+
+/* ---------- the plain-language live/draft banner ----------
+   Colour language locked: green = live / what customers see, orange = your
+   unpublished draft. The left bar carries the state (green when clean, orange
+   when there is unpublished work) and the card lift makes it read as a panel. */
+.status-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0 0 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--surface);
+  box-shadow:
+    inset 3px 0 0 var(--ok),
+    var(--shadow-card);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.status-banner.has-draft {
+  box-shadow:
+    inset 3px 0 0 var(--hot-a),
+    var(--shadow-card);
+}
+.status-banner .sb-live strong {
+  color: var(--ok);
+}
+.status-banner .sb-draft strong:first-child {
+  color: var(--orange-ink);
+}
+.status-banner .sb-ok {
+  color: var(--muted);
+}
+
+/* ---------- dashboard strip ---------- */
+.dash {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (min-width: 900px) {
+  .dash {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  padding: 20px;
+  /* The tone bar on the left, and the soft card lift behind it. */
+  box-shadow:
+    inset 3px 0 0 var(--tone, transparent),
+    var(--shadow-card);
+  color: inherit;
+  text-decoration: none;
+}
+.tile.tone-ok {
+  --tone: var(--ok);
+}
+.tile.tone-warn {
+  --tone: var(--warn);
+}
+.tile.tone-hot {
+  --tone: var(--hot-a);
+}
+a.tile:hover {
+  border-color: var(--edge);
+  box-shadow:
+    inset 3px 0 0 var(--tone, transparent),
+    var(--shadow-card-hover);
+}
+.tile .val {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-size: 2.5rem;
+  line-height: 1;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.tile .note {
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+  line-height: 1.35;
+  letter-spacing: var(--ls-mono);
+  color: var(--muted);
+}
+@media (max-width: 719px) {
+  .tile {
+    padding: 16px;
+  }
+  .tile .val {
+    font-size: 2rem;
+  }
+}
+
+/* ---------- price hold ---------- */
+.notice.hold .hold-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.notice.hold .hold-row > div {
+  flex: 1 1 320px;
+}
+.notice.hold .hold-row .meta {
+  margin-top: 4px;
+  display: block;
+}
+.notice.hold .field {
+  margin: 12px 0;
+}
+.notice.hold .desc {
+  margin: 4px 0 0;
+}
+
+/* ---------- section tabs (sticky on small screens; the sidebar sub-list replaces the editor's from 1024) ---------- */
+.subnav {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-subnav);
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 16px -16px 0;
+  padding: 0 16px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.subnav::-webkit-scrollbar {
+  display: none;
+}
+.subnav a {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 12px 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.83rem;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-tab);
+  white-space: nowrap;
+}
+.subnav a .n {
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.subnav a:hover,
+.subnav a[aria-current="page"] {
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--hot-a);
+}
+.subnav a[aria-current="page"] .n {
+  color: var(--orange-ink);
+}
+@media (min-width: 720px) {
+  .subnav {
+    margin-inline: -24px;
+    padding-inline: 24px;
+  }
+}
+@media (min-width: 1024px) {
+  .subnav {
+    position: static;
+    margin-inline: 0;
+    padding-inline: 0;
+    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .subnav.sections {
+    display: none;
+  }
+}
+
+/* ---------- sections ---------- */
+section.block {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  padding: 24px;
+  margin-top: 32px;
+  scroll-margin-top: 64px;
+  box-shadow: var(--shadow-card);
+}
+@media (min-width: 1024px) {
+  section.block {
+    scroll-margin-top: 24px;
+  }
+}
+@media (max-width: 719px) {
+  section.block {
+    padding: 16px;
+    margin-top: 24px;
+  }
+}
+section.block > .eyebrow {
+  margin-bottom: 8px;
+}
+section.block h2 {
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0;
+  margin: 0 0 6px;
+}
+section.block .desc {
+  color: var(--muted);
+  font-size: 0.95rem;
+  margin: 0 0 20px;
+  max-width: 70ch;
+}
+/* Group heading inside a long form: a mono index line over a hairline (Big Shoulders is never set this small). */
+.fh {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--fs-eyebrow);
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+  color: var(--ink);
+  margin: 28px 0 14px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.admin-app .notice {
+  margin: 16px 0 0;
+}
+.admin-app .notice + .notice {
+  margin-top: 10px;
+}
+.admin-app .notice strong {
+  display: block;
+  margin-bottom: 2px;
+}
+.admin-app .notice li .btn {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.admin-app .notice li + li {
+  margin-top: 6px;
+}
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+.admin-app .empty {
+  margin-top: 16px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: var(--ls-mono);
+}
+
+/* ---------- one form per country ----------
+   The rates table is not one form any more: it could not be, because the
+   whole document in one request body walked past PHP's max_input_vars (1009
+   variables against a limit of 1000) and the editor stopped saving. A <form>
+   may not be a child of <tbody>, so each country's form is printed above the
+   table and its inputs are tied to it with the `form` attribute. The forms
+   themselves hold nothing but hidden fields and must take up no room at all;
+   `display: contents` leaves them with no box rather than a stack of empty
+   blocks between the heading and the toolbar. */
+.rowform,
+#tableform {
+  display: contents;
+}
+/* How the table saves, said once, where the Save buttons are. admin.js
+   rewrites this line when it takes the saving over. */
+.save-note {
+  margin: 0 0 10px;
+}
+/* Whose work is on the screen. One draft row, several admins. */
+.draft-who {
+  display: block;
+  margin: 12px 0 0;
+}
+/* Filled by the server after a refused submit and by admin.js after a refused
+   autosave - one box, so both paths say the same thing in the same place. */
+.conflict-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+.conflict-box[hidden] {
+  display: none;
+}
+/* The save for the twenty-five numbers just keyed, at the foot of the fold
+   rather than up in the table where the owner would have to go looking. */
+.fold-save {
+  margin-top: 18px;
+}
+
+/* ---------- toolbar + tables ---------- */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 12px;
+}
+.toolbar input[type="text"] {
+  max-width: 280px;
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 0.95rem;
+}
+.tablewrap {
+  overflow-x: auto;
+  /* A query container: the per-kilogram editor (grid editor, below) sizes itself to this box,
+     the width the owner can see, not to the table, which is wider from about 1400px down. */
+  container-type: inline-size;
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  background: var(--surface);
+  margin-top: 16px;
+  box-shadow: var(--shadow-card);
+}
+.toolbar + .tablewrap {
+  margin-top: 0;
+}
+.admin-app table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-size: 0.95rem;
+}
+.admin-app table.rates {
+  min-width: 940px;
+}
+.admin-app table.rates-grid {
+  min-width: 760px;
+}
+.admin-app thead tr {
+  background: var(--surface);
+}
+.admin-app th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.83rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+  color: var(--muted);
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  background: inherit;
+}
+.admin-app th.grp {
+  color: var(--ink);
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.admin-app th.grp.express {
+  color: var(--orange-ink);
+}
+.admin-app th.grp.normal {
+  color: var(--ok);
+}
+.admin-app tbody tr {
+  background: var(--surface);
+}
+.admin-app tbody tr:nth-child(even) {
+  background: var(--paper-2);
+}
+.admin-app td {
+  padding: 4px 8px;
+  height: 44px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  background: inherit;
+}
+.admin-app tbody tr:last-child td {
+  border-bottom: 0;
+}
+/* The first column stays put while the kilogram columns scroll. */
+.admin-app th:first-child,
+.admin-app td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: var(--z-sticky);
+  background: inherit;
+  border-right: 1px solid var(--line);
+}
+/* This table shares the class `rates` with the public board, whose site.css rules reach it:
+   from 720px up they set the first HEADER cell `position: static` at higher specificity than
+   the rule above, so "Destination" slid away with the scroll while the names under it stayed
+   pinned (it read "ION" at 1366px once the table was scrolled to the actions). Same range as
+   that rule: below 720px the board's phone rules hide the cell by other means, left as is. */
+@media (min-width: 720px) {
+  .admin-app table.rates thead th:first-child {
+    position: sticky;
+  }
+}
+.admin-app tr.grid-row > td {
+  --grid-gutter: 10px;
+  position: static;
+  background: var(--bg);
+  padding: 12px var(--grid-gutter) 14px;
+  height: auto;
+  border-right: 0;
+}
+/* ...and the actions column stays put on the right, so Undo and Remove never leave the screen. */
+.admin-app table.rates th:last-child,
+.admin-app table.rates td.row-actions {
+  position: sticky;
+  right: 0;
+  z-index: var(--z-sticky);
+  background: inherit;
+  border-left: 1px solid var(--line);
+}
+/* While a side still hides columns (data-overflow, set by RatesTable), the column pinned on that
+   side casts a shadow over them: the table visibly continues underneath. The overlay scrollbar
+   of Windows 11 and macOS is not drawn until the pointer reaches it, so it cannot be the cue. */
+.tablewrap[data-overflow~="right"] table.rates th:last-child,
+.tablewrap[data-overflow~="right"] table.rates td.row-actions {
+  box-shadow: -12px 0 12px -10px var(--scroll-shade);
+}
+.tablewrap[data-overflow~="left"] th:first-child,
+.tablewrap[data-overflow~="left"] tr:not(.grid-row) > td:first-child {
+  box-shadow: 12px 0 12px -10px var(--scroll-shade);
+}
+.admin-app tr.changed td:first-child {
+  box-shadow: inset 3px 0 0 var(--hot-a);
+}
+.tablewrap[data-overflow~="left"] tr.changed > td:first-child {
+  box-shadow:
+    inset 3px 0 0 var(--hot-a),
+    12px 0 12px -10px var(--scroll-shade);
+}
+/* Dim the contents, not the cells: a pinned cell at half opacity would let the columns
+   scrolling underneath show through it. */
+.admin-app tr.inactive td > * {
+  opacity: 0.5;
+}
+.admin-app td.ctr {
+  text-align: center;
+}
+.admin-app td.row-actions,
+.admin-app td.grid-cell {
+  white-space: nowrap;
+}
+/* In grid mode Undo sits above Remove (the rows are tall enough): side by side they widened
+   the pinned column by 64px, over the Prices control. */
+.admin-app table.rates-grid td.row-actions > .btn {
+  display: flex;
+  width: fit-content;
+  margin-inline: auto;
+}
+.admin-app table.rates-grid td.row-actions > .btn + .btn {
+  margin-top: 6px;
+}
+/* site.css right-aligns every `.rates` cell for the public rates board, which pushed the
+   Prices control to the far end of the widest column. It and its heading start at the left
+   edge, so they are on screen before the table is scrolled. */
+.admin-app th.grid-cell,
+.admin-app td.grid-cell {
+  text-align: left;
+}
+.admin-app td .hint,
+.admin-app td.meta {
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+  letter-spacing: var(--ls-mono);
+  color: var(--muted);
+}
+.admin-app td .hint {
+  margin-top: 4px;
+}
+.admin-app td a {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+.admin-app td a:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--hot-a);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.admin-app .qid {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.admin-app td .qid {
+  font-size: 1rem;
+}
+.admin-app td .pill {
+  vertical-align: middle;
+}
+/* Quiet inputs: a cell looks like text until it is hovered or focused. */
+.admin-app td > input[type="number"],
+.admin-app td > input[type="text"] {
+  min-height: 38px;
+  padding: 0 8px;
+  border-radius: var(--r1);
+  border-color: transparent;
+  background: transparent;
+  font-size: 0.95rem;
+}
+.admin-app td > input:hover {
+  border-color: var(--line);
+}
+.admin-app td > input:focus {
+  background: var(--surface);
+  border-color: var(--ink);
+}
+.admin-app td > input.num {
+  width: 92px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-mono);
+}
+.admin-app td > input.days {
+  width: 76px;
+  font-family: var(--font-mono);
+  letter-spacing: var(--ls-mono);
+}
+.admin-app td > input.name {
+  min-width: 180px;
+  font-weight: 600;
+}
+.admin-app td > input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+.admin-app table.preview {
+  font-size: 0.85rem;
+}
+.admin-app table.preview td,
+.admin-app table.preview th {
+  padding: 6px 10px;
+  height: auto;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  letter-spacing: var(--ls-mono);
+}
+.admin-app table.preview tr.hdr {
+  background: var(--paper-2);
+}
+.admin-app table.preview tr.hdr td {
+  font-weight: 600;
+  color: var(--ink);
+}
+.table-note {
+  margin-top: 12px;
+  max-width: 90ch;
+}
+
+/* ---------- per-kilogram grid editor ---------- */
+/* The editor's row spans every column, so its cell is as wide as the table: 1,086px at 1366
+   where the wrapper shows 1,002px, and the boxes laid out 11 to a row with the 11th (11 kg,
+   22 kg) cut off at the visible edge until the table was dragged sideways. The editor keeps
+   to the wrapper's width instead (.tablewrap is the query container; the gutter is the cell's
+   own padding) and sticks to the wrapper's left edge, so the boxes wrap to what the owner can
+   see and stay put while the country rows scroll. */
+.grid-editor {
+  position: sticky;
+  left: var(--grid-gutter, 10px);
+  width: calc(100cqw - 2 * var(--grid-gutter, 10px));
+}
+.grid-service + .grid-service {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--dash);
+}
+.grid-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.grid-head .tag {
+  margin-left: 0;
+  /* 14px floor. Everything in the ladder is something the owner READS while
+     keying five-figure numbers; none of it is chrome. */
+  font-size: 0.875rem;
+  padding: 5px 10px;
+}
+.grid-head .tag.express {
+  background: var(--blue-soft);
+  color: var(--orange-ink);
+}
+.grid-head .tag.normal {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.grid-head .hint {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  letter-spacing: var(--ls-mono);
+}
+.grid-summary {
+  font-size: 0.875rem;
+}
+.grid-summary > span {
+  display: block;
+}
+
+/* ---------- the ladder's tools: fill from a base price, copy to another country ---------- */
+
+/* Two tools side by side while there is room, stacked when there is not. Each
+   one is a labelled strip rather than a row of naked boxes: the old form put
+   "1 kg price" inside a 110px placeholder, where Chrome clipped it to
+   "1 kg pri" and the label vanished the moment anything was typed. */
+.ladder-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.ladder-tools .tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  flex: 1 1 320px;
+  padding: 10px;
+  border: 1px dashed var(--dash);
+  border-radius: var(--r2);
+  /* The fold's cell inherits the table's right alignment, which turned every
+     label in here into a right-hand caption over a left-hand box. */
+  text-align: left;
+}
+.ladder-tools .tool-name {
+  flex: 0 0 100%;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.ladder-tools .tool-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ladder-tools .tool-field > span {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.admin-app .ladder-tools .tool-field input.num {
+  width: 140px;
+  min-height: 48px;
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  text-align: right;
+}
+.admin-app .ladder-tools .tool-field select {
+  min-height: 48px;
+  max-width: 240px;
+}
+.admin-app .ladder-tools .btn {
+  min-height: 48px;
+}
+/* The arithmetic, printed BEFORE the button is pressed. */
+.ladder-tools .tool-preview {
+  flex: 0 0 100%;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  letter-spacing: var(--ls-mono);
+  color: var(--muted);
+}
+.ladder-tools .tool-preview:empty {
+  display: none;
+}
+
+/* The running check: what the customer pays for the box under the cursor. */
+.ladder-running {
+  min-height: 1.5em;
+  margin: 0 0 8px;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  text-align: left;
+  color: var(--ink-2);
+}
+.ladder-running strong {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.ladder-running .work {
+  color: var(--muted);
+}
+
+/* What the ladder needs said, in place. Never a dialog: the owner is keying
+   twenty-five numbers and a modal loses his place. */
+.ladder-note {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: var(--r2);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  text-align: left;
+}
+.ladder-note.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.ladder-note.info {
+  padding-left: 0;
+  color: var(--muted);
+}
+.ladder-note[hidden] {
+  display: none;
+}
+
+/* ---------- the price boxes ---------- */
+
+.grid-boxes {
+  display: grid;
+  /* 96px holds a six-figure price at 16px mono without clipping; auto-fill
+     means ten across at 1366 and four on a 375px phone, with no row of boxes
+     ever running off the right edge. */
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+.grid-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.grid-box > .kg {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.875rem;
+  letter-spacing: var(--ls-mono);
+  color: var(--muted);
+}
+.admin-app .grid-box input {
+  /* 48px: the phone target, and a comfortable one under a pointer too. */
+  min-height: 48px;
+  padding: 0 10px;
+  border-radius: var(--r1);
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-mono);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.admin-app .grid-box input:focus {
+  border-color: var(--ink);
+  outline: 2px solid var(--hot-a);
+  outline-offset: 1px;
+}
+/* A box that differs from what the website is serving right now. A bar on the
+   left, the same language the changed ROWS already speak. */
+.grid-box.is-edited > .kg::after {
+  content: " \2022";
+  color: var(--hot-a);
+}
+.admin-app .grid-box.is-edited input {
+  border-left: 3px solid var(--hot-a);
+}
+/* THE LADDER RUNS BACKWARDS HERE: this rung costs less than the one under it,
+   so a heavier parcel is cheaper. That is money leaking, and it is orange. */
+.admin-app .grid-box.is-low input {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+/* A BLANK RUNG between two priced ones is not a fault - the next heavier price
+   is charged there, which is a normal way to fill a ladder in. It is drawn
+   quietly: a dashed edge, the colour of any other hint. Twenty orange boxes on
+   an ordinary sparse ladder would teach the owner to ignore orange. */
+.admin-app .grid-box.is-gap input {
+  border-style: dashed;
+  border-color: var(--dash);
+}
+/* Colour is never the only carrier: the kilogram label gains a mark too, and
+   the note under the ladder names the weight in words. */
+.grid-box.is-low > .kg::before {
+  content: "\2193 ";
+  font-weight: 700;
+  color: var(--warn);
+}
+.grid-box.is-gap > .kg::before {
+  content: "\2191 ";
+  font-weight: 700;
+  color: var(--muted);
+}
+/* Numeric cells are read as figures, not steppers: no spin buttons stealing the right edge of a five-digit price. */
+.admin-app .grid-box input,
+.admin-app td > input.num,
+.admin-app .ladder-tools input.num {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.admin-app .grid-box input::-webkit-inner-spin-button,
+.admin-app .grid-box input::-webkit-outer-spin-button,
+.admin-app td > input.num::-webkit-inner-spin-button,
+.admin-app td > input.num::-webkit-outer-spin-button,
+.admin-app .ladder-tools input.num::-webkit-inner-spin-button,
+.admin-app .ladder-tools input.num::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ---------- one weight, every country ---------- */
+
+/* Not a modal. A rate change arrives as "10 kg is going up", and the owner
+   wants to look down that one rung with the rest of the page still where he
+   left it. */
+.colview {
+  margin: 16px 0 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.colview[hidden] {
+  display: none;
+}
+.colview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+.admin-app .colview-head select,
+.admin-app .colview-head .btn {
+  min-height: 48px;
+}
+.colview-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 8px;
+}
+.colview-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--r1);
+  text-align: left;
+}
+.colview-row > .who {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.9375rem;
+  line-height: 1.3;
+  /* The name WRAPS rather than truncating. A comparison of twelve countries
+     that shows "United Kin..." beside "United Stat..." is a comparison the
+     owner has to decode before he can read it. */
+  overflow-wrap: anywhere;
+}
+.admin-app .colview-row input {
+  flex: 0 0 110px;
+  min-height: 48px;
+  padding: 0 10px;
+  border-radius: var(--r1);
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.admin-app .colview-row.is-low input,
+.admin-app .colview-row.is-gap input {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.admin-app .colview-row.is-edited input {
+  border-left: 3px solid var(--hot-a);
+}
+.colview-empty {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--muted);
+}
+
+/* The publish bar owns the bottom of the rates editor, and the toast used to
+   land INSIDE it - "8 prices copied to Italy" printed across "Draft saved
+   23:58". The toast is lifted clear wherever a publish bar is on the page;
+   a browser without :has() gets exactly what it got before. */
+body:has(.pubbar) .toast {
+  bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+}
+@media (max-width: 720px) {
+  body:has(.pubbar) .toast {
+    bottom: calc(148px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* The keyboard line under the table. */
+.keys-note[hidden] {
+  display: none;
+}
+.admin-app .keys-note {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+.admin-app .keys-note kbd {
+  display: inline-block;
+  min-width: 1.8em;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: var(--r1);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  text-align: center;
+  color: var(--ink);
+}
+
+/* ---------- buttons: a real, visible edge ----------
+   The default .btn borders --line (~1.3:1 on white), so toolbar buttons read as
+   washed-out text, not pressable controls. Give every admin button the --edge
+   border the customer site already uses (3.2:1), then re-assert the variants
+   that carry their own colour — scoped one class deeper AND placed before the
+   publish-bar rules, so .pubbar's own outline treatment still wins there. */
+.admin-app .btn {
+  border-color: var(--edge);
+}
+.admin-app .btn.outline {
+  border-color: var(--ink);
+  background: transparent;
+}
+.admin-app .btn.primary {
+  border-color: var(--ink);
+}
+.admin-app .btn.book {
+  border-color: var(--book);
+}
+.admin-app .btn.book:hover {
+  border-color: var(--book-hover);
+}
+.admin-app .btn.wa,
+.admin-app .btn.chat {
+  border-color: var(--wa);
+}
+.admin-app .btn.paper {
+  border-color: var(--paper-ink);
+}
+
+/* ---------- forms ---------- */
+.admin-app input[type="number"],
+.admin-app input[type="text"],
+.admin-app input[type="tel"],
+.admin-app input[type="email"],
+.admin-app input[type="date"],
+.admin-app input[type="password"],
+.admin-app select {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 0.98rem;
+  border-color: var(--edge);
+}
+.admin-app textarea {
+  border-color: var(--edge);
+}
+.login input {
+  border-color: var(--edge);
+}
+/* A hover affordance on the per-kilogram boxes: each cell announces itself as
+   editable. The default border stays --line — 25 boxes x 3 services at --edge
+   would read heavy — and every semantic state (edited / low / gap / focus) is
+   untouched. */
+.admin-app .grid-box input:hover {
+  border-color: var(--edge);
+}
+/* FIELD LABELS IN NAVY, NOT ORANGE. Once cards and the yellow CTA arrive, an
+   orange mono-uppercase label on every input is a lot of warm noise. The
+   SECTION kickers ("01 — RATES") stay orange — they echo the logo and mark the
+   numbered sections — but the input labels take the ink, so orange keeps its
+   meaning ("changed / section"). Same mono, same uppercase, same 0.83rem floor;
+   only the colour moves. The .hint sub-labels stay muted. The sign-in page is
+   `.login`, not `.admin-app`, and was left on the orange labels — its EMAIL /
+   PASSWORD / CODE fields take the same navy ink so the front door matches the
+   rooms behind it. */
+.admin-app .field > span:not(.hint),
+.login .field > span:not(.hint) {
+  color: var(--ink);
+}
+.admin-app select {
+  padding-right: 36px;
+}
+.admin-app textarea {
+  min-height: 88px;
+  padding: 10px 12px;
+  font-size: 0.98rem;
+}
+.admin-app textarea.paste {
+  min-height: 120px;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  letter-spacing: var(--ls-mono);
+  white-space: pre;
+}
+.admin-app textarea.long {
+  min-height: 80px;
+}
+/* No `input[type="file"]` rules, and no `.file-field` / `.map-grid`: the admin
+   has no file upload. The Excel rate-sheet feature was removed from the
+   product (owner, 2026-09-27) and the templates assert it — AdminDesksTest and
+   RatesEditorTest both refuse any rendered `type="file"`. */
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px 24px;
+  margin-bottom: 16px;
+}
+@media (min-width: 640px) {
+  .grid2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.grid2 > .field {
+  margin-bottom: 0;
+}
+.chk {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0;
+  font-size: 0.95rem;
+}
+.chk input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: none;
+}
+/* THE BARE CHECKBOX WRAPPER MUST BE A BOX, or the phone block below cannot
+   grow it. `.chk-bare` carries no text, so a <label> stays `display: inline`,
+   and min-height/min-width on an inline element are inert - measured at 19px
+   on a phone with the 48px rule already written and doing nothing. Making it
+   inline-flex is what lets that rule bite; it stays 19px on desktop, where
+   density is deliberate. */
+.chk-bare {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: flex-end;
+}
+.inline .field {
+  margin: 0;
+  min-width: 140px;
+  flex: 1;
+}
+.inline > .btn {
+  min-height: 44px;
+}
+.admin-app .dims {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  gap: 4px;
+  align-items: center;
+}
+.admin-app .dims input {
+  min-width: 0;
+  padding: 0 8px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.admin-app .dims .x {
+  color: var(--orange-ink);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  text-align: center;
+}
+/* Folding details: a mono summary with a boxed +/– glyph. */
+.admin-app details.fold {
+  margin-top: 18px;
+}
+.admin-app details.fold > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.85rem;
+  letter-spacing: var(--ls-mono);
+  color: var(--ink);
+}
+.admin-app details.fold > summary::-webkit-details-marker {
+  display: none;
+}
+.admin-app details.fold > summary::before {
+  content: "+";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  font-size: 0.85rem;
+  color: var(--muted);
+  flex: none;
+}
+.admin-app details.fold[open] > summary::before {
+  content: "–";
+}
+.fold-hint {
+  margin: 4px 0 10px;
+}
+.test-result {
+  margin-top: 8px;
+}
+.test-out {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.test-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--paper-2);
+  box-shadow: var(--shadow-card);
+}
+.test-card.dim {
+  opacity: 0.6;
+}
+.test-card .display {
+  font-size: 1.75rem;
+  margin: 4px 0;
+}
+.test-card .hint {
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+  letter-spacing: var(--ls-mono);
+}
+
+/* ---------- history, diff, review card ---------- */
+.hist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.hist li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.hist li:last-child {
+  border-bottom: 0;
+}
+.hist li > strong {
+  font-weight: 600;
+}
+.hist .tag {
+  margin-left: 0;
+}
+.hist .ver {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: var(--ls-mono);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5ch;
+}
+.hist li.is-live .ver {
+  color: var(--ok);
+}
+/* No `.hist.sheets`: the emailed-rate-sheet list went with the Excel feature
+   (owner, 2026-09-27). The surviving lists are versions, leads, admins,
+   checks, activity and timeline. */
+.hist.versions li .btn {
+  margin-left: auto;
+}
+/* Five columns, not four: a version the owner may act on now carries TWO
+   buttons - "Restore into editor", which changes nothing a customer sees, and
+   "Roll back", which publishes it onto the website. A fifth item in a
+   four-column grid wrapped into an implicit row and left the second button
+   hanging under the date. */
+.hist.versions li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  gap: 6px 16px;
+  align-items: center;
+}
+/* The question the roll-back asks, above the list it was asked from. */
+.admin-app .card.rollback {
+  margin: 16px 0 20px;
+  box-shadow:
+    inset 3px 0 0 var(--warn),
+    var(--shadow-card);
+}
+.admin-app .card.rollback.blocked {
+  box-shadow:
+    inset 3px 0 0 var(--red),
+    var(--shadow-card);
+}
+.card.rollback h3 {
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 6px 0 4px;
+}
+.card.rollback .desc {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+@media (max-width: 719px) {
+  .hist.versions li {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  /* The summary is the second .meta (after the date). Not :last-of-type: on
+     the live row the last <span> is the LIVE .tag, so that matched nothing,
+     the summary fell into column 1 and stretched it past the viewport. */
+  .hist.versions li .meta + .meta,
+  .hist.versions li .btn,
+  .hist.versions li .tag {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+.diff {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: var(--ls-mono);
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+.diff li {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.diff li:nth-child(even) {
+  background: var(--paper-2);
+}
+.diff li:last-child {
+  border-bottom: 0;
+}
+.diff .old {
+  color: var(--muted);
+  text-decoration: line-through;
+  margin-right: 6px;
+}
+.diff .new {
+  color: var(--ink);
+  font-weight: 600;
+}
+.diff .flag {
+  color: var(--warn);
+  font-weight: 600;
+}
+.admin-app .card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+}
+.admin-app .card:hover {
+  border-color: var(--line);
+}
+/* The accent bar is layered OVER the card lift, so the review card keeps both. */
+.admin-app .card.review {
+  margin-top: 32px;
+  box-shadow:
+    inset 3px 0 0 var(--hot-a),
+    var(--shadow-card);
+}
+.card.review h2 {
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0;
+  margin: 6px 0 4px;
+}
+.card.review .desc {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.card.review .chk {
+  margin-top: 14px;
+}
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+.review-msg {
+  display: block;
+  margin-top: 10px;
+}
+
+/* ---------- publish pill ---------- */
+.pubbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(1180px, calc(100% - 32px));
+  background: var(--navy);
+  color: var(--paper-ink);
+  border: 1px solid var(--navy-line);
+  border-radius: var(--r4);
+  box-shadow: var(--shadow-instrument);
+  padding: 12px 16px;
+  z-index: var(--z-pubbar);
+}
+@media (min-width: 1024px) {
+  .pubbar {
+    left: calc(50% + var(--sidebar-w) / 2);
+    width: min(1180px, calc(100% - var(--sidebar-w) - 64px));
+  }
+}
+.pubbar .inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+.pub-state {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pubbar strong {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 600;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+.pubbar .meta {
+  color: var(--paper-70);
+  font-size: 0.83rem;
+}
+.pub-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.pubbar .btn {
+  white-space: nowrap;
+}
+.pubbar .btn.outline {
+  background: transparent;
+  border-color: var(--paper-70);
+  color: var(--paper-ink);
+}
+.pubbar .btn.outline:hover {
+  background: var(--navy-2);
+  border-color: var(--paper-ink);
+}
+/* On a phone the publish bar used to be ~180-200px tall — a bold count line, a
+   two-line "customers still see…" meta, then two full-width stacked buttons —
+   and it covered the last couple of table rows the whole time the owner
+   scrolled. Compacted to ~two rows: the count becomes a small pill, the meta
+   (restated in the status banner up top) is kept to one truncated line, and
+   "Review and publish" is the one full-width filled primary with "Discard all
+   changes" demoted to a quieter, narrower outline beside it. */
+@media (max-width: 479px) {
+  .pubbar {
+    padding: 10px 12px;
+  }
+  .pubbar .inner {
+    flex-direction: column;
+    /* nowrap, NOT the row's wrap: a wrapping column sizes its cross-axis to the
+       widest item's max-content, and the one-line `.meta` sentence (~550px,
+       nowrap + ellipsis) dragged that whole width out — stretching Discard and
+       Review past the right edge of the bar. A single non-wrapping column takes
+       the container's width, so the meta ellipsizes and the buttons stay full
+       width inside the bar. */
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .pub-state {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+  }
+  .pubbar strong {
+    flex: none;
+    font-size: 0.95rem;
+    padding: 2px 10px;
+    border-radius: var(--r-pill);
+    background: var(--navy-2);
+  }
+  .pubbar .meta {
+    flex: 1 1 60px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* The two labels ("Review and publish", "Discard all changes") are fixed by
+     the templates and are too long to share a 358px row, so they stack full
+     width — Review the filled yellow primary on top (what the owner wants and
+     the easiest thumb reach), Discard the quieter outline below, behind its
+     two-press confirm. Three compact rows, down from the old four. */
+  .pub-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pub-actions .btn {
+    flex: 1 1 100%;
+    padding: 0 14px;
+  }
+  .pub-actions [data-publish] {
+    order: 1;
+  }
+  .pub-actions [data-discard] {
+    order: 2;
+  }
+}
+
+/* ---------- inbox ---------- */
+.hist.leads {
+  margin-top: 16px;
+}
+.hist li.lead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px 24px;
+  align-items: start;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--surface);
+  margin-bottom: 10px;
+  box-shadow: var(--shadow-card);
+}
+.hist li.lead:hover {
+  border-color: var(--edge);
+  box-shadow: var(--shadow-card-hover);
+}
+.hist li.lead:last-child {
+  border-bottom: 1px solid var(--line);
+}
+/* The orange "new" bar, layered over the card lift. Scoped to `.hist li.lead.new`
+   so it outranks the plain `.hist li.lead` card shadow rather than replacing it. */
+.hist li.lead.new {
+  box-shadow:
+    inset 3px 0 0 var(--hot-a),
+    var(--shadow-card);
+}
+.hist li.lead.new:hover {
+  box-shadow:
+    inset 3px 0 0 var(--hot-a),
+    var(--shadow-card-hover);
+}
+.lead-body {
+  min-width: 0;
+}
+.lead-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+.lead-head .tag {
+  margin-left: 0;
+}
+.lead-head .tag.kind-message {
+  background: var(--paper-2);
+  color: var(--muted);
+}
+.lead-head .tag.kind-quote {
+  background: var(--blue-soft);
+  color: var(--orange-ink);
+}
+.lead-name {
+  font-weight: 600;
+  font-size: 1.02rem;
+}
+.lead-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+.lead-msg {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  max-width: 80ch;
+  font-size: 0.95rem;
+}
+.lead-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+.lead-actions .field {
+  margin: 0;
+}
+.lead-actions .field > span:first-child {
+  font-size: 0.83rem;
+}
+.admin-app .lead-actions select,
+.admin-app .lead-actions input[type="text"] {
+  min-height: 40px;
+}
+.lead-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lead-foot {
+  grid-column: 1 / -1;
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+  letter-spacing: var(--ls-mono);
+  color: var(--muted);
+}
+@media (min-width: 600px) {
+  .lead-actions {
+    grid-template-columns: 150px minmax(200px, 1fr);
+  }
+  .lead-btns {
+    grid-column: 1 / -1;
+  }
+}
+@media (min-width: 1100px) {
+  .hist li.lead {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .lead-actions {
+    grid-template-columns: 150px 260px;
+  }
+}
+
+/* ---------- shipments ---------- */
+.ship {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .ship {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  }
+}
+.ship .panel,
+.ship-new {
+  margin-bottom: 16px;
+}
+.ship-side .panel:last-child {
+  margin-bottom: 0;
+}
+.ship-meta {
+  margin: -6px 0 16px;
+}
+.ship-now {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -4px 0 16px;
+}
+.ship-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+.admin-app input.track {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.ship-new {
+  max-width: 760px;
+}
+.ship-new .btn.big {
+  margin-top: 4px;
+}
+/* Timeline: a vertical rail with one dot per event, coloured by status. */
+.hist.timeline {
+  margin-top: 4px;
+}
+.hist.timeline li {
+  position: relative;
+  padding: 4px 0 16px 28px;
+  border-bottom: 0;
+  gap: 4px 12px;
+  align-items: baseline;
+}
+.hist.timeline li::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--dot, var(--ink));
+  box-shadow: 0 0 0 3px var(--surface);
+}
+.hist.timeline li::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 24px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--line);
+}
+.hist.timeline li:last-child::after {
+  display: none;
+}
+.hist.timeline .tl-note {
+  flex-basis: 100%;
+  font-size: 0.95rem;
+}
+.hist.timeline .hint {
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+  letter-spacing: var(--ls-mono);
+}
+.s-delivered {
+  --dot: var(--ok);
+}
+.s-exception {
+  --dot: var(--hot-a);
+}
+.s-customs,
+.s-in_transit,
+.s-out_for_delivery {
+  --dot: var(--warn);
+}
+.s-booked,
+.s-picked_up {
+  --dot: var(--ink);
+}
+
+/* ---------- security ---------- */
+.sec-grid {
+  align-items: start;
+}
+.admin-app .panel {
+  margin-bottom: 16px;
+}
+.panel-note {
+  margin-top: 12px;
+}
+.totp-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: -4px 0 16px;
+}
+.totp .btn.primary {
+  margin-top: 4px;
+}
+.admin-app .card.qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 20px;
+  margin: 4px 0 16px;
+}
+.qr img {
+  display: block;
+  width: 200px;
+  height: 200px;
+  border-radius: var(--r3);
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.qr .hint {
+  max-width: 34ch;
+}
+.admin-app .qr details.fold {
+  margin: 0;
+}
+.qr .secret {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  word-break: break-all;
+  padding: 8px 0 0;
+}
+.code-field {
+  max-width: 220px;
+}
+.admin-app input.code,
+.login input.code {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  letter-spacing: 0.4em;
+  text-align: center;
+  max-width: 220px;
+  min-height: 52px;
+  font-variant-numeric: tabular-nums;
+}
+.hist.admins .admin-email {
+  color: var(--ink);
+  font-size: 0.9rem;
+  letter-spacing: var(--ls-mono);
+}
+.hist.admins .tag.role {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.check {
+  align-items: center;
+}
+.check-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--hot-a);
+  flex: none;
+}
+.check.ok .check-dot {
+  background: var(--ok);
+}
+.hist.activity {
+  font-size: 0.9rem;
+}
+.hist.activity li {
+  padding: 9px 0;
+}
+
+/* ---------- login ---------- */
+.login {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+}
+/* The sign-in brand panel is BRAND-YELLOW, mirroring the public header the
+   owner knows, and the real dark-ink logo sits on it directly (10.6:1) — no
+   inner plate needed. Constant in both themes (never redeclared under dark),
+   because the bar IS the brand. The tagline lives inside the artwork, so only
+   the "Admin" eyebrow is printed beside it. */
+.login-side {
+  position: relative;
+  overflow: clip;
+  background: var(--brand-yellow);
+  color: var(--brand-ink);
+  padding: 24px 16px;
+  min-height: 96px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  --gap: var(--brand-yellow);
+}
+.login-logo {
+  height: 34px;
+  width: auto;
+  flex: none;
+}
+.login-eyebrow {
+  color: var(--brand-ink);
+  flex-basis: 100%;
+}
+.login-main {
+  display: grid;
+  padding: 24px 16px;
+}
+.login-card {
+  width: min(400px, 100%);
+  margin: auto;
+  padding: 24px 0;
+}
+.login-card h1 {
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-h2);
+  letter-spacing: var(--ls-h2);
+  margin-top: 8px;
+}
+.login-card .lede {
+  font-size: 1rem;
+  margin: 10px 0 24px;
+}
+.login .panel.login-panel {
+  box-shadow: var(--shadow-instrument);
+  padding: 24px;
+}
+.login .btn.big {
+  width: 100%;
+  min-height: 48px;
+}
+.login-or {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+  letter-spacing: var(--ls-eyebrow);
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 16px 0;
+}
+.login-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.login .notice {
+  margin: 16px 0 0;
+}
+.login-back {
+  margin-top: 24px;
+  font-size: 0.9rem;
+}
+.login-back .link {
+  color: var(--ink);
+  font-weight: 600;
+}
+@media (min-width: 900px) {
+  .login {
+    grid-template-columns: 5fr 7fr;
+    grid-template-rows: none;
+  }
+  .login-side {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding: 40px;
+    gap: 16px;
+    min-height: 100dvh;
+  }
+  /* The logo sits at the top of the panel; the "Admin" eyebrow rests at the
+     bottom, so the yellow reads as a full brand field rather than a strip. */
+  .login-logo {
+    height: 44px;
+    margin-bottom: auto;
+  }
+  .login-eyebrow {
+    flex-basis: auto;
+  }
+  .login-main {
+    padding: 40px;
+  }
+}
+
+/* ---------- phones: 48px touch targets ---------- *
+ * docs/quality-bar.md asks for 48px on every control a finger reaches, and the
+ * admin IS used on a phone (the whole .admin-top row exists for that). But
+ * tokens.css raises --tap to 48px only inside .site and keeps 44px at :root on
+ * purpose, because the rates table is a dense desktop grid and 25 per-kilogram
+ * boxes at 48px each would push the fold off a laptop screen. tokens.css is the
+ * shell's file, so the admin buys the wider targets here instead — at narrow
+ * widths ONLY, leaving the desktop density exactly as designed.
+ *
+ * This block is last in the file on purpose: every height it raises is set
+ * earlier at equal specificity, and the later rule is the one that wins.
+ *
+ * Checkboxes get a different treatment, because a min-height on a checkbox
+ * stretches the BOX, not the hit area:
+ *   - where one sits inside <label class="chk"> (bulk adjust, the settings
+ *     switches), the LABEL is what takes the tap, so the label is raised to
+ *     48px and the 18×18 box is left alone. Measured: those labels were 25px.
+ *   - the one bare checkbox — the rates table's per-row "show on website"
+ *     toggle in <td class="ctr">, which has an aria-label and deliberately no
+ *     visible label — now sits inside <label class="chk-bare">, added to
+ *     admin/partials/rates-table.php for exactly this reason. The LABEL takes
+ *     the tap and reaches 48px; the box itself stays small (26px here) rather
+ *     than being stretched into a rectangle. It was 26px and unreachable-sized
+ *     before the wrapper existed.
+ * `input.code` is left out too — it is 52px already, and matching it here
+ * would shrink it.
+ */
+@media (max-width: 719px) {
+  .admin-app .btn,
+  .admin-app .btn.small,
+  .admin-app .inline > .btn,
+  .admin-app .anav-top > a,
+  /* The sign-in page is not inside .admin-app; its inputs already inherit the
+     48px base from tokens.css, but `.btn.small` ("Start again") is 36px. */
+  .login .btn,
+  .login .btn.small,
+  .admin-app .toolbar input[type="text"],
+  .admin-app input[type="number"],
+  .admin-app input[type="text"]:not(.code),
+  .admin-app input[type="tel"],
+  .admin-app input[type="email"],
+  .admin-app input[type="date"],
+  .admin-app input[type="password"],
+  .admin-app input[type="search"],
+  .admin-app select,
+  .admin-app .lead-actions select,
+  .admin-app .lead-actions input[type="text"],
+  .admin-app .grid-box input,
+  .admin-app .grid-head input.num,
+  .admin-app td > input[type="number"],
+  .admin-app td > input[type="text"] {
+    min-height: 48px;
+  }
+  /* The label is the target, not the 18×18 box inside it. */
+  .admin-app .chk,
+  .admin-app label.chk-bare {
+    min-height: 48px;
+  }
+  .admin-app label.chk-bare {
+    min-width: 48px;
+  }
+  .admin-app td.ctr input[type="checkbox"] {
+    width: 26px;
+    height: 26px;
+  }
+
+  /* NOTHING IS PINNED ON A PHONE, BECAUSE THERE IS NOWHERE TO PIN IT.
+     Measured at 375px: the rates table is 812px inside a 307px .tablewrap.
+     With the name column pinned left and the actions column pinned right,
+     those two cover the whole visible strip — document.elementFromPoint over
+     the middle of "Prices ▾" returned the destination-name input at EVERY
+     scroll position, so the one control that opens the price editor could not
+     be tapped at all. Pinning is a convenience on a laptop and a wall on a
+     phone. Below 720px the table scrolls as one piece and every cell can be
+     reached. */
+  .admin-app table.rates th:first-child,
+  .admin-app table.rates td:first-child,
+  .admin-app table.rates th:last-child,
+  .admin-app table.rates td.row-actions {
+    position: static;
+  }
+  /* The edge shadows said "the table continues underneath this pinned
+     column". Nothing is pinned here, so they would be lying. */
+  .tablewrap[data-overflow~="right"] table.rates th:last-child,
+  .tablewrap[data-overflow~="right"] table.rates td.row-actions,
+  .tablewrap[data-overflow~="left"] table.rates th:first-child,
+  .tablewrap[data-overflow~="left"] table.rates tr:not(.grid-row) > td:first-child {
+    box-shadow: none;
+  }
+  /* The one edge mark that must survive: the orange bar that says this row is
+     edited. It is information, not a scroll hint. */
+  .admin-app table.rates tr.changed td:first-child,
+  .tablewrap[data-overflow~="left"] table.rates tr.changed > td:first-child {
+    box-shadow: inset 3px 0 0 var(--hot-a);
+  }
+}
+
+/* ---------- the rates grid as stacked cards on a phone ----------
+   At phone width the per-country row kept its desktop columns inside a sideways
+   scroller, so reaching a price was a horizontal-scroll hunt on the one device
+   the owner actually checks things on. Below 720px each country is a single
+   card instead: the name and the on-site toggle on top, working days and the
+   per-service price summary next, then a full-width button that opens the SAME
+   price fold, with Save / Undo / Remove beneath it. Nothing about the markup
+   moves — same inputs, same `form="row-<id>"`, same fold id — so admin.js
+   autosave, the filter and every test see exactly what they saw; only the CSS
+   layout changes, and only for the grid table (the slab table keeps its scroll). */
+@media (max-width: 719px) {
+  /* The wrapper stops being a card here; the row-cards are the cards, so the
+     outer frame would be a box drawn around a stack of boxes. */
+  .admin-app .tablewrap:has(table.rates-grid) {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+  }
+  .admin-app table.rates-grid,
+  .admin-app table.rates-grid > tbody {
+    display: block;
+    min-width: 0;
+  }
+  /* The column headings mean nothing above stacked cards; each field keeps its
+     aria-label and the summary names each service. */
+  .admin-app table.rates-grid > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .admin-app table.rates-grid > tbody > tr[data-row] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 12px;
+    padding: 14px;
+    margin-bottom: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r3);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+  .admin-app table.rates-grid > tbody > tr[data-row].changed {
+    box-shadow:
+      inset 3px 0 0 var(--hot-a),
+      var(--shadow-card);
+  }
+  /* The card carries the "edited" bar now, so the name cell must not draw a
+     second one. */
+  .admin-app table.rates-grid tr.changed > td:first-child {
+    box-shadow: none;
+  }
+  .admin-app table.rates-grid > tbody > tr[data-row] > td {
+    display: block;
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  /* line 1: the country name (grows into the card title) and the on-site toggle. */
+  .admin-app table.rates-grid > tbody > tr[data-row] > td:first-child {
+    order: 1;
+    flex: 1 1 60%;
+    min-width: 0;
+  }
+  .admin-app table.rates-grid td:first-child input.name {
+    width: 100%;
+    min-width: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    border-color: var(--edge);
+    background: var(--surface);
+  }
+  .admin-app table.rates-grid > tbody > tr[data-row] > td.ctr:not(.row-actions) {
+    order: 2;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+  }
+  .admin-app table.rates-grid > tbody > tr[data-row] > td.ctr:not(.row-actions)::before {
+    content: "On site";
+    font-family: var(--font-mono);
+    font-size: 0.83rem;
+    letter-spacing: var(--ls-mono);
+    color: var(--muted);
+  }
+  /* line 2: working days per service (small, each labelled), then... */
+  .admin-app table.rates-grid > tbody > tr[data-row] > td:nth-child(n + 3):not(.grid-cell):not(.row-actions) {
+    order: 3;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .admin-app table.rates-grid > tbody > tr[data-row] > td:nth-child(n + 3):not(.grid-cell):not(.row-actions)::before {
+    content: "Days";
+    font-family: var(--font-mono);
+    font-size: 0.83rem;
+    letter-spacing: var(--ls-mono);
+    color: var(--muted);
+  }
+  .admin-app table.rates-grid td > input.days {
+    width: 88px;
+  }
+  /* ...the price summary over a full-width button that opens the price fold. */
+  .admin-app table.rates-grid > tbody > tr[data-row] > td.grid-cell {
+    order: 4;
+    flex: 1 1 100%;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 8px;
+    text-align: left;
+  }
+  .admin-app table.rates-grid td.grid-cell > .btn {
+    width: 100%;
+  }
+  /* line 3: Save / Undo / Remove, laid out across the full card width. */
+  .admin-app table.rates-grid > tbody > tr[data-row] > td.row-actions {
+    order: 5;
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .admin-app table.rates-grid td.row-actions > .btn {
+    flex: 1 1 auto;
+    width: auto;
+    margin: 0;
+  }
+  .admin-app table.rates-grid td.row-actions > .btn + .btn {
+    margin-top: 0;
+  }
+  /* The price-box fold spans the full card width directly under its country. */
+  .admin-app table.rates-grid > tbody > tr.grid-row {
+    display: block;
+  }
+  .admin-app table.rates-grid > tbody > tr.grid-row > td {
+    display: block;
+    padding: 4px 0 0;
+    border: 0;
+  }
+  /* The find box is the everyday task, so it takes the full width on a phone. */
+  .admin-app .toolbar input[type="text"] {
+    max-width: 100%;
+    flex: 1 1 100%;
+  }
+}
+
+/* ---------- analytics ----------
+   Bars, not charts. There is no chart library here and there never will be:
+   the CSP allows no external script, and an inline SVG would bring its own
+   problem — SVG text scales with the picture, so a chart fitted to a 375px
+   phone renders its labels at nine or ten pixels and walks straight through
+   this file's 14px floor. So the bars are boxes with a height, every word is
+   HTML at a size declared here, and the exact numbers are in the table the
+   <details> opens. Nothing on this screen needs JavaScript to be read. */
+.an-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.an-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.an-range .field {
+  margin: 0;
+}
+/* The preset that matches what is on screen. `.on` and not `[aria-current]`
+   alone: the attribute is there for the screen reader and this is the ink. */
+.an-range .btn.outline.on {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.an-h {
+  margin: 28px 0 2px;
+  font-size: var(--fs-h3);
+}
+
+/* The chart. `.an-bars` carries the baseline, so a day with nothing counted is
+   a gap on a line rather than an empty grey column that reads as a bar. */
+.an-chart {
+  margin-top: 14px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  box-shadow: var(--shadow-card);
+}
+.an-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 180px;
+  border-bottom: 1px solid var(--line);
+}
+.an-col {
+  display: flex;
+  align-items: flex-end;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+}
+.an-col:hover {
+  background: var(--paper-2);
+}
+.an-bar {
+  display: block;
+  width: 100%;
+  background: var(--ink);
+  border-radius: var(--r1) var(--r1) 0 0;
+}
+.an-col.peak .an-bar {
+  background: var(--hot-a);
+}
+/* One tick per column, most of them empty above a fortnight (the page model
+   decides which are labelled). `overflow: visible` lets the ones that are
+   labelled spill over their empty neighbours instead of being clipped to a
+   four-pixel column — which is what keeps the number at a readable size
+   rather than shrinking it to fit. */
+.an-axis {
+  display: flex;
+  gap: 2px;
+  margin-top: 6px;
+}
+.an-tick {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: visible;
+  white-space: nowrap;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+  letter-spacing: var(--ls-mono);
+  color: var(--muted);
+}
+.an-axis .an-tick:first-child {
+  text-align: left;
+}
+.an-axis .an-tick:last-child {
+  text-align: right;
+}
+.an-axis-note {
+  margin: 8px 0 0;
+}
+.an-table td.num,
+.an-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The three rankings. One card each, one column on a phone. */
+.an-cols {
+  display: grid;
+  gap: 16px;
+  margin-top: 14px;
+}
+@media (min-width: 900px) {
+  .an-cols {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.an-block {
+  min-width: 0;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  box-shadow: var(--shadow-card);
+}
+.an-block h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+.an-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+/* Every cell is placed explicitly, so the markup can keep the order that reads
+   best to a screen reader (name, bar, count, share) while the eye gets the
+   count and the share on the name's line and the bar underneath it. */
+.an-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto;
+  gap: 3px 10px;
+  align-items: baseline;
+}
+.an-label {
+  grid-area: 1 / 1 / 2 / 2;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+.an-n {
+  grid-area: 1 / 2 / 2 / 3;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+.an-share {
+  grid-area: 1 / 3 / 2 / 4;
+  min-width: 3.4em;
+  text-align: right;
+}
+.an-track {
+  grid-area: 2 / 1 / 3 / 4;
+  height: 8px;
+  border-radius: var(--r1);
+  background: var(--paper-2);
+  overflow: hidden;
+}
+.an-fill {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+/* ---------- motion: hover and focus colour only ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .anav a,
+  .subnav a,
+  .tile,
+  .admin-app td > input,
+  .admin-app .grid-box input,
+  .hist li .btn,
+  .anav-sub a {
+    transition:
+      color var(--t-fast),
+      background-color var(--t-fast),
+      border-color var(--t-fast),
+      box-shadow var(--t-fast);
+  }
+}
+
+/* =====================================================================
+   Admin usability, 2026-09-30. Six fixes found by driving the real
+   screens; each one is a thing the page was telling the owner that was
+   not true, or a dangerous control dressed as a safe one.
+   ===================================================================== */
+
+/* ---------- a real red, separate from the one orange ----------
+   tokens.css keeps --red as a legacy alias of --hot-a, so "Remove" (deletes a
+   country), "Roll back" (changes the live website in one press) and the price
+   hold all computed to rgb(234,88,12) - the same hue as "Review and publish",
+   "Add country" and the ticked on-site boxes. There was no colour in the admin
+   that meant "this one is different", so there was none for the owner to
+   learn. These are the admin's own tokens; tokens.css is not touched, because
+   --red is the hot accent for the customer pages too. */
+.admin-app {
+  --danger: #b91c1c; /* 6.2:1 on white: safe for text AND for a 1px border */
+  --danger-soft: #fdecec;
+  --danger-ink: #ffffff; /* on --danger, 7.0:1 */
+}
+:root[data-theme="dark"] .admin-app {
+  --danger: #f87171;
+  --danger-soft: #3a1717;
+  --danger-ink: #0b1424; /* on --danger, 8.4:1 */
+}
+/* An outlined red button, not orange text on a default border: the outline is
+   what carries at a glance, which is the whole point of the colour. */
+.admin-app .btn.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: transparent;
+}
+.admin-app .btn.danger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+/* THE TWO-PRESS CONFIRM STAYS, and now it also changes colour: the armed
+   state was a text change alone, in a table where the eye is on the boxes. */
+.admin-app .btn.danger.is-armed {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-ink);
+}
+.pubbar .btn.outline.is-armed {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--danger-ink);
+}
+
+/* ---------- the review card has to be findable without a script ----------
+   RatesController::toReview() now redirects to `#reviewbox`, so the browser
+   lands the card itself. The margins keep it clear of the sticky section tabs
+   above and the fixed publish bar below - it used to render eleven screenfuls
+   down with nothing at the top of the page saying anything had happened. */
+#reviewbox {
+  scroll-margin-top: 64px;
+  scroll-margin-bottom: 96px;
+}
+@media (min-width: 1024px) {
+  #reviewbox {
+    scroll-margin-top: 24px;
+  }
+}
+
+/* ---------- a failed save must not look like a saved one ----------
+   The publish bar reported "Save failed - retrying on next edit" in the same
+   grey, at the same size, beside the same timestamp as "Draft saved". */
+.pubbar .save-alarm {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--r1, 4px);
+  background: var(--danger);
+  color: var(--danger-ink);
+  font-weight: 600;
+}
+
+/* ---------- the price hold: state in words, action named after what it does ----------
+   It was one small outline button computed byte for byte like "Sort A-Z", with
+   its only explanation in a hover-only `title`. It now takes its own row under
+   the heading and says where prices stand. */
+.topbar .hold-bar {
+  flex: 1 1 100%;
+  justify-content: stretch;
+}
+.hold-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+.hold-state .hold-now {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+/* The sentence wraps onto its own line rather than squeezing the button, and
+   is printed at every width - the phone is where the tooltip was worthless. */
+.hold-state .hint {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+/* ---------- bulk adjust asks two questions, so it shows two ---------- */
+.pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.admin-app fieldset.picker {
+  min-width: min(100%, 220px);
+  margin: 0;
+  padding: 4px 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+.admin-app fieldset.picker > legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* ---------- the reviews editor (admin/partials/reviews.php) ----------
+   The Reviews section (sec-reviews) is a plain `section.block` card like Settings
+   and the Popup; inside it this is the list of review editors. Each stored review
+   and each blank add-row is one <li>, parted from the next by a hairline and
+   headed by a small mono label like the form's other group headings (.fh). The
+   add-rows read a touch quieter so a half-filled new review is easy to tell from
+   a saved one. New selectors only; the fields themselves are the shared .field. */
+.review-rows {
+  margin: 0 0 20px;
+  padding: 0;
+}
+.review-edit {
+  padding: 20px 0;
+  border-top: 1px solid var(--line);
+}
+.review-edit:first-child {
+  padding-top: 4px;
+  border-top: 0;
+}
+.review-edit > :last-child {
+  margin-bottom: 0;
+}
+.review-edit-head {
+  margin: 0 0 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--fs-eyebrow);
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+  color: var(--orange-ink);
+}
+.review-edit-new .review-edit-head {
+  color: var(--muted);
+}

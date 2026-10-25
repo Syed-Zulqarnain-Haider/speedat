@@ -1,0 +1,6 @@
+# Screenshots are evidence of a run, not source. Keep the directory, drop the
+# images: a full run writes dozens and they change every time.
+*.png
+*.jpg
+*.jpeg
+!.gitignore

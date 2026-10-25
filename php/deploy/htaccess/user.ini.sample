@@ -1,0 +1,210 @@
+; Speedat - .user.ini sample.  Copy to public_html/.user.ini on the host.
+;
+; WHAT THIS FILE IS
+;   On shared hosting php.ini cannot be edited. PHP reads a per-directory
+;   .user.ini instead (it applies to that directory and everything under it),
+;   which is the only file-based way to set the directives that ini_set()
+;   cannot change at runtime:
+;
+;       upload_max_filesize   post_max_size   max_input_time
+;       max_input_vars        output_buffering
+;
+;   Everything else the application needs it sets itself with ini_set(), so this
+;   file is small on purpose. A long .user.ini is a long list of things that
+;   silently did not apply.
+;
+; HOW TO INSTALL IT
+;   hPanel -> Files -> File Manager -> domains/<site>/public_html
+;   New file named  .user.ini  (leading dot; File Manager may need "show hidden
+;   files" turned on afterwards to see it again), paste the ACTIVE lines below.
+;
+;   It is NOT read instantly. PHP caches it for user_ini.cache_ttl seconds,
+;   300 by default, so wait five minutes - or check the value in hPanel ->
+;   PHP Configuration, which applies immediately and is the preferred place for
+;   anything hPanel offers.
+;
+; HOW TO PROVE IT APPLIED
+;   MEASURE THE BEHAVIOUR, NOT THE NUMBER. Post a body larger than
+;   post_max_size at any page and read the status:
+;
+;       curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+;            --data-binary @a-file-bigger-than-3M https://<site>/contact
+;
+;   413  the WEB SERVER refused it - LimitRequestBody in .htaccess.
+;   400  PHP refused it, and the host's error log says
+;        "POST Content-Length of N bytes exceeds the limit of 3145728 bytes",
+;        which is this file (or the php_value pair) in force.
+;   200  NEITHER limit applied and the host is using its own defaults.
+;
+;   max_input_vars has no such status code, because a body cut short is not an
+;   error: PHP stops reading and says nothing. Its observable signal is the
+;   application's own - a `draft_truncated` line in storage/logs/app-<date>.log
+;   and a refused save on the rates editor. If that ever appears, the limit is
+;   lower than this file asked for, and hPanel -> PHP Configuration is where to
+;   raise it (it applies immediately and wins over this file).
+;
+;   (This section used to say the application's /health endpoint reports the
+;   live ini values when called with the metrics token. It does not, and never
+;   did: /health answers {"ok":true} and nothing else by design, and
+;   /api/metrics is a Prometheus text endpoint with no ini values in it. Found
+;   by running it during the go-live rehearsal - docs/go-live-rehearsal.md,
+;   2026-09-29.)
+;
+;   Do NOT create a phpinfo.php to check. If you do, delete it in the same
+;   minute: it publishes the whole server layout, including the absolute path
+;   of config.php.
+;
+; THE CEILING IS THE PLAN'S, NOT THIS FILE'S
+;   Asking for more than the plan allows does not error - it is silently capped.
+;   Web Premium tops out around memory_limit 1536M / max_execution_time 360s,
+;   and LiteSpeed enforces its OWN request timeout on top of PHP's. Nothing here
+;   is a licence to write a slow request.
+
+; --- body size -------------------------------------------------------------
+; THIS IS THE ONLY PLACE A GIANT REQUEST IS REFUSED FOR FREE.
+;
+; post_max_size is what stops a 12 MB POST at the public contact form. PHP
+; discards an over-sized body before the application is reached, so the request
+; costs one refusal instead of twelve megabytes of read, buffer and parse on a
+; one-core shared plan. Every cap inside the application - Caps, the field
+; lengths, the honeypot - is spent AFTER the bytes have already arrived, so
+; none of them is a defence against the size itself.
+;
+; 2M / 3M, not 8M / 9M. These were sized for the Excel rate sheet, and that
+; feature was removed (owner, 2026-09-27): nothing on this site uploads a file
+; any more. The largest legitimate body left is the rates editor's few hundred
+; text fields, which is tens of kilobytes, so 3M is still a hundred times the
+; worst honest case. A small limit is a real defence - it is the number that
+; decides how much a stranger can make the server chew on before it has even
+; checked who they are.
+;
+; post_max_size must stay ABOVE upload_max_filesize (the POST body is the file
+; plus the form fields plus the multipart overhead). If they are equal, a file
+; at exactly the limit fails with an empty $_FILES and no explanation.
+;
+; If this ever has to go back up because a real upload returns, raise BOTH and
+; keep the megabyte of headroom; public/.htaccess and
+; deploy/htaccess/public_html.htaccess carry the same pair and
+; tests/Core/HtaccessTest.php fails if they drift apart.
+upload_max_filesize = 2M
+post_max_size = 3M
+
+; Two, not five, and for the same reason: no form on this site takes a file.
+; The number only decides how many temporary files one request can make the
+; server open before anything has checked who sent it.
+max_file_uploads = 2
+
+; --- memory and time -------------------------------------------------------
+; 128M, not the plan maximum. 40 PHP workers share the plan's 2 GB of RAM: a
+; generous per-request limit does not make the site faster, it makes the site
+; return a bare 503 when forty requests all decide to use it. The application
+; budgets 32-48 MB per request and raises its own limit with ini_set() for the
+; one job that needs more (reading a workbook), which is the right shape - a
+; temporary raise inside one script rather than a standing invitation.
+memory_limit = 128M
+
+; 30s. Long enough for any page this site serves, short enough that a runaway
+; request frees its worker instead of holding one of forty hostage. Cron does
+; the slow work and sets its own limit with ini_set() because CLI never reads
+; this file.
+max_execution_time = 30
+max_input_time = 30
+
+; 4000, AND THE NUMBER IS DELIBERATE RATHER THAN CAUTIOUS.
+;
+; What actually posts. Measured 2026-09-29 against the real document served by
+; the site (11 countries, 3 services, per-kilogram boxes to 25 kg), by counting
+; the named controls in every <form> on /admin:
+;
+;     the largest country row  98     <- the biggest form on the page
+;     form#editor              48        (Settings + Website pages)
+;     everything else          <=20
+;     the whole page at once   1173      (what it would post if it were still
+;                                         ONE form - and it is not, since
+;                                         2026-09-28)
+;
+; This comment used to say "a few hundred text fields" and "roughly four times
+; its worst case" against a limit of 1000. Both were written when the rates
+; table was a single form carrying the entire document; that form reached 1009
+; variables the day a third service was added, PHP stopped reading at a
+; thousand WITHOUT SAYING SO, and the editor could not save at all. The fix was
+; upstream - a country is its own form now, so the largest form on the page is
+; one country however many countries there are - and the old numbers here
+; outlived the shape they described.
+;
+; Why 4000 and not 1000, when 98 fits inside either. Belt and braces, asked for
+; deliberately:
+;   - `max_input_vars` counts INTERMEDIATE ARRAY DIMENSIONS as well as leaf
+;     values, so the number PHP counts is always higher than the number of
+;     boxes on the screen, and by an amount nothing on the page can see.
+;   - a cargo threshold of 300 kg, or a fourth service, multiplies a row.
+;   - the failure mode is the worst one there is: a body cut short is not an
+;     error. $_POST simply ends early, the save reports success, and the prices
+;     that did not arrive are missing quietly until a customer is quoted one.
+;   - PHP does not charge for the headroom. The number is a ceiling, not an
+;     allocation; a request that posts 98 variables costs the same at 4000 as
+;     at 1000. The thing that actually limits body size is post_max_size above,
+;     and 3M is unchanged.
+;
+; THE APPLICATION DOES NOT DEPEND ON THIS VALUE. `Http\Admin\DraftForm` compares
+; what arrived against what PHP made of it and REFUSES the save if the body was
+; cut - it does not half-save and it does not need a particular limit to be
+; correct. So 4000 is not a fix for anything; it is the margin that keeps the
+; refusal from ever having to fire.
+;
+; It must match public_html/.htaccess, which carries the same number for the
+; hosts that read that file instead. tests/Core/UserIniTest.php fails if the
+; copies drift apart.
+max_input_vars = 4000
+
+; --- error output ----------------------------------------------------------
+; Errors go to the log, never to the browser. A PHP warning in an HTML response
+; hands out absolute paths, and a stack trace hands out the config file's
+; location. The application enforces this too; this is the outer lock, in force
+; even for a fatal that happens before the bootstrap runs.
+display_errors = Off
+display_startup_errors = Off
+log_errors = On
+error_reporting = E_ALL
+
+; Do NOT point error_log at anything inside public_html. Left unset, errors go
+; to the host's own error log, which hPanel shows under Files -> Error Log and
+; which is not web-readable. An error log in the web root is a published list
+; of your file paths and query fragments.
+; error_log = /home/uXXXXXXXX/domains/<site>/storage/logs/php-error.log
+
+; --- disclosure ------------------------------------------------------------
+; Stop announcing the exact PHP version in every response header. It does not
+; stop a determined scan, but it does stop the automated ones that only fire
+; when the banner matches a CVE.
+expose_php = Off
+
+; --- sessions --------------------------------------------------------------
+; The application does not use PHP's own sessions - logins live in the
+; `sessions` table, because a file-based session store on shared hosting is
+; neither reliably writable nor reliably private. These two lines only matter if
+; something in a future phase calls session_start().
+;
+; session.save_path must never be the system default on shared hosting: it can
+; be a directory shared with other accounts. Point it at a 700 directory of
+; ours, outside the web root.
+; session.save_path = /home/uXXXXXXXX/domains/<site>/storage/tmp
+session.cookie_httponly = 1
+session.cookie_secure = 1
+session.cookie_samesite = Lax
+session.use_strict_mode = 1
+
+; --- what NOT to put here --------------------------------------------------
+; disable_functions      - PHP_INI_SYSTEM. Ignored here. Hostinger's own list
+;                          (exec, shell_exec, proc_open, symlink, ...) already
+;                          covers what matters and the application spawns
+;                          nothing, so there is nothing to add.
+; allow_url_fopen        - PHP_INI_SYSTEM. Ignored here.
+; open_basedir           - PHP_INI_SYSTEM, and a wrong value here locks the
+;                          application out of config.php. Leave it to the host.
+; opcache.*              - mostly PHP_INI_SYSTEM. OPcache is on by default and
+;                          serves STALE CODE after a file-sync deploy; the cure
+;                          is the token-protected opcache reset endpoint, not a
+;                          setting in this file.
+; date.timezone          - the application calls date_default_timezone_set()
+;                          from its own configuration. Everything stored is UTC.

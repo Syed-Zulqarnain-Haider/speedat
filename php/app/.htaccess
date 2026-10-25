@@ -1,0 +1,20 @@
+# storage/ holds logs, cached files, uploaded rate sheets and temporary files.
+#
+# NOTHING IN HERE IS MEANT TO BE DOWNLOADED. The directory already sits above
+# the web root, so Apache should never be pointed at it in the first place;
+# this file is the second lock, for the day somebody copies the tree into
+# public_html by mistake or a control panel "fixes" the document root.
+#
+# Both forms are present because Apache 2.2 and 2.4 disagree about the syntax
+# and shared hosting is not always what its version number says.
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
+
+Options -Indexes

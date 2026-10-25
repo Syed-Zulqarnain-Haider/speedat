@@ -1,0 +1,56 @@
+/* =====================================================================
+   print.css — owner: SHELL+HOME
+   A quote printed from the browser: white paper, black ink, no chrome.
+   ===================================================================== */
+
+@media print {
+  .pubbar,
+  .head-row .btn,
+  .head-actions,
+  .nav,
+  .btn.theme,
+  footer a,
+  .quote .actions,
+  .ctas,
+  .pricebar .btn {
+    display: none !important; /* print: chrome must never win over a screen display rule */
+  }
+  .admin-app {
+    display: block;
+  }
+  /* On paper the shell is plain flow again: a window-tall flex column would push the footer to a page's foot. */
+  .site.wrap {
+    display: block;
+    min-height: 0;
+  }
+  .admin-side,
+  .admin-top,
+  .pubbar,
+  .subnav {
+    display: none;
+  }
+  /* NO YELLOW ON PAPER. The bar is a full-bleed brand colour on screen; printed it would be a solid block of
+     ink across the top of every sheet, and the words on it are navy for the yellow, not for white paper.
+     `background: none` is the shorthand, so it resets background-color to transparent as well - do not
+     "simplify" it to `background-image: none`, which would leave the yellow behind. */
+  .site-head {
+    position: static;
+    background: none;
+    border-bottom: 1px solid #000;
+    color: #000;
+  }
+  /* The logo file is 660px wide. At its screen height it prints at about 22mm, which is what a letterhead
+     wants; the cap is here so a future change to the screen height cannot spend half a page on it. */
+  .brand-logo {
+    max-height: 32px;
+    width: auto;
+  }
+  .pricebar {
+    position: static;
+    box-shadow: none;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+}

@@ -1,0 +1,60 @@
+# Speedat International Courier
+
+> Speedat is an international courier based in Lahore, Pakistan, sending parcels
+> and documents worldwide door to door. The site quotes a price by destination
+> country and parcel weight, and booking is done on WhatsApp. Prices shown are
+> starting rates for 1 kg and are confirmed when the parcel is weighed at pickup.
+
+Speedat International Courier helps people and small businesses in Pakistan send
+things abroad: send a parcel to the UK, ship a package to the USA, courier
+documents to Europe or the Gulf, and get a price before you book. Every price on
+the site is the live rate card by country and by weight, so you can compare the
+cost yourself rather than ask and wait. There are no invented reviews, ratings or
+counts anywhere on this site or in its structured data; the only numbers are the
+current rates and settings the operator publishes.
+
+## What Speedat does
+
+- International courier from Pakistan to destinations worldwide, door to door.
+- Parcels and documents, priced by destination country and by weight.
+- More than one air service (a faster express tier and an economy tier); the
+  current service names, delivery-day ranges and prices are on the Services page.
+- Pickup on request and tracking shared over WhatsApp.
+- A live price calculator: pick a country and a weight and the site shows the
+  price for each service; the final price is confirmed at pickup after weighing.
+
+## Where it ships
+
+Speedat ships from Pakistan (pickup in Lahore and other listed cities) to
+destinations around the world, including the United Kingdom, the United States,
+Canada, Europe, the Gulf, Australia and Southeast Asia. The full, current list of
+destinations with live starting prices is on the home page and in the sitemap —
+that list is the authoritative one, because it comes straight from the rate card.
+
+## Key pages
+
+- [Get a price](/): the home page — country tiles with a starting "from" price
+  per destination and a calculator that quotes by country and weight.
+- [Services](/services): the courier services on offer, with delivery-day ranges
+  and what each one is for.
+- [About](/about): who Speedat is, the office and pickup cities, and hours.
+- [Contact](/contact): how to reach Speedat, including the WhatsApp booking link.
+- [Questions](/faq): frequently asked questions and their answers.
+
+## Prices and quoting
+
+- Prices are quoted per destination country and per parcel weight; the figure on
+  a country tile is the starting price for a 1 kg parcel.
+- The published price is a starting rate and is confirmed when the shipment is
+  weighed and measured at pickup.
+- To get a quote and book, use the WhatsApp link shown on every page and on the
+  Contact page.
+
+## Machine-readable
+
+- [Sitemap](/sitemap.xml): every public page.
+- Each page carries JSON-LD structured data (schema.org): a LocalBusiness with
+  contact details, service areas and a per-country price offer for 1 kg, plus a
+  Service list on the Services page and an FAQPage on the Questions page. Those
+  values are generated from the same live document the visible pages render, so
+  they never state anything the page does not.

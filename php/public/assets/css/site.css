@@ -1,0 +1,1811 @@
+/* =====================================================================
+   site.css — the public site in three labelled blocks. Engineers edit
+   only inside their own banner; shared skins live in tokens.css.
+     SHELL  (SHELL+HOME): .site container, header, brand, nav, theme
+                          toggle, footer, page head
+     HOME   (SHELL+HOME): .calc, .hero-copy, .instrument geometry,
+                          .promise, .rates (the board), .hold-*
+     PAGES  (INNER):      .page, .svc-list, .facts, .faq-list, .reach*,
+                          .nf, .err
+   A block may only add rules whose first selector is a prefix it owns.
+   Light is the default theme; dark rules use :root[data-theme="dark"] only.
+   Brief v3: one surface (--bg), hairlines not cards, nothing centred,
+   nothing that moves on load or scroll, no transition over 80ms.
+   ===================================================================== */
+
+/* ===== SHELL ===== */
+/* owner: SHELL+HOME */
+
+/* The one blue on the customer site (owner, 2026-10-05): real navigation links - the footer's phone, email and
+   address, the Google-Maps and email links in the contact rows, and the Terms link - read as clearly clickable
+   blue instead of the quieter ink they used to be. Scoped to .site so the admin keeps its own ink links, and it
+   is a token so light and dark each get a shade that clears WCAG AA on the page surface: #1d4ed8 is 6.7:1 on
+   white, #93c5fd is ~9:1 on the dark navy. It is deliberately NOT used by any button or by the yellow bar - those
+   carry their own colour - and not by the current-page underline, which stays orange (docs/brand.md). */
+.site {
+  --link: #1d4ed8;
+}
+:root[data-theme="dark"] .site {
+  --link: #93c5fd;
+}
+
+/* The container: 1360px of content at 1920, 1286 at 1366, 944 at 1024, 720 at 768, 343 at 375. */
+.site.wrap,
+.site .wrap {
+  max-width: calc(var(--wrap) + var(--gutter) * 2);
+}
+/* The shell is a column at least one window tall: header, page, footer. The page takes whatever is left, so on a
+   short page (the 404, /faq on a large monitor) the footer meets the bottom edge instead of floating above blank
+   paper. No overflow is set here or on anything under it: the calculator's price bar sticks to the viewport. */
+.site.wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.site.wrap > main {
+  flex: 1 0 auto;
+}
+/* Headings in one face: Big Shoulders, no letter-spacing below 40px, a hundredth tighter at 44px (v3 §6). */
+.site h1 {
+  max-width: 26ch;
+  text-wrap: balance;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.site h2,
+.site h3 {
+  letter-spacing: 0;
+}
+@media (min-width: 1200px) {
+  .site h1 {
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Header and footer are the only full-bleed bands: the negative margin reaches the viewport edges and the
+   matching padding brings the content back to exactly the page column's edges, scrollbar or not. */
+.site-head,
+footer.site-foot {
+  margin-inline: calc(50% - 50vw);
+  padding-inline: calc(50vw - 50%);
+}
+
+/* Header: one 56px row on a phone — the owner's logo, Call and WhatsApp as 48px squares; no nav, no toggle
+   (both live in the footer). From 1024 one sticky 64px row with the page links in the middle.
+   THE BAR IS YELLOW AND ITS WORDS ARE INK — docs/brand.md, owner 2026-09-28. --brand-* are constant in both
+   themes on purpose: the page behind the bar inverts, the bar does not, and --ink/--bg/--line all flip. Navy
+   on this yellow is 10.6:1; white on it is 1.2:1, so nothing on this bar may be white except the fill of a
+   button that carries its own contrast (the green WhatsApp one) and the Call button's white ground. */
+.site-head {
+  position: relative;
+  z-index: var(--z-head);
+  background: var(--brand-yellow);
+  border-bottom: 1px solid var(--brand-yellow-dark);
+  color: var(--brand-ink);
+}
+.head-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+}
+.brand-link {
+  display: flex;
+  align-items: center;
+  gap: 10px; /* the site's has one child now; the admin shell's two still need it */
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--tap);
+  text-decoration: none;
+  color: inherit;
+}
+/* The logo file, once per page. The height is set here and the width left to the 4.96:1 ratio, so the artwork
+   is never stretched; object-fit is the belt-and-braces for a viewport narrow enough to squeeze the box —
+   it letterboxes rather than distorting the serif tagline inside the art. */
+.brand-logo {
+  display: block;
+  height: 36px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left center;
+}
+/* The stripe mark: no longer the site header's (brand.md), but still the admin shell's and the admin login's,
+   both of which load this file. Orange and ink bands with the surface showing through the gaps. */
+.mark {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r2);
+  background: repeating-linear-gradient(135deg, var(--hot-a) 0 18%, var(--gap) 18% 26%, var(--ink) 26% 44%, var(--gap) 44% 52%);
+  border: 1px solid var(--line);
+}
+/* Likewise .brand-name: the site header prints no wordmark any more, but `admin/layouts/shell.php` still does
+   and admin.css only amends this rule (`.admin-side .brand-name`) rather than declaring it. */
+.brand-name {
+  display: block;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-size: 1.3rem; /* 22px */
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.head-row > .nav {
+  display: none;
+}
+/* Every word on the bar is ink, in every state. --muted on yellow is 4.8:1 and the hover/current colour is
+   --ink, which is cream in dark mode — both are wrong on a bar that does not invert. */
+.site-head .nav a,
+.site-head .nav a:hover,
+.site-head .nav a:focus-visible,
+.site-head .nav a[aria-current="page"] {
+  color: var(--brand-ink);
+}
+/* AND SO IS THE FOCUS RING. tokens.css gives every control an orange ring (`:focus-visible { outline: 3px
+   solid var(--focus) }`), which is strong on the page's own ground and nearly invisible on this one:
+   measured in Chrome against #FFCC00, #ea580c is 2.35:1 in the light theme and #fb923c is 1.50:1 in the
+   dark one, where WCAG 2.1 SC 1.4.11 asks 3:1 of a focus indicator. The FIRST Tab on every page lands on
+   the brand link inside this bar, so it is the first ring a keyboard user ever sees.
+   Ink is 11.5:1 on the yellow, and the bar does not invert, so one colour is right in both themes — the
+   same reasoning that made every word on the bar ink (docs/brand.md). The descendant selector covers
+   anything added to the bar later, not just today's four controls; the 2px offset puts the ring on the
+   yellow even for the green WhatsApp button, so the yellow is the ground that matters. */
+.site-head :focus-visible {
+  outline-color: var(--brand-ink);
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.head-actions .btn {
+  white-space: nowrap;
+}
+.head-actions .btn svg {
+  width: 22px;
+  height: 22px;
+}
+/* Call: ink on WHITE with an ink border, so it reads as the quieter of the two actions on a yellow ground
+   (brand.md). The literals are deliberate — .btn.outline is transparent over --surface and bordered --edge,
+   and both of those invert in dark mode while this bar does not. */
+.head-actions .btn.call {
+  background: #fff;
+  border-color: var(--brand-ink);
+  color: var(--brand-ink);
+}
+.head-actions .btn.call:hover {
+  background: var(--brand-yellow-dark);
+  border-color: var(--brand-ink);
+}
+/* WhatsApp keeps its own white-on-green: contrast-safe inside the button, and it owes the yellow nothing. */
+.head-actions .btn.wa:hover {
+  border-color: var(--wa-hover);
+}
+/* On a phone both buttons are 48px squares with the glyph alone; their names stay "Call …" / "WhatsApp us". */
+.head-actions .btn.call,
+.head-actions .btn.wa {
+  width: var(--tap);
+  padding: 0;
+}
+.call-word,
+.wa-word {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .site-head {
+    position: sticky;
+    top: 0;
+  }
+  .head-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    min-height: 64px; /* a minimum, not a height: a name too long for the row wraps the nav inside the header instead of spilling a link over the page */
+    gap: 24px;
+  }
+  .mark {
+    width: 32px;
+    height: 32px;
+  }
+  /* 40px of the 36–44px band brand.md allows: the serif tagline inside the artwork stays legible and the row
+     keeps its 64px minimum with 12px of air above and below. */
+  .brand-logo {
+    height: 40px;
+  }
+  .head-row > .nav {
+    display: flex;
+    justify-self: center;
+  }
+  .head-actions .btn.call,
+  .head-actions .btn.wa {
+    width: auto;
+    padding: 0 16px;
+  }
+  .call-word,
+  .wa-word {
+    display: inline;
+  }
+  .call-num,
+  .wa-num {
+    display: none;
+  }
+}
+/* The phone number on each button waits for 1280: the logo is 199px wide at 40px tall, and the five links plus
+   both buttons with their numbers need the rest. The WhatsApp number (header.php `.wa-num`) rides the same rules
+   as the Call number so the two appear and hide together (owner, 2026-10-05). */
+@media (min-width: 1280px) {
+  .call-num,
+  .wa-num {
+    display: inline;
+  }
+}
+
+/* The page links (Nav.tsx): Barlow 600 16px, 48px targets, the current page underlined in orange. The same
+   component sits in the header (from 1024) and in the footer (always). */
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 12px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1;
+  white-space: nowrap;
+}
+.nav a:hover,
+.nav a:focus-visible {
+  color: var(--ink);
+}
+.nav a[aria-current="page"] {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--hot-a);
+  text-underline-offset: 6px;
+}
+/* The theme toggle: a 48px square, the glyph alone; the footer's sibling of the nav (it is not a page link). */
+.btn.theme {
+  width: var(--tap);
+  padding: 0;
+}
+.btn.theme svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* The phone menu (header.php): a native <details> hamburger, the LAST child of .head-row, shown only below 1024
+   (the rule inside the 1024 block hides it, where the inline nav returns). No JavaScript: <summary> toggles the
+   panel and <details> carries its own expanded state. The button is INK ON THE YELLOW BAR (brand.md); the panel
+   is a small card on its own surface dropping under the bar, so its links are ink on the surface. */
+.head-row > .menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+/* The hamburger: a 48px square target, the glyph alone, ink on yellow, a radius like the other head buttons. The
+   native disclosure triangle is removed three ways — the summary's list-style, its ::marker and the webkit
+   pseudo — so no browser draws it beside the icon. Its focus ring is already ink via `.site-head :focus-visible`. */
+.menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border-radius: var(--r2);
+  background: transparent;
+  color: var(--brand-ink);
+  cursor: pointer;
+  list-style: none;
+}
+.menu-btn::-webkit-details-marker {
+  display: none;
+}
+.menu-btn::marker {
+  display: none;
+}
+.menu-btn:hover {
+  background: var(--brand-yellow-dark);
+}
+.menu-ico {
+  width: 24px;
+  height: 24px;
+}
+/* The dropdown: shown only while the <details> is open (native <details> hides it closed, no rule needed). A card
+   on --surface under the bar, right-aligned to the hamburger so it stays inside the 16px right gutter and never
+   widens the page (max-width caps it to the viewport less both gutters). Above the bar's content in the header's
+   own stacking context. Its links are ink ON THE SURFACE (not on the yellow), so --ink is correct and inverts
+   with the surface in dark mode. */
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 8px;
+  z-index: var(--z-head);
+  display: flex;
+  flex-direction: column;
+  min-width: 208px;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  box-shadow: 0 10px 28px -10px rgba(10, 26, 51, 0.32);
+}
+.menu-panel a {
+  display: block;
+  min-height: 44px;
+  padding: 11px 14px;
+  border-radius: var(--r2);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1.4;
+}
+.menu-panel a:hover,
+.menu-panel a:focus-visible {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+/* The panel sits on a surface, so its focus ring is the orange page ring, not the bar's ink one (the header rule
+   forces ink, which would vanish on the dark panel in dark mode). This wins by one pseudo-class. */
+.menu-panel a:focus-visible {
+  outline-color: var(--focus);
+}
+.menu-panel a[aria-current="page"] {
+  color: var(--ink);
+  box-shadow: inset 3px 0 0 var(--hot-a);
+}
+/* The hamburger is the inline nav's inverse: it hides from 1024, where the links return to the bar, so the two
+   are never both on screen (header.php). This block sits AFTER the base `.menu { display: flex }` above so, at
+   equal specificity, source order lets the hide win at wide widths — the same ordering the inline nav relies on. */
+@media (min-width: 1024px) {
+  .head-row > .menu {
+    display: none;
+  }
+}
+
+/* Footer: two lines. Line 1 the five page links (on a phone the site's only nav); line 2 one wrapping line of
+   facts, every number a plain link. No heading, no columns, no list, nothing centred.
+   On a phone the five words fill the 343px row edge to edge (the first flush left, the last flush right, the
+   spare space shared between them) — they need 266px of text at 16px, so the 48px toggle cannot share the row.
+   It floats in the corner of the facts line instead: the first two lines of small print run up to it and the
+   rest run full width, which costs no height at all. From 720 the row has room, and the toggle takes the right
+   end of the links' line. */
+footer.site-foot {
+  margin-top: 32px;
+  padding-block: 16px 24px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--fs-label);
+}
+/* ROOM UNDER THE PINNED PRICE BAR. Below 1024 the calculator's price bar is fixed to the bottom edge
+   (calculator.css, .pricebar), so it covers the last 73px of whatever the document ends with — and the one place
+   a visitor can never scroll out from under it is the document's own end, which is this footer. The bar's height
+   is --i-bar, which lives on .instrument; its two terms are written out again here because the footer is not
+   inside it. Keyed on the bar being in the page, so a page with no calculator — and the home page before the
+   second tap, which has no bar yet — keeps its own footer exactly as it was; a browser without :has() gets what
+   it got before this rule, which is the old behaviour and not a broken one. */
+@media (max-width: 1023px) {
+  .site.wrap:has(.pricebar) footer.site-foot {
+    padding-bottom: calc(24px + var(--tap-big, 56px) + 17px + env(safe-area-inset-bottom, 0px));
+  }
+}
+/* Under 360 the live/cargo bar stacks (calculator.css) and stands ~129px tall instead of 73, so the footer owes
+   that much room or the bar hides the last contact line. Mirrors the grown --i-bar: 24 gap + 56 button + 73. */
+@media (max-width: 359.98px) {
+  .site.wrap:has(.pricebar) footer.site-foot {
+    padding-bottom: calc(24px + var(--tap-big, 56px) + 73px + env(safe-area-inset-bottom, 0px));
+  }
+}
+footer.site-foot .nav {
+  justify-content: space-between;
+  column-gap: 8px;
+  margin-inline: -4px;
+}
+/* Every word is at least a 44px target: "FAQ" is 28px of text, so its box grows and, being the last word,
+   keeps its right edge on the column edge. */
+footer.site-foot .nav a {
+  padding: 0 4px;
+  min-width: 44px;
+  justify-content: center;
+}
+footer.site-foot .nav a:last-child {
+  justify-content: flex-end;
+}
+footer.site-foot .btn.theme {
+  float: right;
+  margin: 12px 0 0 12px;
+}
+.foot-line {
+  margin: 8px 0 0;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 720px) {
+  footer.site-foot {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "nav toggle"
+      "facts facts";
+    align-items: center;
+    column-gap: 16px;
+  }
+  /* The links keep their 12px side padding (the tap target) and the row starts 12px left, so the first word
+     sits on the column edge. */
+  footer.site-foot .nav {
+    grid-area: nav;
+    justify-content: flex-start;
+    column-gap: 4px;
+    margin-inline: -12px 0;
+  }
+  footer.site-foot .nav a {
+    padding: 0 12px;
+  }
+  footer.site-foot .btn.theme {
+    grid-area: toggle;
+    float: none;
+    margin: 0;
+  }
+  .foot-line {
+    grid-area: facts;
+  }
+}
+.foot-fact + .foot-fact::before {
+  content: " · ";
+}
+/* A number or the address in the small print is a thumb target on a phone: an inline block (so it never breaks
+   across two lines) padded above and below to a full 44px, with the same negative margin so the line rhythm does
+   not change. The facts wrap to two or three lines on a phone, and the email sits directly under the first phone
+   number, so the facts line is given a touch more leading at phone widths (below) — otherwise two 44px targets on
+   lines only ~23px apart would overlap into one ambiguous strip. */
+.foot-line a {
+  display: inline-block;
+  /* The link sets its OWN leading so the padding lands a 44px tap target (text ~22px + 2 x 11px), independent of
+     the extra leading the wrapped facts line carries below; the negative margin keeps the text on the same
+     baseline so the line rhythm is the container's, not 44px per word. */
+  line-height: 1.4;
+  padding: 11px 0;
+  margin: -11px 0;
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: var(--link);
+  text-underline-offset: 3px;
+}
+/* Phone: the facts wrap and the email lands directly under the first phone number, so the line is given more
+   leading — enough that two 44px targets on adjacent lines overlap less than they did at 39px, not more. From 720
+   the facts sit on one line (grid-area: facts) and this does not apply. */
+@media (max-width: 719px) {
+  .foot-line {
+    line-height: 2;
+  }
+}
+.foot-line a:hover,
+.foot-line a:focus-visible {
+  color: var(--link);
+  text-decoration-thickness: 2px;
+}
+
+/* Page header (PageHead.tsx): a plain h1 and an optional lede. */
+.page-head {
+  margin-bottom: 24px;
+}
+.page-head h1 {
+  font-size: var(--fs-h1);
+  max-width: 26ch;
+  text-wrap: balance;
+}
+.page-head .lede {
+  margin: 12px 0 0;
+}
+
+/* ===== HOME ===== */
+/* owner: SHELL+HOME — the one section: headline, calculator, rates board; the hold panel.
+   375: header 56 → 16 → h1 (26.35px here, under the price bar's figure — see .hero-copy h1) → sub → 16 → the
+   calculator (its first tile inside 260px) → 24 → the
+   board → footer; the whole page ≤ 1,600px with four destinations. From 1024: a 42/58 grid, the headline and
+   the board in the left column beside the calculator, both columns starting on the same top edge, nothing
+   sticky, nothing moving. */
+
+.calc {
+  padding-top: 16px;
+}
+.hero-copy {
+  margin-bottom: 16px;
+}
+.hero-copy h1 {
+  max-width: 26ch;
+  text-wrap: balance;
+}
+/* ON A PHONE THE PRICE IS THE LARGEST THING ON THE PAGE, NOT THE HEADLINE.
+   --fs-h1 bottoms out at 1.75rem — 29.75px — and the price bar's figure is
+   1.65rem (28.05px) below 1024, so the sentence naming the route outranked
+   the number the visitor came for, and did it at every phone width. The
+   figure cannot go up to fix it: at 375 it has 125px beside the 206px green
+   button and "PKR 58,400" already measures 120px there, so a larger price
+   would run into the button. So the headline comes down instead — 1.55rem
+   (26.35px), a tenth under the figure at every width in this range, and
+   three lines of it are 11px shorter, which is 11px the first screen gets
+   back (see the sticky bar's note in calculator.css). Nothing above 719
+   changes: from 1024 the price is 58–72px and outranks any headline. */
+@media (max-width: 719px) {
+  .hero-copy h1 {
+    font-size: 1.55rem;
+  }
+}
+.hero-copy .lede {
+  margin: 8px 0 0;
+  max-width: 52ch;
+}
+/* The owner's optional extra line under the headline (content.stats): one muted line, no icons, no numerals. */
+.hero-copy .stats {
+  margin: 8px 0 0;
+  font-size: var(--fs-label);
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 62ch;
+}
+/* The calculator column (#quote-instrument): geometry only — its skin lives in calculator.css. */
+.instrument {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+/* The line under the calculator (content.promise): 16px, muted, no icon, no border. */
+.promise {
+  margin: 12px 0 0;
+  font-size: var(--fs-label);
+  line-height: 1.4;
+  color: var(--muted);
+  max-width: 62ch;
+}
+.calc > .rates {
+  margin-top: 24px;
+}
+@media (min-width: 768px) {
+  .instrument {
+    max-width: 780px;
+  }
+}
+/* From 1024 the board sits under the headline in the left column at every width. The column is ≈ 390px at 1024
+   and reaches the ≈ 487px the four-column table needs at 1280, so until then the board keeps its phone row
+   layout (the override after the wide-table rules below) instead of leaving the column: an empty column beside
+   the calculator was the one place on the page that read unfinished (QA, round 3). */
+@media (min-width: 1024px) {
+  .calc {
+    display: grid;
+    grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "copy inst"
+      "rates inst";
+    gap: 24px 40px;
+    align-items: start;
+    padding-top: 24px;
+  }
+  .hero-copy {
+    grid-area: copy;
+    margin-bottom: 0;
+  }
+  .calc .instrument {
+    grid-area: inst;
+    min-height: 520px; /* CLS guard while the calculator's session snapshots settle */
+  }
+  .calc > .rates {
+    grid-area: rates;
+    align-self: start;
+    min-width: 0;
+    margin: 0;
+  }
+}
+@media (min-width: 1366px) {
+  .calc {
+    gap: 24px 56px;
+  }
+}
+
+/* The rates board (home/RatesBoard.tsx; also on /services): a table like a departures board. Hairlines under
+   every row, no vertical rules, no radius, no background, tabular numbers right-aligned in fixed-width columns
+   so a changing width never moves a neighbour. Nothing here is tappable.
+   Below 720 the board keeps ONE header row — the service names once, over equal columns — and each row is two
+   lines: the flag and name, then a price with its days in each column. (Repeating "Express / Normal /
+   Documents" inside every row, as a stacked table does, cost a line per cell and read as a template.) Rows and
+   header cells are flex rows with the same equal basis, so the header words sit over their prices whatever
+   the number of services. */
+table.rates {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.rates caption {
+  caption-side: top;
+  text-align: left;
+  padding: 0 0 6px;
+}
+.rates caption strong {
+  display: block;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
+  letter-spacing: 0;
+  color: var(--ink);
+}
+.rates caption span {
+  display: block;
+  font-size: var(--fs-label);
+  line-height: 1.4;
+  color: var(--muted);
+}
+.rates th,
+.rates td {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  text-align: left;
+  vertical-align: middle;
+  font-weight: 400;
+}
+.rates thead,
+.rates tbody {
+  display: block;
+}
+.rates tr {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.rates thead tr {
+  padding: 0 0 4px;
+}
+.rates thead th {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--muted);
+}
+/* "Country" stays for screen readers only: on a phone the flag and name head each row themselves. */
+.rates thead th:first-child {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+/* A phone row is 72px: 4px, the 24px name line (the flag is 18px tall), the 17px price and the 15px days at
+   1.2, 5px, the hairline. Dense like a departures board; four rows fit under the calculator inside the
+   1,600px page budget (v3 §3). */
+.rates tbody tr {
+  padding: 4px 0 5px;
+}
+.rates th[scope="row"] {
+  flex: 0 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.rates .flag {
+  width: 24px;
+  height: 18px;
+}
+.rates td {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.rates td b {
+  display: block;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.rates td span {
+  display: block;
+  font-size: var(--fs-small);
+  line-height: 1.2;
+  color: var(--muted);
+}
+@media (min-width: 720px) {
+  .rates thead,
+  .rates tbody {
+    display: table-row-group;
+  }
+  /* The hairline stays on the row: with border-collapse the row's own border draws under all its cells. */
+  .rates tr {
+    display: table-row;
+  }
+  .rates thead tr,
+  .rates tbody tr {
+    padding: 0;
+  }
+  .rates thead th {
+    padding: 0 0 8px 16px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .rates thead th:first-child {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    padding-left: 0;
+    text-align: left;
+  }
+  /* The flag is pinned to the cell's left edge and the name gets the rest: a name longer than the column wraps
+     to a second line beside its flag instead of dropping under it. */
+  .rates th[scope="row"] {
+    display: table-cell;
+    position: relative;
+    height: 56px;
+    padding: 8px 0 8px 34px;
+  }
+  .rates th[scope="row"] .flag {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    margin: auto 0;
+  }
+  .rates td {
+    display: table-cell;
+    width: 7em;
+    height: 56px;
+    padding: 8px 0 8px 16px;
+    text-align: right;
+  }
+  .rates td b,
+  .rates td span {
+    white-space: nowrap;
+  }
+}
+/* The home board in its column between 1024 and 1279 (the column is ≈ 390–480px; three 7em price columns beside
+   a flag and a nine-letter name need ≈ 487px) takes the phone layout again: one header row of service names,
+   each country on two lines, the same rows that fit 343px on a phone. Every declaration here undoes one from
+   the block above; /services keeps the wide table, its column is 720px. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .calc > .rates thead,
+  .calc > .rates tbody {
+    display: block;
+  }
+  .calc > .rates tr {
+    display: flex;
+  }
+  .calc > .rates thead tr {
+    padding: 0 0 4px;
+  }
+  .calc > .rates tbody tr {
+    padding: 4px 0 5px;
+  }
+  .calc > .rates thead th {
+    padding: 0;
+    text-align: left;
+    white-space: normal;
+  }
+  .calc > .rates thead th:first-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .calc > .rates th[scope="row"] {
+    display: flex;
+    position: static;
+    height: auto;
+    padding: 0;
+  }
+  .calc > .rates th[scope="row"] .flag {
+    position: static;
+    margin: 0;
+  }
+  .calc > .rates td {
+    display: block;
+    width: auto;
+    height: auto;
+    padding: 0;
+    text-align: left;
+  }
+}
+
+/* Hold panel (HoldPanel.tsx): the admin's message as plain words, three fields in the instrument skin
+   (calculator.css, via .instrument), one full-width green button. No price ever reaches it. */
+.hold-panel .step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1.5;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+.hold-panel .hold-msg {
+  margin: 0 0 16px;
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  color: var(--ink);
+  max-width: 62ch;
+}
+.hold-panel .step-done {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.hold-panel .btn.wa.giant {
+  width: 100%;
+  margin-top: 4px;
+}
+.hold-panel > .hint {
+  margin: 12px 0 0;
+  font-size: var(--fs-label);
+  line-height: 1.5;
+}
+
+/* ===== PAGES ===== */
+/* owner: INNER — /services, /about, /contact, /faq, the 404 and error pages, the contact line (CtaBand.tsx).
+   Brief v3 §3: one 720px reading column, left-aligned inside .wrap (the room to its right at 1366 is empty on
+   purpose); rows and lists parted by hairlines, never cards or bands; no icon that is not an affordance;
+   nothing that moves. Rhythm: PageHead (SHELL) → 24px → the first block; a section h2 sits 32px under a
+   hairline; the contact line closes the page 40px under the last block; the footer (SHELL) follows 40px on. */
+
+/* ---- the page column ---- */
+.page {
+  max-width: 720px;
+  padding: 24px 0 0;
+}
+@media (min-width: 1024px) {
+  .page {
+    padding-top: 32px;
+  }
+}
+.page > :last-child {
+  margin-bottom: 0;
+}
+/* Every secondary heading is one size (the board caption's): the page h2s and the contact line's. */
+.page h2,
+.reach h2 {
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
+  font-weight: 700;
+  max-width: 30ch;
+}
+/* A section (SectionHead.tsx): a hairline, 32px, the h2, then 16px to its content. */
+.page-sec {
+  margin: 32px 0 16px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+}
+.page-sec .lede {
+  margin: 8px 0 0;
+}
+/* One rule, never two: a section straight after a list keeps the list's last hairline instead of drawing its
+   own, and a list that ends the column gives up its last hairline to the contact line's. */
+dl.facts + .page-sec,
+.faq-list + .page-sec,
+.svc-list + .page-sec {
+  border-top: 0;
+  padding-top: 0;
+}
+.page > dl.facts:last-child > div:last-child,
+.page > .faq-list:last-child > div:last-child,
+.page > .svc-list:last-child > li:last-child {
+  border-bottom: 0;
+}
+/* Links in the copy and the contact rows read as blue (owner, 2026-10-05): the phone, email, Google-Maps and
+   Terms links a visitor taps to go somewhere. Underlined in the same blue, the underline a touch heavier on
+   hover. Buttons keep their own colours, and orange still marks only the chosen service's bar and the current
+   page's underline, nowhere else. */
+.page a:not(.btn):not(.reach-big),
+.reach-line a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: var(--link);
+  text-underline-offset: 3px;
+}
+.page a:not(.btn):not(.reach-big):hover,
+.page a:not(.btn):not(.reach-big):focus-visible,
+.reach-line a:hover,
+.reach-line a:focus-visible {
+  color: var(--link);
+  text-decoration-thickness: 2px;
+}
+/* A number, the email, the Maps link or the home-page link in a row is a thumb target on a phone (QA, round 3:
+   22–28px on a 27px line): an inline block padded 12px above and below with the same negative margin, so the
+   target is 51px tall while the glyphs and the line rhythm do not move — the footer's device at the control
+   size. A facts row is padded 12px, so a row's target ends at its own hairline and never reaches the next
+   row's; an inline block also moves to the next line as one piece rather than breaking a number between its
+   groups, and only wraps inside itself when it is wider than the column (the inherited overflow-wrap). */
+dl.facts dd a,
+.reach-line a {
+  display: inline-block;
+  max-width: 100%;
+  padding: 12px 0;
+  margin: -12px 0;
+}
+/* The home-page link mid-sentence on /services stays inline (an inline block parted it from the ";" after it):
+   vertical padding on an inline widens its target without touching the line box — 13px each way, because an
+   inline's own box is the font's 22px content area, not the 27px line. */
+p.facts a {
+  padding: 13px 0;
+}
+/* Reading text: the story on /about, mission / vision / values. 19px at 1.6, at most 62 characters a line. */
+.page .story p,
+.page .prose {
+  font-size: var(--fs-lede);
+  line-height: 1.6;
+  max-width: 62ch;
+  margin: 0 0 1em;
+}
+.page .story > :last-child {
+  margin-bottom: 0;
+}
+.page .prose strong {
+  color: var(--ink);
+}
+
+/* ---- /services: one row per service, then the facts paragraph the page computes, then the board ---- */
+.svc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.svc-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.svc-list strong {
+  font-weight: 600;
+  font-size: var(--fs-button);
+  line-height: 1.3;
+  color: var(--ink);
+}
+.svc-list span {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--muted);
+  max-width: 62ch;
+}
+@media (min-width: 720px) {
+  .svc-list li {
+    grid-template-columns: minmax(0, 11em) minmax(0, 1fr);
+    align-items: baseline;
+  }
+}
+/* The facts paragraph (/services): one 18px paragraph, every sentence from a setting. */
+p.facts {
+  margin: 20px 0 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+  max-width: 62ch;
+}
+/* The rates board on /services (home/RatesBoard.tsx): a hairline and 32px above it, in the same 720px column as
+   the list over it. Spanning the wrap put each country ~900px from its own prices at 1366 (QA, round 1); in the
+   page column the three fixed 7em price columns leave the country cell ~340px, so a name and its number read
+   as one row again, and the board's hairlines end where the list's do. */
+.page-board {
+  max-width: 720px;
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+}
+/* The sample-prices notice under the board (SampleNotice.tsx): a line's gap below the last hairline, no gap
+   after — the CTA band brings its own. */
+.page-board > .sample {
+  margin: 12px 0 0;
+}
+
+/* ---- the facts list (/about, /contact): label and value side by side, a hairline under every row ---- */
+dl.facts {
+  margin: 24px 0 0;
+  border-top: 1px solid var(--line);
+}
+dl.facts > div {
+  display: grid;
+  grid-template-columns: 6em minmax(0, 1fr);
+  gap: 0 16px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+dl.facts dt {
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+dl.facts dd {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* ---- /contact: the WhatsApp number as the page, then the rows, then the form ---- */
+/* Display digits in ink, a 64px tap target, the green glyph and a green underline saying "WhatsApp". */
+.reach-big {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tap-giant);
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-size: var(--fs-h2);
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--wa);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 8px;
+  overflow-wrap: anywhere;
+}
+.reach-big svg {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  color: var(--wa);
+}
+.reach-big:hover,
+.reach-big:focus-visible {
+  text-decoration-color: var(--ink);
+}
+/* The message form (ContactForm.tsx, markup untouched): no panel chrome — the fields are the only boxes. */
+.page .contact-form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.page .contact-form textarea {
+  min-height: 132px;
+}
+.page .contact-form .field > span .hint {
+  font-weight: 400;
+  font-size: var(--fs-small);
+  color: var(--muted);
+  margin-left: 4px;
+}
+.page .contact-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 4px;
+}
+.page .contact-form-actions .btn {
+  width: 100%;
+}
+@media (min-width: 560px) {
+  .page .contact-form-actions .btn {
+    width: auto;
+    min-width: 200px;
+  }
+}
+/* Inline errors sit inside the label, so they outrank the .site label rule: 16px, not bold, the error colour. */
+.page .contact-form .field > .contact-form-err {
+  display: block;
+  color: var(--orange-ink);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  line-height: 1.4;
+}
+/* The sent-message block (ContactForm.tsx): plain, a 3px --ok bar at its left, no box. */
+.page .contact-done {
+  max-width: 62ch;
+  padding: 4px 0 4px 20px;
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+.page .contact-done h3 {
+  margin-bottom: 8px;
+}
+.page .contact-done p {
+  font-size: var(--fs-body);
+  color: var(--muted);
+}
+.page .contact-done .btn {
+  margin-top: 18px;
+}
+
+/* ---- /faq: every answer open, a hairline after each pair ---- */
+.faq-list {
+  margin: 0;
+}
+.faq-list > div {
+  margin: 0 0 20px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+.faq-list > div:last-child {
+  margin-bottom: 0;
+}
+.faq-list dt {
+  font-weight: 600;
+  font-size: var(--fs-button);
+  line-height: 1.3;
+  color: var(--ink);
+  text-wrap: pretty;
+  max-width: 40ch;
+}
+.faq-list dd {
+  margin: 8px 0 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--muted);
+  max-width: 65ch;
+}
+
+/* ---- the contact line (CtaBand.tsx): closes every inner page under a hairline; no band, nothing centred ---- */
+.reach {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.reach h2 {
+  margin-bottom: 6px;
+}
+.reach-sub {
+  margin: 0 0 6px;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--muted);
+  max-width: 62ch;
+}
+.reach-line {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.reach-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+/* Buttons alone (/contact, whose rows above state each number once): they sit 24px under the hairline. */
+.reach-actions:first-child {
+  margin-top: 0;
+}
+.reach-actions .btn {
+  width: 100%;
+}
+@media (min-width: 560px) {
+  .reach-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .reach-actions .btn {
+    width: auto;
+    min-width: 200px;
+  }
+}
+
+/* ---- 404 / error (NotFoundBody.tsx): the heading, one line, two big buttons ---- */
+.nf {
+  min-height: 40vh;
+}
+.nf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.nf-actions .btn {
+  width: 100%;
+}
+@media (min-width: 560px) {
+  .nf-actions .btn {
+    width: auto;
+    min-width: 200px;
+  }
+}
+
+/* ===== QUOTE-UX ===== */
+/* owner: SHELL — the guided next-step hooks on the home calculator (owner, 2026-09-30). The markup and JS live in
+   site/partials/calculator.php and calculator.js; these are their skins.
+
+   .kgs is a GRID (calculator.css: repeat(4,1fr) on a phone, repeat(8,1fr) from 560), NOT a flex row, so a child
+   that must take its own full-width line does it with `grid-column: 1 / -1` — the grid equivalent of the
+   flex-basis:100% the hook note describes.
+
+   THE STATE CLASSES CARRY EMPHASIS ONLY. .awaiting / .is-next / .done change colour, outline, box-shadow and
+   opacity and NOTHING that sizes a box (no width/height/margin/padding), so moving between the three stages never
+   reflows the price under the weight row (brief v3 rule 3). The one bit of motion — a slow opacity breath on the
+   next-step hint — is gated on prefers-reduced-motion at the end of this section. */
+
+/* 1. The next-step hint (calculator.php `.kg-guide`): the FIRST child of .kgs, on its own line above the buttons.
+      A fixed min-height, so the wording changing between the three states never moves the buttons — hence the
+      price — below it. One line for every message at 320 and up. */
+.kg-guide {
+  grid-column: 1 / -1;
+  min-height: 1.5rem;
+  margin: 0;
+  font-size: var(--fs-label);
+  font-weight: 600;
+  line-height: 1.3;
+}
+/* Waiting on a country: muted and dim. */
+.kg-guide.awaiting {
+  color: var(--muted);
+  opacity: 0.85;
+}
+/* The next step: the brand orange, with a small arrow to pull the eye down into the weight row. --orange-ink is
+   the accent safe for text this size (7.3:1); --hot-a is display-only. */
+.kg-guide.is-next {
+  color: var(--orange-ink);
+}
+.kg-guide.is-next::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-right: 8px;
+  vertical-align: 0.08em;
+  border: 5px solid transparent;
+  border-right-width: 0;
+  border-left-color: currentColor;
+}
+/* Done: a quiet, de-emphasised confirmation. */
+.kg-guide.done {
+  color: var(--muted);
+}
+
+/* 2 + 3. The "2 Weight" head ([data-step="weight"]): dim while it waits on a country, the brand accent when it is
+      the next step. Colour and opacity only; the head's size never changes. */
+.step-head.awaiting {
+  color: var(--muted);
+  opacity: 0.7;
+}
+.step-head.is-next {
+  color: var(--orange-ink);
+}
+/* And the weight buttons in the row right after that head light up together: a soft brand ring, drawn with
+   box-shadow so it neither resizes the button nor fights the hover/checked border. The head is immediately
+   followed by .kgs (calculator.php / calculator.js both append them in that order). */
+.step-head.is-next + .kgs .kg {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--hot-a) 20%, transparent);
+}
+
+/* 4. Once a weight is chosen the answer is what matters: a soft green glow on the Book button in the price bar,
+      so the eye lands on the one thing left to do. box-shadow only — the bar and button keep their size. */
+.result.is-next .btn.book {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa) 34%, transparent);
+}
+
+/* 5. The exact-weight block (calculator.php `.kg-exact`): the LAST child of .kgs, on its own full-width row under
+      the buttons. Without this it lands in a single 1fr grid cell and the select truncates to "Ex…". */
+.kg-exact {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+/* 6. The label lays the caption over the select, stacked and full-width on a phone; side by side from 480. */
+.kg-exact-lab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kg-exact-text {
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1.25;
+  color: var(--ink);
+}
+/* 7. The dropdown: full width so it stops truncating, the weight buttons' radius so it reads as part of the row.
+      Its 52px height, 1.5px edge, 1.05rem (17.85px, no iOS focus-zoom) and chevron all come from the .instrument
+      select skin (calculator.css); this scope beats that one, so the width and radius take. */
+.instrument .kg-select {
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--r3);
+}
+@media (min-width: 480px) {
+  .kg-exact-lab {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .kg-exact-text {
+    flex: none;
+  }
+  .instrument .kg-select {
+    flex: 1 1 auto;
+    max-width: 320px;
+  }
+}
+/* The one animation: a slow, calm breath on the next-step hint. Nothing else moves, and reduced motion gets a
+   still, orange hint instead. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes kg-guide-breath {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.6;
+    }
+  }
+  .kg-guide.is-next {
+    animation: kg-guide-breath 1.5s ease-in-out infinite alternate;
+  }
+}
+
+/* ===== PROMO POPUP ===== */
+/* owner: SHELL — the owner's optional discount popup (site/partials/promo.php), shown only when it is turned on
+   and an offer has been typed. promo.js reveals and dismisses it by TOGGLING THE [hidden] ATTRIBUTE, so the
+   visible state is styled through :not([hidden]); a bare `.promo-pop { display: flex }` would fight the [hidden]
+   rule and flash the card while it is meant to be hidden.
+
+   It is a compact card PINNED TO THE BOTTOM so it never covers the price: full width within the 16px gutters on a
+   phone, a bottom-right card from 560. On the home page, once the sticky price bar exists, the card lifts above it
+   (the :has rule at the end), so the answer is never hidden even mid-quote. It is a card on its own surface, so
+   nothing here touches the yellow bar. */
+.promo-pop:not([hidden]) {
+  position: fixed;
+  z-index: var(--z-toast);
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  box-shadow: 0 14px 36px -12px rgba(10, 26, 51, 0.34);
+}
+/* Dismiss: a ~40px target in the top-right corner of the card, the glyph alone. */
+.promo-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r2);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.promo-close:hover {
+  background: var(--paper-2);
+}
+.promo-x {
+  font-size: 1.35rem; /* ~23px */
+  line-height: 1;
+}
+/* The offer text clears the close button on its right. */
+.promo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 28px;
+}
+.promo-title {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
+  color: var(--ink);
+}
+.promo-msg {
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 44ch;
+}
+/* The CTA reuses the primary button look — a full-colour ink button that owns its contrast on the white card,
+   not something borrowed from the yellow bar. */
+.promo-cta {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0 20px;
+  border-radius: var(--r2);
+  background: var(--ink);
+  color: var(--bg);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1.2;
+  text-decoration: none;
+}
+.promo-cta:hover {
+  filter: brightness(0.94);
+}
+@media (min-width: 560px) {
+  .promo-pop:not([hidden]) {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+    max-width: 360px;
+  }
+}
+/* Below 1024 the home page's price bar is fixed to the bottom edge (calculator.css .pricebar): lift the card
+   clear above it so the price is never covered. The bar's height is --tap-big + 17px + the safe area (its
+   --i-bar); this mirrors the footer's room-under-the-bar rule. The card may render inside .site.wrap or right
+   after it, so both are keyed; :has evaluates live, so the card drops back to bottom:16px before the bar exists
+   and on every page that has no bar. */
+@media (max-width: 1023px) {
+  .site.wrap:has(.pricebar) .promo-pop:not([hidden]),
+  .site.wrap:has(.pricebar) ~ .promo-pop:not([hidden]) {
+    bottom: calc(28px + var(--tap-big, 56px) + 17px + env(safe-area-inset-bottom, 0px));
+  }
+}
+/* A gentle rise as the card appears; reduced motion gets it with no movement. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes promo-rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .promo-pop:not([hidden]) {
+    animation: promo-rise 160ms var(--ease-out) both;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   "Courier pickup across Lahore" - the local-SEO section under the quote tool
+   (app/Views/site/partials/local-areas.php). Real, visible content: who we
+   collect from, across Lahore. Calm and on-brand - it supports the price tool,
+   it does not compete with it. Tokens flip for dark mode, so no theme rules.
+   --------------------------------------------------------------------------- */
+.local-areas {
+  margin-top: 28px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+}
+.local-areas h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display, inherit);
+  font-size: 1.45rem; /* ~25px */
+  line-height: 1.15;
+  color: var(--ink);
+}
+.local-areas-lede {
+  margin: 0 0 16px;
+  max-width: 70ch;
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  color: var(--muted);
+}
+.area-chips {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.area-chips li {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--fs-label); /* >= 14px */
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+/* The "and all of Lahore" chip reads as the summary, so it carries the brand. */
+.area-chips li:last-child {
+  background: var(--brand-yellow);
+  border-color: var(--brand-yellow-dark, var(--edge));
+  color: var(--brand-ink);
+}
+.local-areas-cta {
+  margin: 0;
+  font-size: var(--fs-label);
+  color: var(--muted);
+}
+.local-areas-cta a {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--brand-yellow-dark, currentColor);
+  text-underline-offset: 3px;
+}
+@media (max-width: 479px) {
+  .local-areas {
+    padding: 18px 16px;
+  }
+  .local-areas h2 {
+    font-size: 1.3rem; /* ~22px */
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The footer's legal line (footer.php `.foot-legal`): one line of small print
+   under the facts, "By booking you agree to our Terms and Conditions." The
+   sentence is muted and centred; the Terms link is a blue link like the facts
+   above it, with vertical padding so it is a real tap target without changing
+   the line's rhythm.
+   --------------------------------------------------------------------------- */
+.foot-legal {
+  margin: 10px 0 0;
+  font-size: var(--fs-small); /* 14.9px, above the 14px floor */
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: center;
+}
+.foot-legal a {
+  display: inline-block;
+  padding: 8px 0;
+  margin: -8px 0;
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: var(--link);
+  text-underline-offset: 3px;
+}
+.foot-legal a:hover,
+.foot-legal a:focus-visible {
+  text-decoration-thickness: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   "Our partners" (site/partials/partners.php): the six carriers Speedat ships
+   with (DHL, FedEx, TeamGlobal, UPS, DPT, Skynet). A calm section under the
+   Lahore pickup block, parted from it by a hairline like the inner-page
+   sections. A logo row that wraps and stays left-aligned; each slot shows the
+   owner's logo file, or - until those arrive - the partner's name as styled
+   text, so the section always reads correctly. Logos show in full colour, with
+   a subtle opacity lift on hover (devices that have hover). Tokens flip for dark mode.
+   --------------------------------------------------------------------------- */
+.partners {
+  margin-top: 28px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+.partners h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display, inherit);
+  font-size: 1.45rem; /* ~25px */
+  line-height: 1.15;
+  color: var(--ink);
+}
+.partners-lede {
+  margin: 0 0 20px;
+  max-width: 70ch;
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  color: var(--muted);
+}
+.partner-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 32px;
+}
+.partner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+}
+.partner-logo {
+  display: block;
+  max-height: 40px;
+  width: auto;
+  max-width: 150px;
+  object-fit: contain;
+}
+.partner-name {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1.1rem; /* ~19px, well above the 14px floor */
+  line-height: 1.2;
+  color: var(--muted);
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  .partner-logo {
+    opacity: 0.95;
+  }
+  .partner:hover .partner-logo {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .partner-logo {
+    transition: opacity var(--t-fast);
+  }
+}
+@media (max-width: 479px) {
+  .partners h2 {
+    font-size: 1.3rem; /* ~22px */
+  }
+  .partner-list {
+    gap: 14px 24px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   "What customers say" (site/partials/reviews.php): the owner-chosen Google
+   Business reviews. One calm hairline-parted section; the reviews are cards on
+   the surface, one column on a phone, two from 640 and three from 1024. The
+   stars are brand orange when filled and a muted edge when empty; the glyph
+   itself differs (filled vs outline) so the rating still reads with colour off.
+   The whole star group carries one spoken label in the markup, so the glyphs
+   here are purely visual. Tokens flip for dark mode.
+   --------------------------------------------------------------------------- */
+.reviews {
+  margin-top: 28px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+.reviews-title {
+  margin: 0 0 8px;
+  font-family: var(--font-display, inherit);
+  font-size: 1.45rem; /* ~25px */
+  line-height: 1.15;
+  color: var(--ink);
+}
+.reviews-lede {
+  margin: 0 0 20px;
+  max-width: 70ch;
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  color: var(--muted);
+}
+.review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+}
+.review-stars {
+  display: inline-flex;
+  gap: 3px;
+  font-size: 1.15rem; /* ~20px */
+  line-height: 1;
+}
+.review-star.is-on {
+  color: var(--hot-a);
+}
+.review-star.is-off {
+  color: var(--edge);
+}
+.review-text {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  color: var(--ink);
+}
+.review-byline {
+  margin: 0;
+  font-size: var(--fs-small);
+  line-height: 1.4;
+  color: var(--muted);
+}
+.review-author {
+  font-weight: 600;
+  color: var(--ink);
+}
+.review-sep,
+.review-date {
+  color: var(--muted);
+}
+@media (min-width: 640px) {
+  .review-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (min-width: 1024px) {
+  .review-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 479px) {
+  .reviews-title {
+    font-size: 1.3rem; /* ~22px */
+  }
+  .review {
+    padding: 16px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   /terms (site/terms.php): the terms page already wears .page, .prose and
+   .notice; this is the reading-column refinement the brief asks for. The h2s
+   get air above them so the numbered sections are easy to find, the prohibited-
+   items list reads as a list, and the contact list drops its bullets (its
+   links are the blue copy links styled above).
+   --------------------------------------------------------------------------- */
+.terms-body h2 {
+  margin-top: 28px;
+}
+.terms-body h2:first-child {
+  margin-top: 0;
+}
+.terms-body ul {
+  margin: 0 0 1em;
+  padding-left: 1.2em;
+  max-width: 62ch;
+}
+.terms-body li {
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+.terms-contact {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.terms-contact li {
+  margin: 0 0 8px;
+  padding-left: 0;
+}

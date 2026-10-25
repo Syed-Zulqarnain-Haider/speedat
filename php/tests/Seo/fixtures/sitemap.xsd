@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The sitemaps.org 0.9 schema, as published at
+  https://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd, kept here as a file
+  so SitemapTest validates offline: a test that reaches the internet is a test
+  that fails on a plane, and "the sitemap is valid" must be checkable on the
+  machine that writes the sitemap.
+
+  Trimmed to what this site emits - <urlset> of <url>, no <sitemapindex>, no
+  extension namespaces - and otherwise identical in the parts that matter:
+  element ORDER (loc, lastmod, changefreq, priority), the changefreq
+  enumeration, and priority bounded to 0.0-1.0.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:sm="http://www.sitemaps.org/schemas/sitemap/0.9"
+           targetNamespace="http://www.sitemaps.org/schemas/sitemap/0.9"
+           elementFormDefault="qualified">
+
+  <xs:element name="urlset">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="url" type="sm:tUrl" minOccurs="1" maxOccurs="unbounded"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name="tUrl">
+    <xs:sequence>
+      <xs:element name="loc" type="sm:tLoc"/>
+      <xs:element name="lastmod" type="sm:tLastmod" minOccurs="0"/>
+      <xs:element name="changefreq" type="sm:tChangeFreq" minOccurs="0"/>
+      <xs:element name="priority" type="sm:tPriority" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:simpleType name="tLoc">
+    <xs:restriction base="xs:anyURI">
+      <xs:minLength value="12"/>
+      <xs:maxLength value="2048"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="tLastmod">
+    <xs:union memberTypes="xs:date xs:dateTime xs:gYearMonth xs:gYear"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="tChangeFreq">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="always"/>
+      <xs:enumeration value="hourly"/>
+      <xs:enumeration value="daily"/>
+      <xs:enumeration value="weekly"/>
+      <xs:enumeration value="monthly"/>
+      <xs:enumeration value="yearly"/>
+      <xs:enumeration value="never"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="tPriority">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0.0"/>
+      <xs:maxInclusive value="1.0"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>

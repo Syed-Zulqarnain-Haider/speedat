@@ -1,0 +1,304 @@
+# Speedat - web-root .htaccess (Hostinger public_html).  DEPLOYMENT REFERENCE COPY.
+#
+# WHICH FILE IS LIVE
+#   The release built by bin/build-release.php ships php/public/.htaccess as
+#   public_html/.htaccess. THIS file is the annotated reference: same rules,
+#   plus the blocks that are deliberately switched off by default (HSTS, the
+#   http->https redirect, ModSecurity relief). Paste from here through hPanel ->
+#   File Manager when something has to be turned on on the host; do not let the
+#   two drift silently - build-release.php prints which file it shipped.
+#
+# WHY IT IS SO DEFENSIVE
+#   app/, config/, storage/, db/, bin/ and var/ are SIBLINGS of public_html, so
+#   nothing sensitive is under a URL at all. Every deny rule below is the second
+#   lock: it only matters on the day somebody copies the tree into the web root
+#   or a control panel "repairs" the document root.
+#
+# HOSTINGER REALITY (see docs/hostinger-constraints.md)
+#   The server is LiteSpeed, not Apache. .htaccess is the ONLY configuration
+#   surface and it is re-read per request - no restart, but also no error other
+#   than a hard 500 if a directive is refused. So:
+#     * EVERY mod_* block is wrapped in <IfModule>. A missing module then
+#       degrades quietly instead of taking the whole site down.
+#     * No <Directory>, no <VirtualHost>, no php_admin_value - all invalid or
+#       refused here.
+#     * Change this file in small, reversible steps and reload the site after
+#       each one.
+
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+
+# ---------------------------------------------------------------------------
+# 0. The web server's own body cap
+# ---------------------------------------------------------------------------
+# 2 MiB, refused a layer EARLIER than everything else on this site.
+#
+# post_max_size (section 6, and .user.ini) stops a giant body before the
+# application sees it, but PHP still has to be started, handed the request and
+# asked to read it. LimitRequestBody is the web server refusing the body with a
+# 413 before a PHP worker is engaged at all, which on a one-core shared plan is
+# the difference between a refusal costing nothing and a refusal costing a
+# worker for as long as the sender cares to keep sending.
+#
+# THE SIZE IS FOR A SITE WITH NO UPLOADS, WHICH IS WHAT THIS SITE IS. Not one
+# form carries enctype="multipart/form-data" - the Excel rate sheet was removed
+# (owner, 2026-09-27) - so the largest honest request is the rates editor's few
+# hundred text fields, tens of kilobytes. 2 MiB is roughly fifty times that and
+# sits UNDER post_max_size (3M) on purpose: whichever layer a host honours, the
+# web server's cheaper refusal fires first and the PHP-side cap stays the
+# backstop rather than the front line.
+#
+# WHY IT IS WRAPPED, WHEN LimitRequestBody IS CORE APACHE AND NOT A mod_*.
+# Because the rule at the top of this file is absolute: an unsupported
+# directive here is a hard 500 that takes the whole site down, and "core
+# Apache" is a statement about Apache, not about LiteSpeed's .htaccess subset.
+# `core.c` is the module identifier Apache itself answers to. A host that does
+# not know that name gets the second block, which asks for the same cap on any
+# server already proving it parses <IfModule> by giving us mod_rewrite -
+# without which this site has no front controller and serves nothing at all.
+#
+# A host matching NEITHER sets no cap here and does not 500, and post_max_size
+# in .user.ini still refuses the body. That is the correct direction to fail:
+# a missing optimisation, never a missing site.
+#
+# IF A LEGITIMATE POST EVER 413s, raise this number AND post_max_size together,
+# keeping this one the smaller of the two. tests/Core/UserIniTest.php fails if
+# they cross over.
+<IfModule core.c>
+    LimitRequestBody 2097152
+</IfModule>
+<IfModule !core.c>
+    <IfModule mod_rewrite.c>
+        LimitRequestBody 2097152
+    </IfModule>
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 1. Front controller
+# ---------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Never rewrite something that really exists on disk (assets, index.php).
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Everything else is the application's problem.
+    RewriteRule ^ index.php [L]
+
+    # --- OPTIONAL: force https ---------------------------------------------
+    # LEAVE THIS OFF on Hostinger. Free certificates are installed
+    # automatically and the platform already forces https; adding a second
+    # redirect here gives every visitor two round trips, and gets it wrong
+    # behind a proxy that terminates TLS (%{HTTPS} reads "off" on the origin
+    # even though the browser is on https, which is an infinite redirect).
+    #
+    # Turn it on ONLY if you have verified with curl -I that a plain http://
+    # request is answered 200 instead of 301. Then uncomment all three lines.
+    #
+    # RewriteCond %{HTTPS} !=on
+    # RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    # RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 2. Deny everything that is not meant to be downloaded
+# ---------------------------------------------------------------------------
+# Both syntaxes are present because Apache 2.2 and 2.4 disagree and a shared
+# host is not always the version its panel claims.
+<IfModule mod_authz_core.c>
+    # Dotfiles: .env, .env.local, .git*, .htpasswd, .user.ini, editor droppings.
+    # .htaccess itself is already protected by the server; denying it here as
+    # well costs nothing.
+    <FilesMatch "^\.">
+        Require all denied
+    </FilesMatch>
+
+    # Source, data and configuration extensions. A .sql in the web root is a
+    # database dump, and a database dump of this site contains customer leads.
+    <FilesMatch "\.(sql|sqlite|sqlite3|db|md|markdown|log|ini|yml|yaml|lock|sh|bash|ps1|bak|old|orig|swp|dist|sample|tpl|twig|ts|tsx|mjs|cjs|map|zip|gz|tar|7z|rar|pem|key|p12|pfx|crt|csr)$">
+        Require all denied
+    </FilesMatch>
+
+    # ALL .json. Nothing this site serves is .json-as-a-file: the API answers
+    # are generated by index.php and have no extension. If a web manifest is
+    # ever needed, name it site.webmanifest (which is the correct name anyway)
+    # rather than poking a hole in this rule.
+    <FilesMatch "\.jsonc?$">
+        Require all denied
+    </FilesMatch>
+
+    # Names that are a leak even with a harmless extension.
+    <FilesMatch "^(composer|package|package-lock|pnpm-lock|phpunit|Dockerfile|docker-compose|\.?env)">
+        Require all denied
+    </FilesMatch>
+
+    # The PHP built-in-server router. Never used under LiteSpeed/Apache, and
+    # build-release.php excludes it, but it is one line of insurance.
+    <Files "router.php">
+        Require all denied
+    </Files>
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^\.|\.(sql|md|log|ini|yml|yaml|lock|sh|bak|dist|sample|jsonc?|pem|key)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# Refuse the HTTP methods this site has no use for. WebDAV verbs in particular
+# are a scanner favourite and index.php would answer 404 to them anyway - this
+# stops them before PHP starts.
+<IfModule mod_rewrite.c>
+    RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK|PROPFIND|PROPPATCH|MKCOL|COPY|MOVE|LOCK|UNLOCK|PATCH|PUT)$
+    RewriteRule ^ - [F,L]
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 3. Security headers
+# ---------------------------------------------------------------------------
+# mod_headers on Hostinger is VERIFY - LiteSpeed supports it, Hostinger never
+# confirms it. Check once with curl -I after the first deploy; if the headers
+# are missing, the application sets the same ones from PHP and nothing breaks.
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    # DENY, matching app/Core/App.php and the CSP's `frame-ancestors 'none'`.
+    # Nothing on this site is framed by anything, so there is no same-origin
+    # embed to keep working and no reason for this header and the CSP to hand
+    # a browser two different answers to the same question.
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Cross-Origin-Opener-Policy "same-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+
+    # HSTS. OFF until the PHP site IS the live https site. A browser remembers
+    # this for a year: set it on a domain that still has to answer plain http
+    # for anything and you have locked yourself out of your own domain for
+    # twelve months. No `preload` until the site has run cleanly for weeks.
+    # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # PHP's version banner. expose_php is also Off in .user.ini.
+    Header always unset X-Powered-By
+    Header always unset Server
+
+    # Never let a proxy or the browser cache an admin page or an API answer.
+    # index.php sets Cache-Control itself; this is the belt to that braces.
+    <FilesMatch "^index\.php$">
+        Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    </FilesMatch>
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 4. MIME and compression
+# ---------------------------------------------------------------------------
+<IfModule mod_mime.c>
+    AddDefaultCharset UTF-8
+    AddType font/woff2 .woff2
+    AddType image/svg+xml .svg
+    AddType application/manifest+json .webmanifest
+</IfModule>
+
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript \
+        application/javascript application/json image/svg+xml \
+        application/manifest+json
+    # Do NOT compress fonts or images: woff2, png, jpeg and webp are already
+    # compressed, and gzipping them costs CPU on a 1-core plan for nothing.
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 5. Static asset caching
+# ---------------------------------------------------------------------------
+# HTML is never cached. Prices change on publish and a cached page is a wrong
+# price - the one bug this whole project exists to avoid.
+#
+# Assets are cached hard because every reference to them carries a
+# ?v=<filemtime> query string (there is no build step to hash filenames), so a
+# changed file is a changed URL.
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 0 seconds"
+    ExpiresByType text/html "access plus 0 seconds"
+    ExpiresByType text/css "access plus 7 days"
+    ExpiresByType text/javascript "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+    ExpiresByType image/svg+xml "access plus 30 days"
+    ExpiresByType image/webp "access plus 30 days"
+    ExpiresByType image/png "access plus 30 days"
+    ExpiresByType image/jpeg "access plus 30 days"
+    ExpiresByType image/x-icon "access plus 30 days"
+    ExpiresByType font/woff2 "access plus 365 days"
+</IfModule>
+
+<IfModule mod_headers.c>
+    # immutable tells the browser not even to revalidate. Safe only because of
+    # the ?v= cache-buster above.
+    <FilesMatch "\.(css|js|woff2|svg|png|jpe?g|webp|ico)$">
+        Header set Cache-Control "public, max-age=604800, immutable"
+    </FilesMatch>
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 6. PHP settings, if the host lets .htaccess set them
+# ---------------------------------------------------------------------------
+# Hostinger documents php_value in .htaccess as working (PHP runs through
+# LSAPI). It is still wrapped, and nothing in the application depends on these
+# being applied - the real place to set them is hPanel -> PHP Configuration, or
+# the .user.ini shipped beside this file.
+#
+# 2M / 3M, and the smallness is the point. Nothing on this site uploads a file
+# any more (the Excel rate sheet was removed, owner 2026-09-27); the largest
+# legitimate body is the rates editor's text fields, tens of kilobytes. A 12 MB
+# POST at the contact form has to be refused BEFORE PHP hands it to the
+# application, and this is the only layer that can do that. post_max_size stays
+# 1M above upload_max_filesize so that a body at exactly the file limit is not
+# silently discarded whole.
+#
+# max_input_vars 4000, the same number the .user.ini beside this file sets. It
+# has to be the same: a host reads one or the other and never announces which,
+# so two different numbers mean the live limit is an accident of the SAPI. The
+# largest form on the site is one country row in the rates editor - 98 named
+# controls, measured 2026-09-29 against the real document, with form#editor at
+# 48 behind it - so 4000 is about forty times the worst honest case. The margin
+# is deliberate: max_input_vars counts intermediate array dimensions too, a
+# cargo threshold or a fourth service multiplies a row, and a body PHP cut short
+# is not an error - $_POST just ends early. Http\Admin\DraftForm refuses a save
+# that arrived short, so this is headroom rather than something depended on.
+<IfModule mod_php.c>
+    php_flag display_errors Off
+    php_flag expose_php Off
+    php_value upload_max_filesize 2M
+    php_value post_max_size 3M
+    php_value max_input_vars 4000
+</IfModule>
+<IfModule lsapi_module>
+    php_flag display_errors Off
+    php_flag expose_php Off
+    php_value upload_max_filesize 2M
+    php_value post_max_size 3M
+    php_value max_input_vars 4000
+</IfModule>
+
+# ---------------------------------------------------------------------------
+# 7. OPTIONAL: ModSecurity relief for the rates admin
+# ---------------------------------------------------------------------------
+# ModSecurity is ON by default on Hostinger and false-positives on exactly what
+# a rates admin posts: long text, numbers in SQL-ish shapes, pasted HTML. The
+# symptom is a 403 that never reaches PHP, so it is absent from storage/logs.
+#
+# Do NOT uncomment this pre-emptively. If and only if a specific admin POST
+# 403s while the same request succeeds with a shorter body, narrow the rule to
+# that ONE path - never the whole site.
+#
+# <IfModule mod_security.c>
+#     <Location "/admin/rates">
+#         SecRuleRemoveById 200003
+#     </Location>
+# </IfModule>
+#
+# (<Location> is invalid in .htaccess. On Hostinger the supported route is
+#  hPanel -> Advanced -> ModSecurity, which toggles it per directory. Put the
+#  admin under its own directory only if it comes to that.)

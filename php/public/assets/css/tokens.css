@@ -1,0 +1,967 @@
+/* =====================================================================
+   tokens.css — owner: SHELL+HOME (was FOUNDATION)
+   Design tokens (:root is the LIGHT set and is authoritative regardless of
+   the OS preference; the one dark block is :root[data-theme="dark"], which
+   the root layout sets from the "theme" cookie), responsive overrides, the
+   customer scale scoped to .site (v2, amended by v3), base element styles,
+   layout utilities and the shared component skins (.btn, .tag, .notice,
+   .field, inputs, .panel, h2.step, .toast, .link, .count). Other files
+   override these skins only under their own scope (.instrument, .admin-app,
+   .login, .page, .hold-panel) — never edit them here from another block.
+   The admin keeps every :root value pixel for pixel except the page colour,
+   which the owner asked to be white.
+   1rem = 17px (html font-size). No keyframe lives here any more (v3 §5):
+   customer pages paint finished; the admin's hover transitions stay inside
+   @media (prefers-reduced-motion: no-preference) at the end.
+   ===================================================================== */
+
+:root {
+  /* ---- white page & ink (light, the default for everyone) ---- */
+  --bg: #ffffff; /* page background */
+  --paper-2: #f5f1ea; /* warm tinted bands, idle readout, zebra rows, admin sidebar */
+  --surface: #ffffff; /* cards, inputs, instrument panels */
+  --ink: #0a1a33; /* text; ink fills (buttons), 18.4:1 on white */
+  --ink-2: #1e2d47; /* secondary headings */
+  --muted: #4f5866; /* body-secondary, 7.2:1 on white */
+  --line: #e6e1d8; /* decorative hairlines only */
+  --edge: #8a9099; /* the border of every interactive control (tiles, weight buttons, inputs, outline buttons), 3.2:1 */
+  --rule: rgba(10, 26, 51, 0.14); /* editorial rules (admin) */
+  --dash: rgba(10, 26, 51, 0.3); /* dashed borders: idle readout */
+
+  /* ---- the one orange ---- */
+  --hot-a: #ea580c; /* fills, bars and display numerals >= 24px/700 only (3.6:1 on white) */
+  --hot-b: #b4400c; /* gradient/hover partner of --hot-a */
+  --orange-ink: #9a3412; /* orange for small text and icons, 7.3:1 */
+  --blue: #c2410c; /* legacy name: text-level accent (links, icons); >= 0.9rem/600 only */
+  --red: #ea580c; /* legacy name: hot accent, same as --hot-a */
+  --blue-soft: #fbeee4;
+  --red-soft: #f8dfcf;
+
+  /* ---- status ---- */
+  --ok: #0f766e;
+  --ok-soft: #ddf1ec;
+  --warn: #9a5b04;
+  --warn-soft: #fbefcf;
+
+  /* ---- conversion ---- */
+  --wa: #0e7a3f; /* WhatsApp green: fill of every WhatsApp button, incl. the customer Book button */
+  --wa-hover: #0b6634;
+  --wa-ink: #ffffff; /* text on --wa, 5.4:1 */
+  --book: #ea580c; /* orange stamp: the admin's publish button (the customer Book button is greened under .instrument) */
+  --book-hover: #d14e0a;
+  --book-ink: #0a1a33; /* text on --book, 4.9:1 (constant; never --ink here, it flips in dark mode) */
+  --focus: #ea580c;
+  --gap: #ffffff; /* gap colour inside the stripe mark = the surface it sits on */
+
+  /* ---- the yellow header: constant in BOTH themes, because the bar IS the brand (docs/brand.md) ----
+     Never redeclare these under :root[data-theme="dark"]. The page behind the bar inverts; the bar does
+     not, so a word on it that took --ink would turn cream (#f1ece2) on yellow — 1.3:1, unreadable. That
+     is why --brand-ink exists at all and why it is spelled out rather than aliased to --ink. */
+  --brand-yellow: #ffcc00; /* the bar */
+  --brand-yellow-dark: #e6b800; /* the hairline under it, and the pressed state */
+  --brand-ink: #0a1a33; /* every word on the bar, 10.6:1 on --brand-yellow (white would be 1.2:1) */
+
+  /* ---- navy: constant in BOTH themes (price readout, WhatsApp band, login side) ---- */
+  --navy: #0a1a33;
+  --navy-2: #122544; /* hover rows on navy */
+  --paper-ink: #f5f0e7; /* text on navy, 14.8:1 */
+  --paper-70: rgba(245, 240, 231, 0.72); /* secondary text on navy, > 7:1 */
+  --paper-45: rgba(245, 240, 231, 0.45); /* disabled/decorative on navy, never for text */
+  --navy-line: rgba(245, 240, 231, 0.14); /* hairlines on navy */
+  --navy-rule: rgba(245, 240, 231, 0.25); /* the rule above a sum on navy */
+  --navy-accent: #f97316; /* orange on navy, 6.2:1 */
+
+  /* ---- shadows (the admin's panels and publish bar only; no customer page casts one, v3 §6) ---- */
+  --shadow-instrument: 0 1px 0 rgba(10, 26, 51, 0.06), 0 24px 48px -28px rgba(10, 26, 51, 0.28);
+  --scroll-shade: rgba(10, 26, 51, 0.28); /* cast by a pinned table column over the columns scrolling under it */
+  --glass: color-mix(in srgb, var(--bg) 92%, transparent);
+
+  /* ---- type scale (html = 17px): the ADMIN scale; the customer site redefines it on .site below ---- */
+  --fs-hero: clamp(3.4rem, 1.4rem + 6vw, 7.75rem);
+  --fs-h1: clamp(2.75rem, 1.5rem + 4vw, 5.25rem);
+  --fs-h2: clamp(2rem, 1.35rem + 2.2vw, 3.25rem);
+  --fs-h3: clamp(1.35rem, 1.2rem + 0.6vw, 1.7rem);
+  --fs-total: clamp(3rem, 1.75rem + 7vw, 5.25rem);
+  --fs-ghost: clamp(4rem, 14vw, 13rem);
+  --fs-numeral: 4.5rem;
+  --fs-lede: clamp(1.1rem, 1rem + 0.45vw, 1.3rem);
+  --fs-body: 1.0625rem;
+  --fs-small: 0.9rem;
+  --fs-label: 0.95rem;
+  --fs-eyebrow: 0.72rem;
+  --lh-display: 0.92;
+  --lh-h1: 0.95;
+  --lh-h2: 1;
+  --lh-h3: 1.1;
+  --lh-body: 1.55;
+  --lh-lede: 1.5;
+  --ls-display: -0.025em;
+  --ls-h1: -0.02em;
+  --ls-h2: -0.015em;
+  --ls-mono: 0.02em;
+  --ls-eyebrow: 0.16em;
+  --ls-tab: 0.12em;
+
+  /* ---- spacing ---- */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  --s8: 64px;
+  --s9: 96px;
+  --s10: 128px;
+  --section: var(--s9); /* between home sections (desktop); phone overrides to --s8 */
+  --gap-title: 20px; /* title block → its content */
+  --card-pad: 24px; /* phone overrides to 20px */
+  --panel-pad: 24px; /* instrument panels; phone overrides to 16px */
+  --tap: 44px; /* the admin's controls; the customer site raises these on .site */
+  --tap-big: 52px;
+  --tap-giant: 60px;
+
+  /* ---- radii (nothing above 16px anywhere) ---- */
+  --r1: 4px;
+  --r2: 6px;
+  --r3: 10px;
+  --r4: 16px;
+  --r-pill: 999px;
+
+  /* ---- layout ---- */
+  --wrap: 1240px;
+  --gutter: 16px; /* 24px at >= 720, 40px at >= 1200 */
+  --head-h: 56px; /* 64px at >= 900 */
+  --sidebar-w: 232px;
+
+  /* ---- z layers ---- */
+  --z-bg: 0;
+  --z-fg: 1;
+  --z-sticky: 5; /* sticky table column */
+  --z-subnav: 15; /* admin section tabs */
+  --z-head: 20; /* site + admin header */
+  --z-pubbar: 30; /* admin publish pill */
+  --z-toast: 40;
+
+  /* ---- motion (the admin's; the customer scope shortens --t-fast on .site below) ---- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-fast: 150ms; /* hover, focus, colour */
+
+  color-scheme: light;
+}
+
+/* The dark set: chosen with the header toggle and remembered in the "theme" cookie; never by the OS alone. */
+:root[data-theme="dark"] {
+  --bg: #0b1424;
+  --paper-2: #101b2f;
+  --surface: #121d31;
+  --ink: #f1ece2;
+  --ink-2: #d9d3c7;
+  --muted: #a9b1c0;
+  --line: #26334c;
+  --edge: #66708a; /* 3.4:1 on --surface */
+  --rule: rgba(241, 236, 226, 0.14);
+  --dash: rgba(241, 236, 226, 0.3);
+  --hot-a: #f97316;
+  --hot-b: #c2410c;
+  --orange-ink: #fdba74;
+  --blue: #fdba74;
+  --red: #fb923c;
+  --blue-soft: #3a2416;
+  --red-soft: #4a2413;
+  --ok: #5eead4;
+  --ok-soft: #10322f;
+  --warn: #fcd34d;
+  --warn-soft: #3b2f0b;
+  --wa: #0e7a3f;
+  --wa-hover: #0b6634;
+  --wa-ink: #ffffff;
+  --book: #f97316;
+  --book-hover: #ea580c;
+  --book-ink: #0b1424;
+  --focus: #fb923c;
+  --gap: #0b1424;
+  --shadow-instrument: 0 1px 0 rgba(0, 0, 0, 0.35), 0 24px 48px -28px rgba(0, 0, 0, 0.7);
+  --scroll-shade: rgba(0, 0, 0, 0.7);
+  color-scheme: dark;
+}
+/* Navy sections stay navy on the dark page and read as a panel through a hairline. */
+:root[data-theme="dark"] .on-navy {
+  border-block: 1px solid var(--line);
+}
+
+/* Responsive token overrides: the only place a breakpoint changes a token. */
+@media (min-width: 720px) {
+  :root {
+    --gutter: 24px;
+  }
+}
+@media (min-width: 900px) {
+  :root {
+    --head-h: 64px;
+  }
+}
+@media (min-width: 1200px) {
+  :root {
+    --gutter: 40px;
+  }
+}
+@media (max-width: 719px) {
+  :root {
+    --section: var(--s8);
+    --card-pad: 20px;
+    --panel-pad: 16px;
+  }
+}
+
+/* Customer scale — scoped to the public site (ShellWrap's `.site.wrap`); the admin keeps the :root values.
+   v3: the h1 is a sentence, not a slogan — 32px at 375, 44 at 1366, two lines at most; body 18px; labels 16px;
+   nothing customer-facing below --fs-small (14.9px); no uppercase, letter-spacing or mono on any customer page.
+   --t-fast is 80ms here (v3 §5): colour on hover / focus / checked, nothing slower, nothing that moves. */
+.site {
+  --fs-h1: clamp(1.75rem, 1rem + 1.9vw, 2.6rem); /* 30 @375 · 32 @768 · 36 @1024 · 43 @1366 · 44 from 1470 */
+  --fs-h2: clamp(1.65rem, 1.2rem + 1.4vw, 2.5rem); /* 28 → 42 */
+  --fs-h3: clamp(1.25rem, 1.15rem + 0.4vw, 1.5rem); /* 21 → 25 */
+  --fs-lede: clamp(1.1rem, 1.02rem + 0.35vw, 1.25rem); /* 19 → 21 */
+  --fs-body: 1.0625rem; /* 18px */
+  --fs-label: 0.95rem; /* 16px — every control label */
+  --fs-small: 0.875rem; /* 14.9px — the floor */
+  --fs-button: 1.1rem; /* 18.7px — .btn.big and .btn.giant */
+  --fs-price: clamp(2.6rem, 1.4rem + 4vw, 4.25rem); /* 44 @375 · 56 @768 · 66 @1024 · 72 from 1200 */
+  --fs-total: var(--fs-price); /* alias for calculator.css */
+  --fs-kg: 1.35rem; /* 23px — the number on a weight button */
+  --lh-h1: 1.05;
+  --lh-h2: 1.08;
+  --lh-h3: 1.15;
+  --lh-body: 1.55;
+  --lh-lede: 1.5;
+  --ls-h1: -0.01em;
+  --ls-h2: -0.005em;
+  --section: 72px; /* between home sections; 48px below 720 */
+  --gap-title: 20px;
+  --tap: 48px;
+  --tap-big: 56px;
+  --tap-giant: 64px;
+  --wrap: 1360px;
+  --card-pad: 24px;
+  --panel-pad: 24px;
+  --t-fast: 80ms; /* v3 §5: colour on hover / focus / checked; nothing slower on a customer page */
+}
+@media (max-width: 719px) {
+  .site {
+    --section: 48px;
+    --card-pad: 20px;
+    --panel-pad: 16px;
+  }
+}
+/* The 1366×768 density tier: the price is 58px (down from 72) so the price bar and the green button fit the fold.
+   calculator.css reads the price size through --i-price. */
+@media (min-width: 1024px) and (max-height: 820px) {
+  .site {
+    --fs-price: 3.4rem;
+  }
+}
+
+/* ---------- base ---------- */
+html {
+  font-size: 17px;
+  scroll-padding-top: calc(var(--head-h) + 16px);
+  -webkit-text-size-adjust: 100%;
+  /* The full-bleed header/footer use a 50vw trick, and 100vw counts the
+     vertical scrollbar, so the document can be a few px wider than the
+     viewport on desktop. body already clips this; clipping it here too stops
+     documentElement itself reporting the overshoot. clip, not hidden, so it
+     makes no scroll container and position:sticky and inner overflow:auto
+     scrollers (the admin rates grid) are untouched. */
+  overflow-x: clip;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+h1,
+h2,
+h3,
+.display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  margin: 0;
+  color: inherit;
+}
+h1 {
+  font-size: var(--fs-h1);
+  font-weight: 800;
+  line-height: var(--lh-h1);
+  letter-spacing: var(--ls-h1);
+}
+h2 {
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-h2);
+  letter-spacing: var(--ls-h2);
+}
+h3 {
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  line-height: var(--lh-h3);
+  letter-spacing: 0;
+}
+.display {
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+}
+p {
+  margin: 0;
+}
+a {
+  color: var(--blue);
+}
+strong {
+  font-weight: 600;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+input[type="radio"],
+input[type="checkbox"] {
+  accent-color: var(--hot-a);
+}
+/* The one standing !important: an author display rule on a class must never un-hide a [hidden] element. */
+[hidden] {
+  display: none !important;
+}
+::selection {
+  background: var(--hot-a);
+  color: var(--book-ink);
+}
+
+/* ---------- layout utilities ---------- */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.wrap {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+/* Full bleed: stretches a section's background to the viewport edges; put a .wrap inside for the content. */
+.bleed {
+  margin-inline: calc(50% - 50vw);
+}
+.on-navy {
+  background: var(--navy);
+  color: var(--paper-ink);
+}
+.on-navy a {
+  color: inherit;
+}
+
+/* ---------- type utilities ---------- */
+/* Mono eyebrows, editorial rules and light numerals are ADMIN devices now; .site turns any leftover into plain text. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--fs-eyebrow);
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+  color: var(--orange-ink);
+  margin: 0;
+}
+.on-navy .eyebrow {
+  color: var(--navy-accent);
+}
+.rule {
+  display: block;
+  width: 48px;
+  height: 2px;
+  background: var(--ink);
+  margin: 10px 0 16px;
+}
+.on-navy .rule {
+  background: var(--paper-ink);
+}
+.rule.hot {
+  background: var(--hot-a);
+  width: 24px;
+  margin: 12px 0 10px;
+}
+.mono {
+  font-family: var(--font-mono);
+  letter-spacing: var(--ls-mono);
+  font-variant-numeric: tabular-nums;
+}
+.numeral {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 200;
+  font-size: var(--fs-numeral);
+  line-height: 0.9;
+  color: var(--orange-ink);
+  font-variant-numeric: tabular-nums;
+}
+.lede {
+  font-size: var(--fs-lede);
+  line-height: var(--lh-lede);
+  color: var(--muted);
+  max-width: 52ch;
+  margin: 12px 0 24px;
+}
+.on-navy .lede {
+  color: var(--paper-70);
+}
+/* Safety net for the customer site: a stray .eyebrow reads as a plain 16px label; a stray .rule is gone. */
+.site .eyebrow {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1.3;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.site .rule {
+  display: none;
+}
+/* v3: no numbered circles on customer pages; a stray .n prints as plain text (the admin keeps h2.step's "01"). */
+.site .n {
+  font: inherit;
+  color: inherit;
+}
+.site h2.step .n::before {
+  content: none;
+}
+/* Growing underline for in-copy and footer links. */
+.link {
+  color: inherit;
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+}
+.link:hover,
+.link:focus-visible {
+  background-size: 100% 1px;
+}
+/* Count pill on an admin nav item. */
+.count {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--hot-a);
+  color: var(--book-ink);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+}
+/* Customer buttons: 48px targets, 17px words, --edge borders; the variants below keep their own colours. */
+.site .btn {
+  min-height: var(--tap);
+  font-size: 1rem;
+  border-color: var(--edge);
+}
+.btn:hover {
+  border-color: var(--ink);
+}
+.btn.small {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.9rem;
+}
+.btn.big {
+  min-height: 52px;
+  padding: 0 22px;
+  font-size: 1.05rem;
+}
+.site .btn.big {
+  min-height: var(--tap-big);
+  padding: 0 24px;
+  font-size: var(--fs-button);
+}
+.site .btn.big svg {
+  width: 22px;
+  height: 22px;
+}
+/* The one giant button: Book on WhatsApp, the hold panel's ask, the band's WhatsApp/Call. */
+.site .btn.giant {
+  min-height: var(--tap-giant);
+  padding: 0 28px;
+  font-size: var(--fs-button);
+  border-radius: var(--r3);
+}
+.site .btn.giant svg {
+  width: 24px;
+  height: 24px;
+}
+.btn.outline {
+  background: transparent;
+  border-color: var(--ink);
+}
+.site .btn.outline {
+  border-color: var(--edge);
+}
+.btn.outline:hover {
+  background: var(--paper-2);
+  border-color: var(--ink);
+}
+.btn.primary {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.btn.paper {
+  background: var(--paper-ink);
+  color: var(--navy);
+  border-color: var(--paper-ink);
+}
+.btn.wa,
+.btn.chat {
+  background: var(--wa);
+  color: var(--wa-ink);
+  border-color: var(--wa);
+}
+.btn.wa:hover,
+.btn.chat:hover {
+  background: var(--wa-hover);
+  border-color: var(--wa-hover);
+}
+.btn.book {
+  background: var(--book);
+  color: var(--book-ink);
+  border-color: var(--book);
+}
+.btn.book:hover {
+  background: var(--book-hover);
+  border-color: var(--hot-b);
+}
+.btn.primary:hover,
+.btn.paper:hover {
+  filter: brightness(0.94);
+}
+.btn.book[aria-disabled="true"],
+.btn[aria-disabled="true"],
+.btn:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.btn.danger {
+  color: var(--red);
+}
+.btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+/* ---------- shared components ---------- */
+.tag {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+/* Customer pills ("Fastest", "Cheapest", "Document rate"): Barlow 600 at the 14.9px floor, sentence case. */
+.site .tag {
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-small);
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.notice {
+  padding: 12px 16px 12px 18px;
+  border-radius: var(--r2);
+  box-shadow: inset 3px 0 0 currentColor;
+  margin: 14px 0;
+  font-size: 0.95rem;
+  background: var(--paper-2);
+}
+.site .notice {
+  font-size: 1rem;
+}
+.notice.info {
+  background: var(--blue-soft);
+  color: var(--orange-ink);
+}
+.notice.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.notice.err {
+  background: var(--red-soft);
+  color: var(--orange-ink);
+}
+.notice.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.notice ul {
+  margin: 6px 0 0 18px;
+  padding: 0;
+  list-style: disc;
+}
+.notice li {
+  margin: 2px 0;
+}
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.site .hint {
+  font-size: var(--fs-small);
+}
+.meta {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  letter-spacing: var(--ls-mono);
+}
+.meta.warn {
+  color: var(--warn);
+  font-weight: 500;
+}
+.site .meta {
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  letter-spacing: 0;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.field > span {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--fs-eyebrow);
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+  color: var(--orange-ink);
+}
+.field > span.hint {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+/* Customer field labels: short plain words in Barlow 600 at 16px; no mono, no uppercase. */
+.site .field > span {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-label);
+  line-height: 1.3;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+.site .field > span.hint {
+  font-weight: 400;
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+.lab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.lab svg {
+  width: 14px;
+  height: 14px;
+  color: var(--orange-ink);
+  flex: none;
+}
+.site .lab {
+  gap: 8px;
+}
+.site .lab svg {
+  width: 22px;
+  height: 22px;
+}
+input[type="number"],
+input[type="text"],
+input[type="tel"],
+input[type="email"],
+input[type="date"],
+input[type="password"],
+select,
+textarea {
+  width: 100%;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  padding: 0 14px;
+  min-height: 48px;
+  font-weight: 500;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+textarea {
+  padding: 12px 14px;
+  min-height: 96px;
+  line-height: 1.45;
+}
+input[type="number"] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-mono);
+}
+/* Customer inputs: 52px, 17px, a visible --edge border; numbers in Barlow (tabular), not mono. */
+.site input[type="number"],
+.site input[type="text"],
+.site input[type="tel"],
+.site input[type="email"],
+.site input[type="date"],
+.site select,
+.site textarea {
+  min-height: 52px;
+  border-color: var(--edge);
+  font-size: 1rem;
+}
+.site input[type="number"] {
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+}
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--dash);
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--ink);
+}
+.site input:hover,
+.site select:hover,
+.site textarea:hover,
+.site input:focus,
+.site select:focus,
+.site textarea:focus {
+  border-color: var(--ink);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) 50%,
+    calc(100% - 14px) 50%;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 36px;
+}
+.site select {
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%), linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position:
+    calc(100% - 22px) 50%,
+    calc(100% - 15px) 50%;
+  background-size: 7px 7px;
+  padding-right: 40px;
+}
+.row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 12px;
+}
+@media (min-width: 560px) {
+  .row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.row.three {
+  grid-template-columns: 1fr 1fr;
+}
+.row.three > .field:last-child {
+  grid-column: 1 / -1;
+}
+@media (min-width: 560px) {
+  .row.three {
+    grid-template-columns: 1fr 1fr 2fr;
+  }
+  .row.three > .field:last-child {
+    grid-column: auto;
+  }
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  padding: var(--panel-pad);
+  margin-bottom: 16px;
+}
+.panel > :last-child {
+  margin-bottom: 0;
+}
+h2.step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0;
+  margin: 0 0 16px;
+}
+h2.step .n {
+  font-family: var(--font-display);
+  font-weight: 200;
+  font-size: 2.25rem;
+  line-height: 1;
+  color: var(--orange-ink);
+  font-variant-numeric: tabular-nums;
+}
+h2.step .n::before {
+  content: "0";
+}
+h2.step svg {
+  width: 20px;
+  height: 20px;
+  color: var(--orange-ink);
+  flex: none;
+}
+.site h2.step {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: 1.2;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+.site h2.step svg {
+  width: 22px;
+  height: 22px;
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  background: var(--navy);
+  color: var(--paper-ink);
+  padding: 10px 16px;
+  border-radius: var(--r2);
+  font-weight: 600;
+  z-index: var(--z-toast);
+  max-width: 90vw;
+  box-shadow: var(--shadow-instrument);
+}
+/* A country flag (site/Flag.tsx): a framed 4:3 image, or a two-letter badge when the country is unknown. */
+.flag {
+  display: block;
+  flex: none;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  object-fit: cover;
+}
+.flag-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.875rem;
+  line-height: 1;
+  color: var(--ink);
+}
+
+/* Button feedback on customer pages: a rectangle that darkens under the finger, at once (v3 §5). Works before
+   hydration because it is CSS. Nothing moves, nothing scales. */
+.site .btn:active {
+  filter: brightness(0.92);
+}
+
+/* ---------- motion: colour transitions only, and none longer than --t-fast (150ms admin, 80ms customer) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .btn {
+    transition:
+      background-color var(--t-fast),
+      border-color var(--t-fast),
+      color var(--t-fast);
+  }
+  .link {
+    transition: background-size var(--t-fast) var(--ease-out);
+  }
+  .rule.hot {
+    transition: width var(--t-fast) var(--ease-out);
+  }
+  input,
+  select,
+  textarea {
+    transition: border-color var(--t-fast);
+  }
+}

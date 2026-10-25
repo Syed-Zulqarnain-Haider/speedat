@@ -1,0 +1,59 @@
+# Speedat - deny-all guard.  DEPLOY A COPY OF THIS INTO EVERY NON-PUBLIC DIRECTORY.
+#
+# Ships as .htaccess in:  app/  config/  db/  storage/  storage/*/  var/  bin/
+#
+# WHY IT EXISTS AT ALL
+#   On Hostinger these directories are SIBLINGS of public_html, so there is no
+#   URL that reaches them and this file is never consulted. It is here for the
+#   three ways that stops being true:
+#
+#     1. Somebody extracts the release into public_html instead of one level
+#        above it (the single most likely deployment mistake).
+#     2. The domain is moved, or an addon domain is pointed at the account root
+#        rather than at domains/<site>/public_html.
+#     3. A control panel "repairs" the document root after a restore.
+#
+#   In all three cases this file is the difference between a 403 and handing out
+#   config.php, the logs and the uploaded rate sheets.
+#
+# WHAT IT DOES NOT DO
+#   It does not stop PHP from reading these files - that is the whole point of
+#   the layout, the application has to read them. It stops the WEB SERVER from
+#   serving them. If a request for app/Core/Config.php returns 403, this is
+#   working; if it returns the PHP source, Apache/LiteSpeed is ignoring
+#   .htaccess entirely and the site must be taken down until that is fixed.
+#
+# BOTH SYNTAXES ARE PRESENT on purpose. Apache 2.4 uses Require, 2.2 uses
+# Order/Deny, and shared hosting is not always the version its panel claims.
+# LiteSpeed understands both.
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
+
+# If neither authz module is loaded, deny by handler instead: refuse to execute
+# or serve anything at all in here.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^ - [F,L]
+</IfModule>
+
+Options -Indexes -ExecCGI
+
+# Strip the PHP handler, so a request for app/Core/Config.php cannot be EXECUTED
+# either - a denied file that still runs could still, for instance, be made to
+# emit a fatal error containing a path.
+#
+# This does not stop PHP's own `require` of these files: that is the interpreter
+# reading a file, not the server dispatching a request. Wrapped in <IfModule>
+# because an unsupported directive here is a 500, and mod_mime is the module
+# that owns Remove*.
+<IfModule mod_mime.c>
+    RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phps
+    RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phps
+</IfModule>

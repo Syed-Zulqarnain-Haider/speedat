@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  mark.svg — the brand mark as a standalone file, for the places a stylesheet
+  cannot reach: the favicon/apple-touch icon, an Open Graph image, an emailed
+  quote. It is a DERIVED asset, not a copy of one: in the site itself the mark
+  has never been a file. src/app/(site)/layout.tsx renders an empty
+  <span class="mark">, and site.css paints it:
+
+      .mark {
+        width: 28px; height: 28px; border-radius: var(--r2);
+        background: repeating-linear-gradient(135deg,
+          var(--hot-a) 0 18%, var(--gap) 18% 26%,
+          var(--ink) 26% 44%, var(--gap) 44% 52%);
+        border: 1px solid var(--line);
+      }
+
+  So the PHP header must keep using that same empty <span class="mark">, which
+  follows the theme for free. This file is the LIGHT theme frozen
+  (--hot-a #ea580c, --gap #ffffff, --ink #0a1a33, --line #e6e1d8); the dark
+  values are #f97316 / #0b1424 / #f1ece2 / #26334c if a dark variant is ever
+  wanted.
+
+  The geometry is the gradient's, worked out rather than eyeballed. At 135deg
+  on a 28x28 box the gradient line runs from the top-left corner towards the
+  bottom-right and is 28*sqrt(2) = 39.598 long, so one 52% period is 20.591
+  and the stops fall at 7.128 / 10.296 / 17.423 / 20.591. The pattern below is
+  those four bands laid out along its own x axis and rotated 45 degrees, which
+  maps that axis onto the same down-right direction from the same origin.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" role="img" aria-label="Speedat">
+  <defs>
+    <pattern id="stripes" patternUnits="userSpaceOnUse" width="20.591" height="8" patternTransform="rotate(45)">
+      <rect x="0" y="0" width="7.128" height="8" fill="#ea580c" />
+      <rect x="7.128" y="0" width="3.168" height="8" fill="#ffffff" />
+      <rect x="10.296" y="0" width="7.127" height="8" fill="#0a1a33" />
+      <rect x="17.423" y="0" width="3.168" height="8" fill="#ffffff" />
+    </pattern>
+  </defs>
+  <rect x="0.5" y="0.5" width="27" height="27" rx="5.5" fill="url(#stripes)" stroke="#e6e1d8" stroke-width="1" />
+</svg>
