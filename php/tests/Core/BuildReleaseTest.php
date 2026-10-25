@@ -86,7 +86,8 @@ final class BuildReleaseTest extends TestCase
             'public_html/index.php', 'public_html/.htaccess', 'app/Core/Bootstrap.php',
             'app/Core/Config.php', 'app/Core/Router.php', 'app/routes.php',
             'config/config.sample.php', 'db/migrations/0001_init.sql',
-            'db/migrations/0002_session_csrf_secret.sql', 'INSTALL.txt', 'bin/cron.php',
+            'db/migrations/0002_session_csrf_secret.sql', 'db/migrations/0003_page_views.sql',
+            'INSTALL.txt', 'bin/cron.php',
         ] as $wanted) {
             $this->assertTrue(in_array($wanted, $entries, true), $wanted . ' must be in the release');
         }
@@ -166,7 +167,7 @@ final class BuildReleaseTest extends TestCase
         $this->write($this->tree . '/db/migrations/9999_customer_dump.sql', $dump);
         $this->write($this->tree . '/db/migrations/dump.sql', $dump);
         $this->write($this->tree . '/db/migrations/backup-2026-09-27.sql', $dump);
-        $this->write($this->tree . '/db/migrations/0003_a_real_one.sql', "-- a genuine new migration\nALTER TABLE leads ADD COLUMN x INT NULL;\n");
+        $this->write($this->tree . '/db/migrations/0099_a_real_one.sql', "-- a genuine new migration\nALTER TABLE leads ADD COLUMN x INT NULL;\n");
         $this->write($this->tree . '/db/migrations/README.txt', "not a migration at all\n");
 
         $build = $this->build('migrations.zip');
@@ -184,7 +185,8 @@ final class BuildReleaseTest extends TestCase
             [
                 'db/migrations/0001_init.sql',
                 'db/migrations/0002_session_csrf_secret.sql',
-                'db/migrations/0003_a_real_one.sql',
+                'db/migrations/0003_page_views.sql',
+                'db/migrations/0099_a_real_one.sql',
             ],
             $migrations,
             'a data dump in db/migrations is still a data dump'

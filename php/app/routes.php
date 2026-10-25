@@ -364,6 +364,30 @@ return static function (Router $router): void {
     // it. One canonical URL for the home page, not two.
     $router->get('/index.php', static fn (): Response => Response::redirect('/', 301));
 
+    // THE OLD STATIC SITE'S ADDRESSES. Before the quote site, speedat.co was a
+    // set of .html pages, and search engines and old WhatsApp links still ask
+    // for them: the October logs show /tracking.html, /services.html,
+    // /index.html and the rest answering 404 every day. A permanent redirect to
+    // the page that replaced each one keeps the visitor and hands the old
+    // page's ranking to the new one. There is no public tracking page, so
+    // tracking goes to Contact, where the office can be asked.
+    $legacy = [
+        '/index.html'                => '/',
+        '/calculator.html'           => '/',
+        '/services.html'             => '/services',
+        '/coverage.html'             => '/services',
+        '/about.html'                => '/about',
+        '/contact.html'              => '/contact',
+        '/tracking.html'             => '/contact',
+        '/faq.html'                  => '/faq',
+        '/privacy-policy.html'       => '/terms',
+        '/terms.html'                => '/terms',
+        '/blog/send-parcel-uae.html' => '/',
+    ];
+    foreach ($legacy as $from => $to) {
+        $router->get($from, static fn (): Response => Response::redirect($to, 301));
+    }
+
     /**
      * Liveness check for uptime monitoring.
      *

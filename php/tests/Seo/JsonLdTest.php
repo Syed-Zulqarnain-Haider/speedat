@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Speedat\Tests\Seo;
 
 use Speedat\Domain\Seo\JsonLd;
+use Speedat\Domain\Seo\LocalAreas;
 use Speedat\Domain\Seo\Routes;
 use Speedat\Domain\Seo\ShareCard;
 use Speedat\Domain\Seo\SiteFacts;
@@ -109,11 +110,24 @@ final class JsonLdTest extends TestCase
     public function testAreaServedIsTheLiveDestinationListInOrder(): void
     {
         $areas = $this->nodes('home')['LocalBusiness']['areaServed'];
-        $names = array_map(static fn (array $a): string => $a['name'], $areas);
+
+        // The local pickup area leads (Lahore, then its neighbourhoods - the
+        // visible "Pickup across Lahore" section), and the destination
+        // countries follow, every one of them and only them, in admin order.
+        $local = 1 + count(LocalAreas::NEIGHBOURHOODS);
+        $this->assertSame(['@type' => 'City', 'name' => LocalAreas::CITY], $areas[0]);
+        foreach (array_slice($areas, 1, $local - 1) as $i => $area) {
+            $this->assertSame(['@type' => 'Place', 'name' => LocalAreas::NEIGHBOURHOODS[$i]], $area);
+        }
+
+        $countries = array_slice($areas, $local);
+        $names     = array_map(static fn (array $a): string => $a['name'], $countries);
 
         $this->assertSame($this->facts->countryNames(), $names);
         $this->assertSame(10, count($names));
-        $this->assertSame('Country', $areas[0]['@type']);
+        foreach ($countries as $country) {
+            $this->assertSame('Country', $country['@type']);
+        }
     }
 
     public function testAHiddenDestinationIsNotClaimedAsAreaServed(): void
@@ -123,6 +137,7 @@ final class JsonLdTest extends TestCase
 
         $facts = new SiteFacts(\Speedat\Domain\SiteDoc\SiteData::fromArray($document), 7, '2026-09-20T06:15:00Z');
         $areas = $this->nodes('home', $this->ldFor($facts))['LocalBusiness']['areaServed'];
+        $areas = array_values(array_filter($areas, static fn (array $a): bool => $a['@type'] === 'Country'));
         $names = array_map(static fn (array $a): string => $a['name'], $areas);
 
         $this->assertSame(9, count($names));

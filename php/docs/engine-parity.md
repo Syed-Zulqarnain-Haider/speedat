@@ -56,9 +56,10 @@ Expected today: `17 passed, 0 failed, 887 assertions` for
 ## Regenerating the vectors
 
 Do this whenever the TypeScript engine changes, and then make the PHP and the
-JavaScript agree with the new file. There are **three** steps now, and they are
-in order: skipping the second puts the document rate back, and skipping the
-third puts the next-priced-kilogram fallback back.
+JavaScript agree with the new file. There are **four** steps now, and they are
+in order: skipping the second puts the document rate back, skipping the
+third puts the next-priced-kilogram fallback back, and skipping the fourth puts
+the em dashes back.
 
 ```bash
 cd /d/speedat
@@ -66,10 +67,15 @@ TZ=Asia/Karachi node_modules/.bin/tsx php/tools/make-vectors.ts             # 94
 cd php
 php tests/vectors/strip-document-rate.php tests/vectors/pricing.json       # 861 cases
 php tests/vectors/apply-skippable-weights.php tests/vectors/pricing.json   # 861 cases, 6 answers nulled
+php tests/vectors/apply-plain-dashes.php tests/vectors/pricing.json        # 6 expected strings: "—" -> "-"
 php bin/test.php
 ```
 
-Both derivation scripts only ever REMOVE — one drops cases and keys, the other
+The third, `apply-plain-dashes.php` (owner, 2026-10-11: no em dash in
+customer or office text), rewrites " — " to " - " in EXPECTED strings only -
+never an input, never a number.
+
+The first two derivation scripts only ever REMOVE — one drops cases and keys, the other
 turns six answers into `null` — and neither computes a price, so neither can
 move one. Both are idempotent: running either twice changes nothing.
 
@@ -88,8 +94,9 @@ wrong hour.
 
 When the Next.js app is finally deleted, this file's first table loses a row and
 `php/tools/make-vectors.ts`, `php/tests/vectors/strip-document-rate.php` and
-`php/tests/vectors/apply-skippable-weights.php` go with it. Until then those
-three scripts are the only things that may write `tests/vectors/pricing.json` —
+`php/tests/vectors/apply-skippable-weights.php` and
+`php/tests/vectors/apply-plain-dashes.php` go with it. Until then those
+four scripts are the only things that may write `tests/vectors/pricing.json` —
 never hand-edit it.
 
 ---

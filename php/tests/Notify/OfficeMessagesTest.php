@@ -41,7 +41,7 @@ final class OfficeMessagesTest extends TestCase
             self::BASE,
         );
 
-        $this->assertSame("New message from Ayesha Khan \u{2014} Canada", $mail->subject);
+        $this->assertSame("New message from Ayesha Khan - Canada", $mail->subject);
         $this->assertSame('lead', $mail->tag);
 
         $this->assertSame(

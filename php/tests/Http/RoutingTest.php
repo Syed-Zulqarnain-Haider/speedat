@@ -53,6 +53,27 @@ final class RoutingTest extends HttpTestCase
         }
     }
 
+    /** The old static site's pages, still asked for by search engines and old links. */
+    public function testTheOldHtmlPagesRedirectToThePagesThatReplacedThem(): void
+    {
+        $old = [
+            '/index.html'          => '/',
+            '/services.html'       => '/services',
+            '/about.html'          => '/about',
+            '/tracking.html'       => '/contact',
+            '/privacy-policy.html' => '/terms',
+        ];
+
+        foreach ($old as $asked => $now) {
+            $answer = $this->get($asked);
+
+            $this->assertStatus(301, $answer, $asked);
+            $this->assertSame($now, $answer->header('Location'), $asked);
+        }
+
+        $this->assertStatus(404, $this->get('/never-existed.html'), 'an unknown .html is still not found');
+    }
+
     public function testTheCanonicalFormIsServedAndNotRedirected(): void
     {
         foreach (['/', '/services', '/about', '/contact', '/faq'] as $path) {

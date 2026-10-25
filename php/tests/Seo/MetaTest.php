@@ -50,11 +50,11 @@ final class MetaTest extends TestCase
 
     public function testEveryPageTitleIsItsOwnLeafPlusTheCompanyName(): void
     {
-        $this->assertSame('Get a price — Speedat International Courier', $this->meta->title(Routes::byKey('home')));
-        $this->assertSame('Services — Speedat International Courier', $this->meta->title(Routes::byKey('services')));
-        $this->assertSame('About us — Speedat International Courier', $this->meta->title(Routes::byKey('about')));
-        $this->assertSame('Contact — Speedat International Courier', $this->meta->title(Routes::byKey('contact')));
-        $this->assertSame('Questions — Speedat International Courier', $this->meta->title(Routes::byKey('faq')));
+        $this->assertSame('Get a price - Speedat International Courier', $this->meta->title(Routes::byKey('home')));
+        $this->assertSame('Services - Speedat International Courier', $this->meta->title(Routes::byKey('services')));
+        $this->assertSame('About us - Speedat International Courier', $this->meta->title(Routes::byKey('about')));
+        $this->assertSame('Contact - Speedat International Courier', $this->meta->title(Routes::byKey('contact')));
+        $this->assertSame('Questions - Speedat International Courier', $this->meta->title(Routes::byKey('faq')));
     }
 
     public function testACompanyNameAlreadyInTheTitleIsNotRepeated(): void
@@ -80,7 +80,10 @@ final class MetaTest extends TestCase
 
         $this->assertSame($expected, $this->meta->description(Routes::byKey('home')));
         $this->assertSame(
-            'Express and Normal courier prices from Pakistan by country and weight. Book on WhatsApp.',
+            // Led by the pickup city and the Lahore neighbourhoods a local
+            // search matches on (SiteFacts::siteDescription), not the country.
+            'Express and Normal courier prices from Lahore by country and weight. Free pickup across Lahore '
+            . '- DHA, Bahria Town, Model Town and Johar Town. Book on WhatsApp.',
             $expected
         );
     }

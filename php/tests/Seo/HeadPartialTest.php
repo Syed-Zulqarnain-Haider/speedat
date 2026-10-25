@@ -40,7 +40,7 @@ final class HeadPartialTest extends TestCase
         $html = $this->render('faq');
 
         $this->assertSame(1, substr_count($html, '<title>'));
-        $this->assertStringContains('<title>Questions — Speedat International Courier</title>', $html);
+        $this->assertStringContains('<title>Questions - Speedat International Courier</title>', $html);
         $this->assertSame(1, substr_count($html, 'rel="canonical"'));
         $this->assertStringContains('<link rel="canonical" href="https://speedat.com.pk/faq">', $html);
     }

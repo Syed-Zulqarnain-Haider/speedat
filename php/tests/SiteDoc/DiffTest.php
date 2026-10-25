@@ -23,7 +23,8 @@ final class DiffTest extends SiteDocTestCase
 {
     private const MIDDOT = "\u{00b7}";
     private const NDASH  = "\u{2013}";
-    private const MDASH  = "\u{2014}";
+    // The owner replaced the em dash with a plain hyphen in admin text (2026-10-11).
+    private const DASH   = '-';
     private const HELLIP = "\u{2026}";
 
     public function testIdenticalDocumentsReportNothing(): void
@@ -53,7 +54,7 @@ final class DiffTest extends SiteDocTestCase
         $this->assertSame('PKR 4,600', $first->new);
         $this->assertNull($first->flag, 'a 2% move is not worth a warning');
 
-        $this->assertSame('+100% ' . self::MDASH . ' please double-check', $d->lines[1]->flag);
+        $this->assertSame('+100% ' . self::DASH . ' please double-check', $d->lines[1]->flag);
         $this->assertSame('1 change: 1 destination', Diff::summarise(Diff::of(Seed::site(), $this->only($b, 'gb'))));
     }
 
@@ -249,7 +250,7 @@ final class DiffTest extends SiteDocTestCase
         $this->assertSame('United Kingdom ' . self::MIDDOT . ' Express 3 kg', $d->lines[0]->label);
         $this->assertSame('PKR 10,000', $d->lines[0]->old);
         $this->assertSame('PKR 3,000', $d->lines[0]->new);
-        $this->assertSame('-70% ' . self::MDASH . ' please double-check', $d->lines[0]->flag);
+        $this->assertSame('-70% ' . self::DASH . ' please double-check', $d->lines[0]->flag);
     }
 
     /**
@@ -268,7 +269,7 @@ final class DiffTest extends SiteDocTestCase
 
         $this->assertSame('United Kingdom ' . self::MIDDOT . ' Express first slab', $line->label);
         $this->assertSame('PKR 4,500', $line->old);
-        $this->assertSame(self::MDASH, $line->new);
+        $this->assertSame(self::DASH, $line->new);
         $this->assertNull($line->flag, 'removing a price is not a percentage move');
     }
 

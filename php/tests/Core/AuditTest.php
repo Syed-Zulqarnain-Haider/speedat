@@ -257,7 +257,11 @@ final class AuditTest extends TestCase
             if (!$entry->isFile() || !str_ends_with($path, '.php')) {
                 continue;
             }
-            if (!str_contains($path, '/app/') && !str_contains($path, '/bin/')) {
+            // Judged on the path BELOW the project root: a root that is itself
+            // called /app (the Docker image) would otherwise put every file,
+            // tests/ included, "under app/".
+            $relative = substr($path, strlen(rtrim(str_replace('\\', '/', Paths::root()), '/')) + 1);
+            if (!str_starts_with($relative, 'app/') && !str_starts_with($relative, 'bin/')) {
                 continue;
             }
 

@@ -252,32 +252,54 @@ final class RatesEditorTest extends AdminViewTestCase
     }
 
     /**
-     * THE PUBLISH IS PINNED TO THE VERSION THE EDITOR WAS OPENED AT, not to
-     * the live version as it stands when the card is drawn. Printing the live
-     * version made the form agree with the row it was about to be compared
-     * with, so the stale-publish refusal could never fire from a browser.
+     * TWO VERSIONS, TWO JOBS (fix of 2026-10-25, app/Views/admin/partials/review.php).
+     *
+     * The editor's own forms stay pinned to the version the editor was OPENED
+     * at, so saving on top of a colleague's newer publish is still caught.
+     * The review card's Publish form carries the live version ITS CHANGE LIST
+     * WAS COMPARED WITH (nextVersion - 1): pinning it to the opened-at version
+     * refused every publish once the stored draft fell behind live, with no
+     * way out on screen. A publish landing between drawing the card and
+     * pressing the button still disagrees with that number and is refused.
      */
-    public function testThePublishCarriesTheOpenedAtVersionAndNotTheCurrentLiveOne(): void
+    public function testThePublishCarriesTheComparedWithVersionAndTheEditorTheOpenedAtOne(): void
     {
         // The editor was opened at version 10; version 11 has gone live since.
         $html = $this->render(['review' => $this->review()], true, 3, 10);
 
-        $this->assertStringContains('name="expectedBase" value="10"', $html, 'the publish is pinned to the opened-at version');
-        $this->assertStringNotContains('name="expectedBase" value="11"', $html, 'the form re-read the live version');
+        $card = strstr($html, '<div class="card review">');
+        $this->assertTrue(is_string($card), 'the review card is on the page');
+        $card = (string) strstr((string) $card, '</form>', true);
+        $rest = str_replace($card, '', $html);
+
+        $this->assertStringContains('name="expectedBase" value="11"', $card, 'the publish is pinned to the version the card was compared with');
+        $this->assertStringNotContains('name="expectedBase" value="10"', $card, 'the card re-used the stale opened-at version');
+        $this->assertStringContains('name="expectedBase" value="10"', $rest, 'the editor forms stay pinned to the opened-at version');
+        $this->assertStringNotContains('name="expectedBase" value="11"', $rest, 'the editor forms re-read the live version');
         $this->assertStringContains('<h2>Publishing version 12</h2>', $html, 'and the card still describes the next version');
+        $this->assertStringContains('This draft was started from version 10, and version 11 has gone live since.', $card, 'and says the draft is behind');
+    }
+
+    public function testADraftOpenedAtTheLiveVersionGetsNoBehindNotice(): void
+    {
+        $html = $this->render(['review' => $this->review()], true, 3, 11);
+
+        $this->assertStringNotContains('This draft was started from version', $html);
     }
 
     /* ---------------- the sections ---------------- */
 
     /**
-     * SIX sections, numbered 01 to 06, in order - and the seventh the React
-     * editor had is not there under any name.
+     * EIGHT sections, numbered 01 to 08, in order - Popup and then Reviews
+     * (owner, 2026-10-05) joined before History - and the "Import from Excel"
+     * section the React editor had is not there under any name or number.
+     * The eyebrow separator is a plain hyphen since 2026-10-11.
      */
-    public function testThereAreSixSectionsNumberedInOrder(): void
+    public function testThereAreEightSectionsNumberedInOrder(): void
     {
         $html = $this->render();
 
-        $this->assertSame(6, count(Sections::ALL), 'the section list itself');
+        $this->assertSame(8, count(Sections::ALL), 'the section list itself');
 
         $expected = [
             ['01', 'Rates', 'sec-rates'],
@@ -285,7 +307,9 @@ final class RatesEditorTest extends AdminViewTestCase
             ['03', 'Test', 'sec-test'],
             ['04', 'Settings', 'sec-settings'],
             ['05', 'Pages', 'sec-content'],
-            ['06', 'History', 'sec-history'],
+            ['06', 'Popup', 'sec-promo'],
+            ['07', 'Reviews', 'sec-reviews'],
+            ['08', 'History', 'sec-history'],
         ];
 
         $last = 0;
@@ -294,11 +318,13 @@ final class RatesEditorTest extends AdminViewTestCase
             $this->assertTrue($at !== false, $anchor . ' is missing');
             $this->assertTrue($at > $last, $anchor . ' is out of order');
             $last = (int) $at;
-            $this->assertStringContains($no . ' &#8212; ' . $eyebrow, $html, 'the eyebrow of ' . $anchor);
+            $this->assertStringContains('<p class="eyebrow">' . $no . ' - ' . $eyebrow, $html, 'the eyebrow of ' . $anchor);
         }
 
-        // Nothing numbered 07, and nothing counting from seven.
-        $this->assertStringNotContains('07 &#8212;', $html, 'there is no seventh section');
+        // Nothing numbered 09, and no Excel import under any name.
+        $this->assertStringNotContains('<p class="eyebrow">09 ', $html, 'there is no ninth section');
+        $this->assertStringNotContains('sec-import', $html);
+        $this->assertStringNotContains('Import from Excel', $html);
     }
 
     /** The section nav, the sidebar sub-list and the anchors cannot drift apart. */
@@ -472,7 +498,7 @@ final class RatesEditorTest extends AdminViewTestCase
 
         // Economy for Türkiye prices 1 kg and 5 kg and nothing else. 2-4 kg are
         // gaps; 6-25 kg are simply not carried.
-        $this->assertStringContains('name="dest[tr][rates][eco][grid][6]" value="" placeholder="&#8212;"', $html);
+        $this->assertStringContains('name="dest[tr][rates][eco][grid][6]" value="" placeholder="-"', $html);
         $this->assertSame(
             1,
             preg_match(
@@ -647,7 +673,11 @@ final class RatesEditorTest extends AdminViewTestCase
         $html = $this->render(['changeCount' => 0]);
 
         $this->assertStringContains('No unpublished changes', $html);
-        $this->assertStringContains('form="discardform" data-confirm="Confirm discard" disabled>', $html, 'Discard is refused');
+        $this->assertSame(
+            1,
+            preg_match('#form="discardform" data-discard\s+data-confirm="[^"]*" disabled>Discard all changes</button>#', $html),
+            'Discard is refused'
+        );
         $this->assertStringContains('formaction="' . Routes::REVIEW . '" disabled>', $html, 'and so is Review and publish');
     }
 
@@ -672,7 +702,7 @@ final class RatesEditorTest extends AdminViewTestCase
     public function testTheReviewCardOffersTheGoLiveAndResumeTicksOnlyWhenTheyApply(): void
     {
         $plain = $this->render(['review' => $this->review()]);
-        $this->assertStringContains('Rates are live &#8212; remove the sample notice from the website', $plain);
+        $this->assertStringContains('Rates are live - remove the sample notice from the website', $plain);
         $this->assertStringNotContains('Show prices again after publishing', $plain, 'nothing is on hold');
 
         $held = $this->render([
@@ -732,7 +762,7 @@ final class RatesEditorTest extends AdminViewTestCase
         $this->assertStringContains('name="dest[ca][name]" value="Canada" maxlength="120"' . "\n" . '                   aria-label="Destination name" form="row-ca" disabled', $html);
         $this->assertStringContains('name="add" value="1" disabled', $html);
         $this->assertStringContains(
-            'name="dest[ca][rates][exp][grid][1]" value="5220" placeholder="&#8212;"' . "\n"
+            'name="dest[ca][rates][exp][grid][1]" value="5220" placeholder="-"' . "\n"
             . '                           aria-label="Canada Express 1 kg price" form="row-ca" disabled',
             $html,
             'a price box'
@@ -750,8 +780,14 @@ final class RatesEditorTest extends AdminViewTestCase
     {
         $html = $this->render();
 
-        $this->assertStringContains('>Hold prices</a>', $html, 'the button is a link, so it works without JavaScript');
-        $this->assertStringContains('href="' . Routes::holdDialog() . '"', $html);
+        // The button says what it does in words (the hold block was reworded
+        // so it no longer reads as decoration), and it is still a link.
+        $this->assertStringContains('<strong class="hold-now">Prices are showing on the website</strong>', $html);
+        $this->assertStringContains(
+            'href="' . Routes::holdDialog() . '" data-hold-open>Take prices off the website</a>',
+            $html,
+            'the button is a link, so it works without JavaScript'
+        );
         $this->assertStringContains('Take every price off the website now?', $html);
         $this->assertStringContains('maxlength="' . HoldPanel::MESSAGE_MAX . '"', $html, 'the message is capped at the column width');
         $this->assertStringContains('<input type="hidden" name="on" value="1">', $html);
@@ -775,16 +811,25 @@ final class RatesEditorTest extends AdminViewTestCase
 
     /* ---------------- the rest of the page ---------------- */
 
-    /** Three tiles, not four: the sheets counter went with the feature. */
-    public function testThereAreThreeDashboardTiles(): void
+    /**
+     * Two tiles: what is waiting to publish, and new leads. The sheets counter
+     * went with the Excel feature; the live version moved out of a tile into
+     * the one-sentence status banner under the heading.
+     */
+    public function testThereAreTwoDashboardTilesAndTheLiveVersionIsInTheBanner(): void
     {
         $html = $this->render();
 
-        $this->assertSame(3, substr_count($html, 'class="tile'), 'three tiles');
-        $this->assertStringContains('Live version', $html);
-        $this->assertStringContains('Prices', $html);
-        $this->assertStringContains('New leads', $html);
-        $this->assertStringContains('href="' . Routes::INBOX . '"', $html, 'the leads tile is a link to the inbox');
+        $this->assertSame(2, substr_count($html, 'class="tile'), 'two tiles');
+        $this->assertStringContains('<span class="eyebrow">Unpublished</span>', $html);
+        $this->assertStringContains('customers still see version 11', $html);
+        $this->assertStringContains('<span class="eyebrow">New leads</span>', $html);
+        $this->assertStringContains('<a class="tile tone-hot" href="' . Routes::INBOX . '">', $html, 'the leads tile is a link to the inbox');
+        $this->assertStringContains('Customers see <strong>version 11</strong>.', $html, 'the banner names the live version');
+
+        $none = $this->render(['changeCount' => 0]);
+        $this->assertStringContains('<span class="eyebrow">Nothing waiting</span>', $none);
+        $this->assertStringContains('the editor matches version 11', $none);
     }
 
     /** Bulk adjust posts to its own action and re-states nothing the server will not check. */

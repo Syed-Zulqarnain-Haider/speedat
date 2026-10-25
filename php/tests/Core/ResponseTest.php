@@ -33,7 +33,10 @@ final class ResponseTest extends TestCase
     {
         $report = $this->childReport([]);
 
-        $this->assertSame('', $report['zlib'], 'no compression in this child');
+        // The flag's default spelling depends on the build: '' where a php.ini
+        // says Off (the host), '0' with no php.ini at all (the Docker image).
+        // Both are off; what matters is that the child did not turn it on.
+        $this->assertTrue(in_array($report['zlib'], ['', '0'], true), 'no compression in this child, got "' . $report['zlib'] . '"');
         $this->assertTrue($report['survives']);
 
         // strlen(), the byte count - not mb_strlen(), which would promise fewer
@@ -92,7 +95,7 @@ final class ResponseTest extends TestCase
     {
         $report = $this->childReport([], 'gzhandler');
 
-        $this->assertSame('', $report['zlib'], 'this one is not the ini flag');
+        $this->assertTrue(in_array($report['zlib'], ['', '0'], true), 'this one is not the ini flag, got "' . $report['zlib'] . '"');
         $this->assertTrue(in_array('ob_gzhandler', $report['handlers'], true), 'the handler really is on the stack');
         $this->assertFalse($report['survives']);
         $this->assertFalse(isset($report['headers']['Content-Length']));

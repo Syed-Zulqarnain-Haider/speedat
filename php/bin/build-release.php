@@ -1247,7 +1247,7 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
        pdo_mysql is missing from that line the cron is pointed at a different
        PHP build and nothing below it means anything.
 
-   10. WALK THE SITE.
+    10. WALK THE SITE.
          https://your-domain/health     -> {"ok":true}
          https://your-domain/           -> the calculator, with prices
          https://your-domain/admin      -> sign in

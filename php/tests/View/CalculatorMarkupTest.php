@@ -108,16 +108,22 @@ final class CalculatorMarkupTest extends ViewTestCase
     {
         $html = $this->home();
 
-        // The headline and its line are generated from the rate document.
+        // The headline is generated from the rate document. Its sub-line is
+        // NOT: the owner had the automatic "1 kg from PKR X · N to M days"
+        // promise removed (2026-10-11, app/View/HomeView.php), so with no
+        // heroSub typed in Admin there is no lede at all.
         $this->assertStringContains('<h1>Lahore to Canada, Australia and Narnia.</h1>', $html);
-        $this->assertStringContains('1 kg from PKR 4,400', $html);
+        $this->assertStringNotContains('1 kg from PKR', $html);
+        $this->assertStringNotContains('<p class="lede">', $html);
         // The proof row: the owner's `Label | Value` lines as "Value Label",
         // joined by a middle dot - and nothing at all when he set none, because
         // the one thing the brief forbids outright is an invented count.
         $this->assertStringContains('<p class="stats">3 countries · 0.5 kg minimum</p>', $html);
         // Step 1: the tiles, with the flag, the name and the from-price.
         $this->assertStringContains('<div class="ctiles" role="radiogroup" aria-label="Country">', $html);
-        $this->assertStringContains('<button type="button" role="radio" class="ctile" aria-checked="false">', $html);
+        // Each tile states its country and from-price outright for screen
+        // readers, the days range read as "to" rather than "minus".
+        $this->assertStringContains('<button type="button" role="radio" class="ctile" aria-checked="false" aria-label="Canada, from PKR 4,600, 8 to 12 days">', $html);
         $this->assertStringContains('src="/assets/flags/ca.svg', $html);
         $this->assertStringContains('<span class="ctile-name">Canada</span>', $html);
         $this->assertStringContains('<span class="ctile-from">from PKR 4,600', $html);
@@ -271,11 +277,26 @@ final class CalculatorMarkupTest extends ViewTestCase
         $this->assertStringNotContains('Sample prices for now', $html);
     }
 
-    public function testTheHeroLineFallsBackToThePickupCityWhenNoPriceMayBePrinted(): void
+    /**
+     * The hero sub-line used to be generated - a price, or under hold "Pickup
+     * in Lahore · 3 to 12 days". The owner had the generated line removed
+     * (2026-10-11, app/View/HomeView.php): only a heroSub typed in Admin shows.
+     * So with prices held and nothing typed there is no lede and no promise.
+     */
+    public function testTheHeroHasNoGeneratedLineWhenPricesAreHeld(): void
     {
         $html = $this->home(['on' => true, 'message' => 'Back soon.']);
 
-        $this->assertStringContains('Pickup in Lahore · 3 to 12 days', $html);
+        $this->assertStringNotContains('<p class="lede">', $html);
+        $this->assertStringNotContains('Pickup in Lahore · 3 to 12 days', $html);
+        $this->assertStringNotContains('from PKR', $html, 'nothing priced is printed under hold');
+    }
+
+    public function testAHeroSubTheOwnerTypedStillShows(): void
+    {
+        $html = $this->home([], ['content' => ['heroSub' => 'Parcels to family abroad, collected from your door.']]);
+
+        $this->assertStringContains('<p class="lede">Parcels to family abroad, collected from your door.</p>', $html);
     }
 
     /* --------------------------------------------------- the tile split */

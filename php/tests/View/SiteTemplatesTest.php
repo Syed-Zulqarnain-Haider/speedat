@@ -173,7 +173,16 @@ final class SiteTemplatesTest extends ViewTestCase
         $this->assertStringContains('<dt>How long does it take?</dt>', $html);
         $this->assertStringContains('<dd>Three to ten working days.</dd>', $html);
         // Nothing folds: no accordion, no <details>, here or in the Next app.
-        $this->assertStringNotContains('<details', $html);
+        // The one <details> on the page is the header's phone menu
+        // (site/partials/header.php), so the check is on the main content.
+        $start = strpos($html, '<main');
+        $end   = strpos($html, '</main>');
+        $this->assertTrue(is_int($start) && is_int($end), 'the page has a <main>');
+        $main = substr($html, (int) $start, (int) $end - (int) $start);
+        $this->assertStringContains('<dl class="faq-list">', $main);
+        $this->assertStringNotContains('<details', $main);
+        $this->assertSame(1, substr_count($html, '<details'), 'only the header menu folds');
+        $this->assertStringContains('<details class="menu">', $html);
     }
 
     public function testContactStatesEachNumberOnceAndCarriesTheFormsGuards(): void

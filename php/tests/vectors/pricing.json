@@ -1,5 +1,5 @@
 {
- "note": "Generated from the TypeScript engine by php/tools/make-vectors.ts, then had its document-rate cases removed (owner, 2026-09-27) and its next-priced-kilogram fallback removed (owner, 2026-09-28) by the rules in docs/engine-parity.md. Do not hand-edit: regenerate and re-apply both derivations, in that order.",
+ "note": "Generated from the TypeScript engine by php/tools/make-vectors.ts, then had its document-rate cases removed (owner, 2026-09-27), its next-priced-kilogram fallback removed (owner, 2026-09-28) and the em dashes in its expected text made plain (owner, 2026-10-11) by the rules in docs/engine-parity.md. Do not hand-edit: regenerate and re-apply all three derivations, in that order.",
  "generator": "php/tools/make-vectors.ts",
  "timezone": "Asia/Karachi",
  "count": 861,
@@ -31874,7 +31874,7 @@
        }
       ]
      },
-     "expected": "Charged on 24 kg for 2 pieces — volumetric weight (24 kg) is higher than actual (2 kg)."
+     "expected": "Charged on 24 kg for 2 pieces - volumetric weight (24 kg) is higher than actual (2 kg)."
     },
     {
      "name": "grid: 0.3 kg",
@@ -31994,7 +31994,7 @@
        }
       ]
      },
-     "expected": "Charged on 24 kg for 2 pieces — volumetric weight (24 kg) is higher than actual (2 kg)."
+     "expected": "Charged on 24 kg for 2 pieces - volumetric weight (24 kg) is higher than actual (2 kg)."
     },
     {
      "name": "seedFirst1Step05: 0.3 kg",
@@ -32114,7 +32114,7 @@
        }
       ]
      },
-     "expected": "Charged on 24 kg for 2 pieces — volumetric weight (24 kg) is higher than actual (2 kg)."
+     "expected": "Charged on 24 kg for 2 pieces - volumetric weight (24 kg) is higher than actual (2 kg)."
     },
     {
      "name": "seedFirstKg1: 0.3 kg",
@@ -32234,7 +32234,7 @@
        }
       ]
      },
-     "expected": "Charged on 24 kg for 2 pieces — volumetric weight (24 kg) is higher than actual (2 kg)."
+     "expected": "Charged on 24 kg for 2 pieces - volumetric weight (24 kg) is higher than actual (2 kg)."
     }
    ]
   },
@@ -33112,7 +33112,7 @@
       "site": "gridTopsAt3"
      },
      "expected": [
-      "United Kingdom · Express: no price above 3 kg — parcels of 4–25 kg get no price on the site and are sent to WhatsApp.",
+      "United Kingdom · Express: no price above 3 kg - parcels of 4–25 kg get no price on the site and are sent to WhatsApp.",
       "United Kingdom: Express is cheaper than Normal (PKR 4,000 vs PKR 4,050)."
      ]
     },
@@ -33122,8 +33122,8 @@
       "site": "gridWithGaps"
      },
      "expected": [
-      "United Kingdom · Express: no price for 20 weights (3, 4, 6, 7, 8, 9… kg) — those parcels are charged at the next heavier priced kg.",
-      "United Kingdom · Express: no price above 24 kg — parcels of 25 kg get no price on the site and are sent to WhatsApp.",
+      "United Kingdom · Express: no price for 20 weights (3, 4, 6, 7, 8, 9… kg) - those parcels are charged at the next heavier priced kg.",
+      "United Kingdom · Express: no price above 24 kg - parcels of 25 kg get no price on the site and are sent to WhatsApp.",
       "United Kingdom: Express is cheaper than Normal (PKR 4,000 vs PKR 4,050)."
      ]
     },

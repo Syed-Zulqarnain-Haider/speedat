@@ -29,32 +29,36 @@ final class AdminPublishTest extends AdminTestCase
     private const DEST = 'gb';
 
     /**
-     * The CHEAPEST service, deliberately.
-     *
-     * The home page's country tiles print a "from" price, which is the lowest 1
-     * kg price across the services - so a test that edited Express would publish
-     * a change the public page does not show, and would prove nothing about the
-     * round trip. Every price these tests set is therefore below the other
-     * service's, whose 1 kg box is 5,600.
+     * The service these tests edit. Every price they set is below Express's
+     * 1 kg box (5,600), so it is also the cheapest service - which keeps the
+     * test meaningful whichever cheapest-price summary the home page carries.
      */
     private const SERVICE = 'normal';
 
     /**
-     * WHAT THE TILE PRINTS IS NOT THE BOX THE OWNER TYPED, and every figure
-     * below is the printed one.
+     * WHERE THE ROUND TRIP IS READ. The home page used to be checked for the
+     * country tile's "from" price; the live site no longer prints one there,
+     * so these tests read the two things the public page is built from:
      *
-     * `View\Copy::fromPrice()` is the cheapest service at 1 kg PLUS the add-ons
-     * that are on by default, and the seed's `settings.addons` reads "Pickup
-     * and service charges | 500 | on". So the seed's 1 kg Normal box of 4,050
-     * reaches the home page as 4,550, and a price these tests type reaches it
-     * as that figure plus 500. `View\CopyTest` is where that rule is pinned;
-     * this test only has to spell the arithmetic out instead of re-deriving it.
+     *   1. THE RATES BOARD (`View\BoardView`) - the United Kingdom row's
+     *      Normal cell, server-rendered and visible without JavaScript.
+     *   2. THE CALCULATOR DATA - the published document in
+     *      <script id="speedat-calculator">, which is what pricing.js quotes
+     *      every customer from. Its 1 kg box must be exactly the typed price.
+     *
+     * WHAT THE BOARD PRINTS IS NOT THE BOX THE OWNER TYPED: it is the 1 kg
+     * price PLUS the add-ons that are on by default, and the seed's
+     * `settings.addons` reads "Delivery | 1000 | on". So the seed's 1 kg
+     * Normal box of 4,050 reaches the board as 5,050, and a price these tests
+     * type reaches it as that figure plus 1,000.
      *
      * The typed prices are multiples of `settings.roundTo` (10) on purpose, so
      * the add-on is the ONLY difference between the two numbers and a failure
      * here can never be an argument about rounding.
      */
-    private const SEED_FROM = '4,550';
+    private const SEED_BOX = 4050;
+
+    private const ADDON_ON = 1000;
 
     public function setUp(): void
     {
@@ -78,8 +82,7 @@ final class AdminPublishTest extends AdminTestCase
         $home = $this->get('/');
 
         $this->assertSame(200, $home->response->status, 'the home page after a publish');
-        // 3,110 typed + the 500 add-on.
-        $this->assertStringContains('3,610', $home->body(), 'the published price is not on the home page');
+        $this->assertPublicPrice(3110, $home->body(), 'after the publish');
         $this->assertStringNotContains('Sample prices for now', $home->body(), 'the sample notice survived "Rates are live"');
 
         $detail = $this->auditDetail('publish');
@@ -209,7 +212,7 @@ final class AdminPublishTest extends AdminTestCase
 
     public function testHoldingPricesTakesThemOffThePublicPageAtOnce(): void
     {
-        $this->assertStringContains(self::SEED_FROM, $this->get('/')->body(), 'the seed prices are not on the home page to begin with');
+        $this->assertPublicPrice(self::SEED_BOX, $this->get('/')->body(), 'with the seed, before any hold');
 
         $answer = $this->adminPost(Routes::HOLD, ['on' => '1', 'message' => 'New rates on Monday.']);
 
@@ -220,7 +223,8 @@ final class AdminPublishTest extends AdminTestCase
 
         $this->assertStringContains('data-hold-panel', $home, 'the hold panel is not on the public page');
         $this->assertStringContains('New rates on Monday.', $home, 'the message the owner wrote is not shown');
-        $this->assertStringNotContains(self::SEED_FROM, $home, 'a price survived the hold');
+        $this->assertStringNotContains($this->boardFigure(self::SEED_BOX), $home, 'a price survived the hold');
+        $this->assertStringNotContains('id="speedat-calculator"', $home, 'the calculator data survived the hold');
         $this->assertStringNotContains('assets/js/pricing.js', $home, 'the rate document still reaches the browser while prices are held');
 
         // And the editor says so, with the way back.
@@ -242,8 +246,7 @@ final class AdminPublishTest extends AdminTestCase
         $home = $this->get('/')->body();
 
         $this->assertStringNotContains('data-hold-panel', $home, 'prices are still held after a publish that lifted it');
-        // 3,330 typed + the 500 add-on.
-        $this->assertStringContains('3,830', $home, 'the new price is not on the home page');
+        $this->assertPublicPrice(3330, $home, 'after the publish that lifted the hold');
     }
 
     public function testPublishingWithoutTheTickLeavesPricesHeld(): void
@@ -276,6 +279,54 @@ final class AdminPublishTest extends AdminTestCase
     /* ------------------------------------------------------------ internals */
 
     /** Save a draft whose first grid box for the first service is $price. */
+    /** "PKR 5,050": the board's figure for a typed 1 kg box. */
+    private function boardFigure(int $box): string
+    {
+        return 'PKR ' . number_format($box + self::ADDON_ON);
+    }
+
+    /**
+     * The typed 1 kg price is what the public page shows and quotes from: the
+     * board's United Kingdom row prints it (plus the on-by-default add-on) in
+     * the Normal column, and the calculator data carries the box itself.
+     */
+    private function assertPublicPrice(int $box, string $home, string $when): void
+    {
+        // The board: header order decides which cell is Normal.
+        $this->assertSame(1, preg_match('#<table class="rates">.*?<thead>(.*?)</thead>#s', $home, $head), 'no rates board on the home page ' . $when);
+        preg_match_all('#<th scope="col">([^<]*)</th>#', $head[1], $cols);
+        $column = array_search('Normal', $cols[1], true);
+        $this->assertTrue(is_int($column) && $column > 0, 'the board has no Normal column ' . $when);
+
+        $this->assertSame(
+            1,
+            preg_match('#<span>United Kingdom</span></th>((?:\s*<td>.*?</td>)+)\s*</tr>#s', $home, $row),
+            'no United Kingdom row on the board ' . $when
+        );
+        preg_match_all('#<td>(.*?)</td>#s', $row[1], $cells);
+        $this->assertStringContains(
+            '<b>' . $this->boardFigure($box) . '</b>',
+            (string) ($cells[1][$column - 1] ?? ''),
+            'the published price is not on the rates board ' . $when
+        );
+
+        // The calculator data the browser quotes from.
+        $this->assertSame(
+            1,
+            preg_match('#<script type="application/json" id="speedat-calculator">(.*?)</script>#s', $home, $blob),
+            'no calculator data on the home page ' . $when
+        );
+        $data = json_decode($blob[1], true);
+        $this->assertTrue(is_array($data), 'the calculator data is not JSON ' . $when);
+        $found = null;
+        foreach ($data['site']['destinations'] ?? [] as $dest) {
+            if (($dest['id'] ?? null) === self::DEST) {
+                $found = $dest['rates'][self::SERVICE]['grid']['1'] ?? null;
+            }
+        }
+        $this->assertTrue($found !== null && (float) $found === (float) $box, 'the calculator data does not carry the published 1 kg box ' . $when);
+    }
+
     private function editPrice(string $price): void
     {
         $this->saveDraftWith([], $price);

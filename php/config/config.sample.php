@@ -89,6 +89,17 @@ return [
         'firebase_project_id' => '',
 
         /**
+         * The rest of the Firebase web app's config, as the Firebase console
+         * prints it (Project settings -> Your apps -> Web app -> SDK setup and
+         * configuration). The "Sign in with Google" button needs all four.
+         * None of these is a secret - Firebase ships them to every browser -
+         * but they belong here, beside the project id, not in a template.
+         */
+        'firebase_api_key'     => '',
+        'firebase_auth_domain' => '',
+        'firebase_app_id'      => '',
+
+        /**
          * Allow a password + TOTP sign-in alongside Firebase. Intended as the
          * way back in when Google is unreachable; leave it off unless the
          * owner asks for it.

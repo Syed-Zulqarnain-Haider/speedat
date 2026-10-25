@@ -97,14 +97,17 @@ final class AdminDesksTest extends AdminViewTestCase
         $this->assertStringContains('<div class="hint">EK623-99814</div>', $html, 'the tracking number');
         $this->assertStringContains('<span class="pill s-in_transit">In transit</span>', $html);
         $this->assertStringContains('<span class="pill s-exception">Needs attention</span>', $html);
-        // A shipment with nothing in a column reads as an em dash, not as blank.
+        // A shipment with nothing in a column reads as a dash, not as blank.
         // The dash comes off the view model rather than being retyped here.
+        // Since the owner's plain-hyphen change (2026-10-11) it is "-", which
+        // also occurs all over the markup, so the count is of CELLS whose
+        // whole text is the dash, not of the character.
         $page = $this->shipmentsPage();
         $dash = $page->table()[1]['customerName'];
+        $this->assertSame('-', $dash);
         $this->assertSame(
-            // Two cells, plus the one in the page's own eyebrow ("03 - Shipments").
-            2 + substr_count($page->eyebrow(), $dash),
-            substr_count($html, $dash),
+            2,
+            preg_match_all('#<td>\s*' . preg_quote(htmlspecialchars($dash), '#') . '\s*(?:<div|</td>)#', $html),
             'the nameless row shows a dash for name and carrier'
         );
         // The one needing attention is marked the same way a changed rate row is.

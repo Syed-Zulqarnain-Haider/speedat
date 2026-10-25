@@ -975,6 +975,18 @@ section.block .desc {
   min-width: 180px;
   font-weight: 600;
 }
+/* The slab table's column widths were set by its headings, not its boxes: "FIRST 0.5 KG" in
+   uppercase mono with nowrap made each price column 141px around a 92px box, and the table
+   1,241px inside a 916px wrapper at 1280, so the second service was off-screen until the owner
+   scrolled sideways. The headings may now wrap, and do only where the space runs out, and the
+   name box starts narrower: the same row height, and both services on screen at 1440. Grid
+   mode has its own widths and is left alone. */
+.admin-app table.rates:not(.rates-grid) thead tr:last-child th:not(:first-child):not(:last-child) {
+  white-space: normal;
+}
+.admin-app table.rates:not(.rates-grid) td > input.name {
+  min-width: 150px;
+}
 .admin-app td > input[type="checkbox"] {
   width: 18px;
   height: 18px;

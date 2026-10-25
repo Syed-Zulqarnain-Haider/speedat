@@ -48,8 +48,20 @@ final class RobotsTest extends TestCase
             $this->assertStringContains('Disallow: ' . $prefix, $text);
         }
 
-        // And nothing else is disallowed: one Disallow line per prefix.
-        $this->assertSame(count(Routes::DISALLOWED), substr_count($text, 'Disallow:'));
+        // And nothing else is disallowed. The file has more than one
+        // User-agent group (everyone, then the named AI crawlers), and every
+        // group must disallow exactly the route list - no more, no fewer.
+        $groups = 0;
+        foreach (preg_split('/\n\s*\n/', trim($text)) ?: [] as $block) {
+            if (!str_contains($block, 'User-agent:')) {
+                continue;
+            }
+            $groups++;
+            preg_match_all('/^Disallow: (.*)$/m', $block, $m);
+            $this->assertSame(array_values(Routes::DISALLOWED), $m[1], 'the Disallow lines of group ' . $groups);
+        }
+        $this->assertTrue($groups >= 1, 'robots.txt has at least one User-agent group');
+        $this->assertSame($groups * count(Routes::DISALLOWED), substr_count($text, 'Disallow:'), 'no Disallow outside a group');
     }
 
     public function testNoPublicPageIsAccidentallyBlocked(): void
