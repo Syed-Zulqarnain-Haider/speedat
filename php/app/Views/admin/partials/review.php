@@ -21,6 +21,22 @@ declare(strict_types=1);
  * disagrees the publish IS refused - which is the only reason the field
  * exists.
  *
+ * ...EXCEPT WHEN THE DRAFT ITSELF IS BEHIND, which is what kept speedat.co
+ * from publishing anything from 2026-10-16: the stored draft said it was
+ * branched from version 17 while 18 was live, so the editor was "opened at" 17
+ * on every fresh sign-in, every publish was refused as a conflict, and the
+ * refusal's own advice ("Reload") reloaded the same 17. Nothing on the screen
+ * could get the owner out of it short of throwing the draft away.
+ *
+ * So the form now carries THE LIVE VERSION THIS CARD WAS COMPARED WITH
+ * (`nextVersion - 1`). That is what the owner actually confirms: the change
+ * list above is drawn against that version, and if somebody publishes between
+ * drawing the card and pressing the button the number disagrees and the
+ * publish is refused exactly as before. A colleague's publish while the editor
+ * was open is still caught one step earlier, by the draft's revision
+ * fingerprint, when the editor saves on the way here. When the draft did start
+ * from an older version the card says so in words, above the list.
+ *
  * `admin.js` does one thing here: scrolls the card clear of the fixed publish
  * bar. Without it the card is still on the page, still complete.
  *
@@ -34,6 +50,7 @@ declare(strict_types=1);
 use Speedat\View\Admin\Routes;
 
 $baseVersion = isset($baseVersion) && is_int($baseVersion) ? $baseVersion : 0;
+$comparedWith = max(0, $review->nextVersion - 1);
 ?>
 <?php if ($review->blocked()) { ?>
 <div class="notice err">
@@ -49,6 +66,9 @@ $baseVersion = isset($baseVersion) && is_int($baseVersion) ? $baseVersion : 0;
   <p class="eyebrow">Review</p>
   <h2>Publishing version <?= e($review->nextVersion) ?></h2>
   <p class="desc"><?= e($review->countSentence()) ?> <?= e($review->effectSentence()) ?></p>
+  <?php if ($baseVersion > 0 && $baseVersion < $comparedWith) { ?>
+  <p class="notice warn">This draft was started from version <?= e($baseVersion) ?>, and version <?= e($comparedWith) ?> has gone live since. The changes below are compared with version <?= e($comparedWith) ?>, the one customers see now - publishing replaces it with exactly what is listed.</p>
+  <?php } ?>
   <ul class="diff">
     <?php foreach ($review->lines as $line) { ?>
     <li>
@@ -74,7 +94,7 @@ $baseVersion = isset($baseVersion) && is_int($baseVersion) ? $baseVersion : 0;
   <?php } ?>
   <form method="post" action="<?= e($this->url(Routes::PUBLISH)) ?>">
     <?= $csrf->field() ?>
-    <input type="hidden" name="expectedBase" value="<?= e($baseVersion) ?>">
+    <input type="hidden" name="expectedBase" value="<?= e($comparedWith) ?>">
     <?php if ($review->offerGoLive) { ?>
     <label class="chk">
       <input type="hidden" name="goLive" value="0">

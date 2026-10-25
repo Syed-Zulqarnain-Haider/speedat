@@ -100,6 +100,37 @@ final class AdminPublishTest extends AdminTestCase
         $this->assertStringContains('No unpublished changes', $body, 'the draft still looks dirty after a publish');
     }
 
+    /**
+     * The state speedat.co was stuck in from 2026-10-16: a draft row branched
+     * from version 1 while version 2 is live. Every fresh sign-in opened the
+     * editor "at" 1, so every publish was refused as a conflict and reloading
+     * changed nothing. The review card must offer a publish that goes through.
+     */
+    public function testADraftBranchedFromAnOlderVersionCanStillBePublished(): void
+    {
+        Repo::publishVersion(new \Speedat\Domain\SiteDoc\PublishArgs(
+            data: Repo::getLatestVersion()->data,
+            by: 'someone.else@speedat.test',
+            source: 'admin',
+            summary: 'Their change',
+            changeCount: 1,
+        ));
+        Live::forget();
+        $this->editPrice('3333');
+        Db::exec('UPDATE draft SET base_version = 1');
+
+        $body = $this->adminGet(Routes::REVIEW)->body();
+
+        $this->assertStringContains('name="expectedBase" value="2"', $body, 'the card does not publish against the version it compared with');
+        $this->assertStringContains('started from version 1, and version 2 has gone live since', $body, 'the card does not say the draft is behind');
+
+        $answer = $this->adminPost(Routes::PUBLISH, ['expectedBase' => '2']);
+
+        $this->assertRedirects(Routes::RATES, $answer, 'the publish');
+        $this->assertSame(3, $this->liveVersion(), 'the publish from a behind draft did not land');
+        $this->assertSame(3, (int) Db::value('SELECT base_version FROM draft'), 'the draft was not re-based onto the new version');
+    }
+
     public function testPublishingOnTopOfSomebodyElsesVersionIsRefusedWithTheSameSentence(): void
     {
         // Somebody else published while this review was on screen.

@@ -43,3 +43,4 @@ Thumbs.db
 *.sql
 !/db/migrations/*.sql
 !/bin/local/bootstrap-db.sql
+!/bin/local/docker/*.sql

@@ -42,8 +42,17 @@ use Speedat\Http\Kernel;
  * /php` sibling. Move the account, rename the domain, migrate to another host:
  * as long as `public_html` and `speedat_main` stay next to each other, this
  * keeps working and nobody has to remember to edit a path.
+ *
+ * In the repository (and on a development machine) this file is `php/public/
+ * index.php` and the application is simply its parent, `php/`. That layout is
+ * the fallback, taken only when there is no `speedat_main` sibling, so the
+ * server never depends on it.
  */
 $root = dirname(__DIR__) . '/speedat_main/php';
+
+if (!is_file($root . '/app/Core/Autoloader.php') && is_file(dirname(__DIR__) . '/app/Core/Autoloader.php')) {
+    $root = dirname(__DIR__);
+}
 
 $autoloader = $root . '/app/Core/Autoloader.php';
 

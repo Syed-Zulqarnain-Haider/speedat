@@ -1,0 +1,41 @@
+# The Mac/Linux twin of the Windows toolchain in ../README-local.md:
+# MariaDB 11.4 (what Hostinger runs) and PHP 8.2 serving php/public.
+#
+#   docker compose -f php/bin/local/docker/compose.yml up -d --build
+#   docker compose -f php/bin/local/docker/compose.yml exec php php bin/test.php
+#
+# The site is then on http://127.0.0.1:8081/ and the database on 127.0.0.1:3307,
+# the same ports the Windows setup uses. config/config.php must point db.host at
+# "db" (the service name below), port 3306.
+name: speedat-php
+
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "1"
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - ../bootstrap-db.sql:/docker-entrypoint-initdb.d/0-bootstrap.sql:ro
+      - ./1-docker-user.sql:/docker-entrypoint-initdb.d/1-docker-user.sql:ro
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 3s
+      retries: 20
+
+  php:
+    build: .
+    working_dir: /app
+    command: php -S 0.0.0.0:8081 -t public public/router.php
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - ../../..:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
