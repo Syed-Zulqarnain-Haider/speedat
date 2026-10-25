@@ -64,6 +64,10 @@ export function AdminEditor({ live: liveProp, draft: initial, versions, user, im
     setLiveSeen(liveProp);
     if (liveProp.version >= live.version) setLive(liveProp);
   }
+  // The version the draft in memory was built on. It is what publish expects to still be live, so a version
+  // published elsewhere since then is refused rather than silently reverted. It moves only when the draft is
+  // re-based (our own publish, discard, restore), never because a refresh brought a newer `live`.
+  const [base, setBase] = useState(initial.baseVersion);
   const [hold, setHold] = useState<Hold>(initialHold);
   const [holdSeen, setHoldSeen] = useState(initialHold);
   if (initialHold !== holdSeen) {
@@ -129,7 +133,8 @@ export function AdminEditor({ live: liveProp, draft: initial, versions, user, im
   // edit re-arms the timer, so the callback always closes over the latest draft.
   useEffect(() => {
     // Not while publishing: the publish stores this same draft, and a save racing it could re-base the stored draft on the old version.
-    if (save !== "dirty" || publishing) return;
+    // Nor while discard/restore is on the wire: a save landing after them would bring the thrown-away edits back.
+    if (save !== "dirty" || publishing || busy) return;
     const t = setTimeout(async () => {
       setSave("saving");
       const res = await saveDraftAction(draft);
@@ -143,7 +148,7 @@ export function AdminEditor({ live: liveProp, draft: initial, versions, user, im
       }
     }, 800);
     return () => clearTimeout(t);
-  }, [save, draft, publishing, showToast]);
+  }, [save, draft, publishing, busy, showToast]);
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
@@ -176,7 +181,7 @@ export function AdminEditor({ live: liveProp, draft: initial, versions, user, im
     setPubMsg("Publishing…");
     // `resume` is only an instruction when this page knows of a hold; otherwise the server lifts any hold it finds
     // (switched on by someone else since this page loaded) and says so in the result.
-    const res = await publishAction({ data: draft, expectedBase: live.version, goLive: sent.live, resume: hold.on ? resume : undefined }).catch(
+    const res = await publishAction({ data: draft, expectedBase: base, goLive: sent.live, resume: hold.on ? resume : undefined }).catch(
       (): PublishResult => ({ ok: false, code: "network", message: "The publish could not be confirmed (connection lost). Reload to see whether it went out before trying again." }),
     );
     setBusy(false);
@@ -191,7 +196,10 @@ export function AdminEditor({ live: liveProp, draft: initial, versions, user, im
     replace(sent, res.publishedAt);
     // The props catch up on router.refresh(); until then a second publish must already expect this version.
     setLive({ ...sent, version: res.version, publishedAt: res.publishedAt });
-    if (res.hold) setHold(res.hold);
+    setBase(res.version);
+    // A hold switched on after the publish committed (the bar stays clickable) must not be shown as lifted.
+    const pubHold = res.hold;
+    if (pubHold) setHold((h) => (newerHold(pubHold, h) ? pubHold : h));
     const knewOfHold = hold.on;
     const held = res.hold ? res.hold.on : hold.on && !res.resumed;
     const msg = res.resumed
@@ -212,6 +220,7 @@ export function AdminEditor({ live: liveProp, draft: initial, versions, user, im
     setBusy(false);
     if (!res.ok) return showToast(res.message);
     replace(res.data, res.updatedAt);
+    setBase(res.baseVersion);
     showToast("Changes discarded");
     router.refresh(); // sheets that were in the discarded draft are back to waiting
   };
@@ -222,6 +231,8 @@ export function AdminEditor({ live: liveProp, draft: initial, versions, user, im
     setBusy(false);
     if (!res.ok) return showToast(res.message);
     replace(res.data, res.updatedAt);
+    // A restore replaces the whole draft on purpose: it is published over the live version this page knows.
+    setBase(live.version);
     showToast(`Version ${version} loaded into the editor — publish to make it live`);
     router.refresh(); // sheets the restore overwrote are back to waiting
     document.getElementById("sec-rates")?.scrollIntoView({ behavior: "smooth", block: "start" });

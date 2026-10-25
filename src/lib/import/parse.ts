@@ -294,7 +294,7 @@ export function buildImport({ rows, headerRow, map, opts, draft, fileName }: Bui
   }
   let converted = 0;
   let zeros = 0;
-  /** A 0 in a carrier sheet means "not offered", never "free": it is read as a blank cell. */
+  /** A 0 in a carrier sheet is never a free price: it is read as a blank cell (slab: keep the current price; grid: that weight is unpriced). */
   const price = (v: number | null): number | null => {
     if (v !== 0) return v;
     zeros++;
@@ -390,7 +390,7 @@ export function buildImport({ rows, headerRow, map, opts, draft, fileName }: Bui
     const kgs = gridWeights(draft.settings);
     out.warnings.unshift(`The site prices per kilogram: first-slab and step prices were turned into 1–${kgs[kgs.length - 1]} kg prices (${converted} service price${converted === 1 ? "" : "s"}).`);
   }
-  if (zeros) out.warnings.push(`${zeros} price cell${zeros === 1 ? "" : "s"} read 0 and ${zeros === 1 ? "was" : "were"} taken as “not offered” (left blank), not as a free price.`);
+  if (zeros) out.warnings.push(`${zeros} price cell${zeros === 1 ? "" : "s"} read 0 and ${zeros === 1 ? "was" : "were"} treated as blank, not as a free price: a blank keeps the current price, and in a per-kg sheet leaves that weight unpriced.`);
   if (opts.hideMissing) {
     const inFile = new Set(out.rows.map((r) => r.existing).filter((x): x is string => !!x));
     out.hide = draft.destinations.filter((x) => x.active && !inFile.has(x.id)).map((x) => x.id);
@@ -567,35 +567,4 @@ export function largestMove(base: SiteData, im: ImportResult): Move | null {
     }
   }
   return worst;
-}
-
-function sameRate(a: Rate | undefined, b: Rate | undefined): boolean {
-  const n = (v: unknown) => (isNum(v) ? v : null);
-  if (n(a?.first) !== n(b?.first) || n(a?.addl) !== n(b?.addl) || n(a?.doc) !== n(b?.doc) || (a?.days ?? "") !== (b?.days ?? "")) return false;
-  const ga = a?.grid ?? {};
-  const gb = b?.grid ?? {};
-  const kgs = new Set([...Object.keys(ga), ...Object.keys(gb)]);
-  for (const k of kgs) if (n(ga[k]) !== n(gb[k])) return false;
-  return true;
-}
-
-/**
- * Does `data` carry this import's prices? True when applying it again would
- * change no rate of the destinations it covers, every destination it adds
- * exists, and every one it hides is hidden. Used when an admin publishes: a
- * sheet whose prices they edited away or deleted before publishing did not
- * go live, and must not be reported as published.
- */
-export function importReflected(im: ImportResult, data: SiteData): boolean {
-  const bound = rebind(im, data);
-  for (const id of bound.hide ?? []) if (data.destinations.find((x) => x.id === id)?.active) return false;
-  if (bound.opts.addNew && bound.rows.some((r) => !r.existing)) return false;
-  const again = applyImport(data, { ...bound, hide: undefined, profile: null });
-  for (const r of bound.rows) {
-    if (!r.existing) continue;
-    const a = data.destinations.find((x) => x.id === r.existing);
-    const b = again.destinations.find((x) => x.id === r.existing);
-    for (const svc of Object.keys(r.rates)) if (!sameRate(a?.rates[svc], b?.rates[svc])) return false;
-  }
-  return true;
 }

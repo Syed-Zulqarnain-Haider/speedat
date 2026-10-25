@@ -132,7 +132,7 @@ export async function publishAction(input: PublishInput): Promise<PublishResult>
   };
   try {
     // Every sheet applied to the draft went out in this version; the Recent sheets list says so.
-    const imports = await attempt("marking imported sheets as published", () => markImportsPublished(v.version, doc));
+    const imports = await attempt("marking imported sheets as published", () => markImportsPublished(v.version));
     await attempt("writing the audit log", async () => {
       await audit(user.email, "publish", { version: v.version, summary, resumedPrices: resumed, imports, changes: diff?.lines.slice(0, 200) ?? [] });
       if (resumed) await audit(user.email, "hold_off", { version: v.version, viaPublish: true });

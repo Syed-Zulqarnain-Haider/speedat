@@ -23,7 +23,7 @@ import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { upsertQuoteLead } from "@/lib/leads";
 import { clientIp, rateLimit } from "@/lib/limits";
-import { cargoLimitKg, isBillableG, kgToG, priceService } from "@/lib/pricing/engine";
+import { billableFor, cargoLimitKg, isBillableG, kgToG, priceService } from "@/lib/pricing/engine";
 import { QUOTE_ID_RE } from "@/lib/pricing/format";
 import { bookedTotal, leadSummary, resolveAddons } from "@/lib/pricing/quote";
 import { getLiveHold, getLiveSite } from "@/lib/site/live";
@@ -77,7 +77,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: { code: "bad_weight", message: "Not a weight the rate card bills" } }, { status: 422 });
   }
   const limitG = kgToG(cargoLimitKg(site));
-  if (limitG && billableG > limitG) {
+  // The heaviest billed weight a parcel within the threshold can have (25 kg bills as 25.5 kg on a 0.5 + 1 kg card).
+  if (limitG && billableG > billableFor(site.settings, limitG)) {
     return NextResponse.json({ error: { code: "overmax", message: "Over the cargo threshold; priced on WhatsApp" } }, { status: 422 });
   }
   // The chargeable weight never exceeds the billed one (the billed weight is the chargeable one rounded up).

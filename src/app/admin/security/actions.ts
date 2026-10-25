@@ -40,7 +40,7 @@ export async function beginTotpAction(): Promise<ActionResult<{ uri: string; qrD
   }
 }
 
-export async function confirmTotpAction(input: unknown): Promise<ActionResult> {
+export async function confirmTotpAction(input: unknown): Promise<ActionResult<{ signedOut: boolean }>> {
   try {
     const user = await requireAdmin();
     const { code } = z.object({ code: z.string().max(12) }).parse(input);
@@ -51,7 +51,7 @@ export async function confirmTotpAction(input: unknown): Promise<ActionResult> {
     // every device (this one too) signs in again with the new second factor.
     const revoked = await revokeAllSessions(user.email);
     await audit(user.email, "totp_enabled", { sessionsRevoked: revoked });
-    return { ok: true };
+    return { ok: true, signedOut: revoked };
   } catch (err) {
     return onError(err);
   }

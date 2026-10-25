@@ -20,14 +20,18 @@ describe("quick weight buttons", () => {
     expect(quickKgs(g)).toEqual(KG_BUTTONS);
   });
 
-  it("drops a slab button that bills over the cargo limit", () => {
+  it("judges a slab button against the cargo limit on its weight, not its billed weight", () => {
     // 1 kg first slab + 2 kg steps: 25 kg is billed as 25 kg (1 + 12 × 2), within the limit.
     const fits = structuredClone(SEED);
     Object.assign(fits.settings, { firstKg: 1, stepKg: 2, maxKg: 25 });
     expect(quickKgs(fits)).toContain(25);
-    // 2 kg first slab + 2 kg steps under a 25 kg limit: 25 kg bills as 26 kg, so no button.
+    // 2 kg first slab + 2 kg steps: 25 kg bills as 26 kg but weighs 25 kg, so it is still priced.
+    const at = structuredClone(SEED);
+    Object.assign(at.settings, { firstKg: 2, stepKg: 2, maxKg: 25 });
+    expect(quickKgs(at)).toContain(25);
+    // Under a 24 kg limit the 25 kg button goes.
     const over = structuredClone(SEED);
-    Object.assign(over.settings, { firstKg: 2, stepKg: 2, maxKg: 25 });
+    Object.assign(over.settings, { firstKg: 2, stepKg: 2, maxKg: 24 });
     expect(quickKgs(over)).not.toContain(25);
     expect(quickKgs(over)).toContain(20);
   });

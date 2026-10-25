@@ -52,6 +52,20 @@ describe("billed weight is the first slab plus whole steps (slab misalignment)",
   });
 });
 
+describe("the cargo threshold is judged on the chargeable weight", () => {
+  const odd = withSettings(SEED, { firstKg: 0.5, stepKg: 1, maxKg: 25 });
+
+  it("prices a 25 kg parcel under a 25 kg limit even though it bills as 25.5 kg", () => {
+    const r = ok(priceAll(odd, one("gb", 25)));
+    expect(r.weights.billableG).toBe(25500);
+    expect(r.prices.express).not.toBeNull();
+  });
+
+  it("still sends anything heavier to the cargo message", () => {
+    expect(priceAll(odd, one("gb", 25.1)).ok).toBe(false);
+  });
+});
+
 describe("grid mode without a cargo threshold", () => {
   const g = withSettings(gridSeed(), { maxKg: 0 });
   for (const d of g.destinations) for (const r of Object.values(d.rates)) if (r) r.grid = slabToGrid({ ...g.settings, maxKg: 0 }, { first: r.first, addl: r.addl });

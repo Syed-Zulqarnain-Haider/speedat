@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { estimateDelivery } from "@/lib/pricing/dates";
-import { priceAll } from "@/lib/pricing/engine";
+import { cargoLimitKg, priceAll } from "@/lib/pricing/engine";
 import { fmtMoney, fmtNum, fmtRange } from "@/lib/pricing/format";
 import { weightSentence } from "@/lib/pricing/quote";
 import type { ShipmentType } from "@/lib/pricing/types";
@@ -79,7 +79,7 @@ export function TestPrice({ draft }: { draft: SiteData }) {
         {!res.ok ? (
           <div className="meta">
             {res.reason === "overmax"
-              ? `Over the cargo threshold (${draft.settings.maxKg} kg): the site asks the customer to message you. ${weightSentence(res.weights, draft.settings)}`
+              ? `Over the cargo threshold (${cargoLimitKg(draft)} kg): the site asks the customer to message you. ${weightSentence(res.weights, draft.settings)}`
               : "Enter a destination and weight."}
           </div>
         ) : (

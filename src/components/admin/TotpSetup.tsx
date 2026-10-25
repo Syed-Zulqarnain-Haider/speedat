@@ -36,6 +36,9 @@ export function TotpSetup({ enabled: initialEnabled }: { enabled: boolean }) {
     const res = await confirmTotpAction({ code });
     setBusy(false);
     if (!res.ok) return setError(res.message);
+    // This browser's session was revoked with the others; say why before the
+    // next request bounces to the sign-in page.
+    if (res.signedOut) return router.replace("/admin/login?reason=totp-on");
     setEnabled(true);
     setEnrol(null);
     setCode("");

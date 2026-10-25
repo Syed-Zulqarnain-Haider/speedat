@@ -198,8 +198,10 @@ export function priceAll(card: RateCard, input: PriceInput): PriceResult {
   const rows = input.rows.filter((r) => Number(r.kg) > 0);
   if (!rows.length) return { ok: false, reason: "weight" };
   const weights = computeWeights(card.settings, rows);
+  // Judged on the chargeable weight, not the billed one: with a 0.5 kg first slab and 1 kg steps a 25 kg
+  // parcel bills as 25.5 kg, and "up to 25 kg" must still price it.
   const maxG = kgToG(cargoLimitKg(card));
-  if (maxG && weights.billableG > maxG) return { ok: false, reason: "overmax", dest, weights };
+  if (maxG && weights.chargeG > maxG) return { ok: false, reason: "overmax", dest, weights };
   const type: ShipmentType = input.type ?? "pkg";
   const prices: Partial<Record<string, ServicePrice | null>> = {};
   for (const s of card.services) prices[s.id] = priceService(card.settings, dest, s.id, weights.billableG, type, weights.chargeG);

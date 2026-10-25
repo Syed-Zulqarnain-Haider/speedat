@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { priceAll, slabToGrid } from "@/lib/pricing/engine";
 import { gridSeed, SEED } from "@/lib/site/seed";
 import type { SiteData } from "@/lib/site/types";
-import { applyImport, autoMap, buildImport, describeMove, headerNames, importReflected, largestMove, mapFields, mappedKgs, suggestLayout, weightColumns } from "./parse";
+import { applyImport, autoMap, buildImport, describeMove, headerNames, largestMove, mapFields, mappedKgs, suggestLayout, weightColumns } from "./parse";
 import type { ImportOptions } from "./types";
 import { largestSheet, readWorkbook } from "./workbook";
 
@@ -166,7 +166,7 @@ describe("bug 10: grids, zeros", () => {
     // The removed 4–25 kg boxes are a change a person must see.
     expect(largestMove(g, im)!.pct).toBe(Infinity);
   });
-  it("reads a 0 cell as not offered, never as a free price", () => {
+  it("reads a 0 cell as blank (the current price stays), never as a free price", () => {
     const rows = [
       ["Country", "Express First", "Express Add", "Express Docs"],
       ["United Kingdom", "0", "0", "3900"],
@@ -178,23 +178,3 @@ describe("bug 10: grids, zeros", () => {
   });
 });
 
-describe("bug 4: did a sheet's prices go live?", () => {
-  const rows = [
-    ["Country", "Express First", "Express Add"],
-    ["United Kingdom", "4800", "1200"],
-    ["Narnia", "100", "100"],
-  ];
-  const im = buildImport({ rows, headerRow: 0, map: autoMap(rows[0]!, SEED.services), opts, draft: SEED, fileName: null });
-  it("is true for the document it was applied to", () => {
-    expect(importReflected(im, applyImport(SEED, im))).toBe(true);
-  });
-  it("is false when the admin edited the price away or deleted an added destination", () => {
-    const edited = applyImport(SEED, im);
-    edited.destinations.find((d) => d.id === "gb")!.rates.express!.first = 4500;
-    expect(importReflected(im, edited)).toBe(false);
-    const dropped = applyImport(SEED, im);
-    dropped.destinations = dropped.destinations.filter((d) => d.name !== "Narnia");
-    expect(importReflected(im, dropped)).toBe(false);
-    expect(importReflected(im, SEED)).toBe(false);
-  });
-});

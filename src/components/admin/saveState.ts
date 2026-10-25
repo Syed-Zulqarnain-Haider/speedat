@@ -19,7 +19,8 @@ export function afterReplace(storedAt: string | undefined): { save: SaveState; s
  * Whether discard and restore must wait. An autosave already on the wire lands
  * after them and writes the thrown-away edits back over the server's draft, so
  * both buttons stay disabled until it returns. A pending (not yet sent) save is
- * fine: replacing the draft cancels its timer.
+ * fine: the editor holds its timer while discard or restore is on the wire, and
+ * the replaced draft is no longer dirty.
  */
 export function replaceBlocked(save: SaveState): boolean {
   return save === "saving";

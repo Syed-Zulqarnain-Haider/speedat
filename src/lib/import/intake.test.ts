@@ -36,13 +36,18 @@ const repo = vi.hoisted(() => ({
   draft: null as unknown as SiteData,
   live: null as unknown as SiteData & { version: number; publishedAt: string },
   saved: [] as SiteData[],
+  /** Saves after this many succeed throw (a DB blip after the publish committed); -1 = never. */
+  failSaveAfter: -1,
   published: [] as { data: SiteData; expectedBase?: number; liftHold?: boolean }[],
 }));
 vi.mock("@/lib/site/repo", () => ({
   PublishConflict: class extends Error {},
   getDraft: async () => ({ baseVersion: 7, data: structuredClone(repo.draft), updatedAt: "", updatedBy: "" }),
   getLatestVersion: async () => structuredClone(repo.live),
-  saveDraft: async (d: SiteData) => void repo.saved.push(structuredClone(d)),
+  saveDraft: async (d: SiteData) => {
+    if (repo.failSaveAfter >= 0 && repo.saved.length >= repo.failSaveAfter) throw new Error("db blip");
+    repo.saved.push(structuredClone(d));
+  },
   publishVersion: async (a: { data: SiteData; expectedBase?: number; liftHold?: boolean }) => {
     repo.published.push(a);
     return { ...a.data, version: 8, publishedAt: "", hold: null };
@@ -73,6 +78,7 @@ function arrange(rows: string[][]) {
   repo.draft = structuredClone(live);
   repo.draft.destinations.find((d) => d.id === "gb")!.rates.normal!.doc = 1;
   repo.saved = [];
+  repo.failSaveAfter = -1;
   repo.published = [];
   selects.length = 0;
   sets.length = 0;
@@ -133,6 +139,28 @@ describe("unattended email auto-publish", () => {
     expect(repo.published).toEqual([]);
     expect(sets.at(-1)).toMatchObject({ status: "published", appliedVersion: 7 });
     expect(alerts.at(-1)!.subject).toMatch(/changed nothing/);
+  });
+
+  it("holds a sheet with unreadable rows even when the readable ones match live", async () => {
+    arrange([
+      ["Country", "Express First", "Express Add"],
+      ["United Kingdom", "4500", "1100"],
+      ["United States", "abc", "1100"],
+    ]);
+    const r = await apply(true);
+    expect(r.status).toBe("applied");
+    expect(repo.published).toEqual([]);
+    expect(sets.at(-1)).not.toMatchObject({ status: "published" });
+    expect(alerts.at(-1)!.subject).toMatch(/waiting for your review/);
+  });
+
+  it("still serves and records a committed publish when restoring the draft fails", async () => {
+    arrange(SHEET);
+    repo.failSaveAfter = 1; // the apply's save succeeds, the write-back after the publish throws
+    const r = await apply(true);
+    expect(r).toMatchObject({ status: "published", publishedVersion: 8 });
+    expect(revalidateTag).toHaveBeenCalledWith("site", { expire: 0 });
+    expect(sets.at(-1)).toMatchObject({ status: "published", appliedVersion: 8 });
   });
 
   it("holds a sheet that adds a destination, whatever the tolerance", async () => {

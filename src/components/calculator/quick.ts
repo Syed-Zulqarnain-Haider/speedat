@@ -3,8 +3,8 @@
  * prices that weight for at least one service to at least one live
  * destination: the old filter compared against the list of weights the
  * settings allow, so a grid with no box at or above a weight, or a slab
- * whose steps bill a 25 kg button as 26 kg over a 25 kg limit, offered a
- * button that could only answer "no price".
+ * with no price for a weight, offered a button that could only answer
+ * "no price".
  */
 import { priceAll } from "@/lib/pricing/engine";
 import type { RateCard } from "@/lib/pricing/types";

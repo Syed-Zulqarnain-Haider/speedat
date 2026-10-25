@@ -6,7 +6,7 @@
  * no price by more than that; only the unattended email path ever publishes.
  */
 import "server-only";
-import { and, desc, eq, inArray, ne, or, type SQL } from "drizzle-orm";
+import { desc, eq, inArray, ne, or, type SQL } from "drizzle-orm";
 import { revalidateTag } from "next/cache";
 import { alertNow } from "@/lib/alerts";
 import { audit } from "@/lib/audit";
@@ -17,7 +17,7 @@ import { SITE_TAG } from "@/lib/site/live";
 import { PublishConflict, getDraft, getLatestVersion, publishVersion, saveDraft } from "@/lib/site/repo";
 import type { SiteData } from "@/lib/site/types";
 import { businessDayKey } from "@/lib/time";
-import { applyImport, buildImport, describeMove, importReflected, largestMove, suggestLayout, type Move } from "./parse";
+import { applyImport, buildImport, describeMove, largestMove, suggestLayout, type Move } from "./parse";
 import type { ImportOptions, ImportResult } from "./types";
 import { WorkbookError, largestSheet, readWorkbook, type Workbook } from "./workbook";
 
@@ -165,6 +165,14 @@ export async function applyToDraft(args: ApplyArgs): Promise<ApplyResult> {
   const result = buildImport({ rows, headerRow: args.headerRow, map: args.map, opts: args.opts, draft: draft.data, fileName: args.fileName ?? rec.fileName });
   if (!result.rows.length) {
     await db.update(schema.imports).set({ result, status: "needs_mapping", error: result.errors[0] ?? "No destinations with prices were found" }).where(eq(schema.imports.id, args.importId));
+    // An emailed sheet whose known layout no longer reads (e.g. a grid sheet against slab rates) must not stop
+    // landing silently until the daily digest.
+    if (args.unattended) {
+      void alertNow(
+        `Rate sheet ${rec.fileName} could not be read`,
+        `The sheet from ${rec.fromEmail ?? "an unknown sender"} has a layout seen before, but no prices could be taken from it: ${result.errors[0] ?? "no destinations with prices were found"}. Nothing was changed. Open ${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/admin and check it under Import from Excel.`,
+      );
+    }
     return { status: "needs_mapping", result, draft: null, publishedVersion: null, error: result.errors[0] ?? "No destinations with prices were found" };
   }
   const next = applyImport(draft.data, result);
@@ -240,6 +248,8 @@ Review and publish at ${site}/admin.`,
   const im = buildImport({ rows: a.rows, headerRow: args.headerRow, map: args.map, opts: args.opts, draft: live, fileName: args.fileName ?? rec.fileName });
   const next = applyImport(live, im);
   const diff = diffSite(live, next);
+  // Unreadable rows hold the sheet even when the readable ones match live: the unread ones may not.
+  if (im.errors.length) return held(holdReason({ autoPublishPct: settings.autoPublishPct, rowErrors: im.errors.length, validation: [], worst: null }) ?? "rows could not be read");
   if (!diff.lines.some((l) => l.kind !== "profile")) {
     // The live site already quotes these prices: say so, rather than leave the sheet "in the editor" silently.
     await db.update(schema.imports).set({ status: "published", appliedVersion: latest.version }).where(eq(schema.imports.id, a.importId));
@@ -269,16 +279,25 @@ Review and publish at ${site}/admin.`,
     if (err instanceof PublishConflict) return held(`version ${err.live} was published while the sheet was being read`);
     throw err;
   }
-  // publishVersion re-based the draft onto `next`; put back the admin's draft (with this sheet in it).
-  await saveDraft(a.draftNext, args.actor);
-  // Outside a server action updateTag is not allowed; { expire: 0 } is its route-handler equivalent (no stale serve).
+  // The version is committed. Expire the cache first so customers get it whatever fails next; outside a server
+  // action updateTag is not allowed, and { expire: 0 } is its route-handler equivalent (no stale serve).
   revalidateTag(SITE_TAG, { expire: 0 });
+  // The rest is best effort: a throw here would 500 the webhook and make the sender retry a sheet that is live.
+  const after = async (what: string, fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch (err) {
+      console.error(`[intake] after publishing version ${v.version}: ${what} failed`, err);
+    }
+  };
   // Only this sheet went live; others applied to the draft are still only in the draft.
-  await db.update(schema.imports).set({ status: "published", appliedVersion: v.version }).where(eq(schema.imports.id, a.importId));
+  await after("marking the sheet published", () => db.update(schema.imports).set({ status: "published", appliedVersion: v.version }).where(eq(schema.imports.id, a.importId)));
+  // publishVersion re-based the draft onto `next`; put back the admin's draft (with this sheet in it).
+  await after("restoring the editor's draft", () => saveDraft(a.draftNext, args.actor));
   // The hold as the publish transaction saw it wins over the earlier read.
   const holdOn = v.hold?.on ?? hold.on;
   const holdAfter = holdOn ? `\n\n${HOLD_NOTE}` : "";
-  await audit(args.actor, "publish", { version: v.version, auto: true, importId: a.importId, imports: [a.importId], largestMovePct: worst?.pct ?? 0, holdOn });
+  await after("writing the audit entry", () => audit(args.actor, "publish", { version: v.version, auto: true, importId: a.importId, imports: [a.importId], largestMovePct: worst?.pct ?? 0, holdOn }));
   void alertNow(
     `Rate sheet ${rec.fileName} was published automatically`,
     `The sheet from ${rec.fromEmail ?? "an unknown sender"} went live as version ${v.version}: ${summarise(diff)}. ${worst ? `Largest change: ${describeMove(worst)}.` : ""}${holdAfter}
@@ -291,36 +310,14 @@ Check it at ${site}/admin.`,
 /**
  * An admin's publish takes the sheets applied to the draft live: mark them
  * `published` with the version they went out in, so the list stops saying
- * "publish to go live". Returns the ids marked published.
- *
- * With `publishedData` (what was actually published), only sheets whose
- * prices it still carries are marked (`importReflected`); a sheet whose rows
- * the admin edited away or deleted before publishing did not go live, so it
- * goes back to waiting instead, like after a discard. Without it, every
- * applied sheet is marked (the old behaviour, for callers that cannot say).
- * The email auto-publish marks its own sheet and does not call this.
+ * "publish to go live". Every applied sheet is marked, including one a newer
+ * sheet or a hand edit has since overridden: it was reviewed and superseded,
+ * and sending it back to waiting would invite re-applying old prices over the
+ * new ones. Returns the ids marked published. The email auto-publish marks its
+ * own sheet and does not call this.
  */
-export async function markImportsPublished(version: number, publishedData?: SiteData): Promise<number[]> {
-  if (!publishedData) {
-    const rows = await db.update(schema.imports).set({ status: "published", appliedVersion: version }).where(eq(schema.imports.status, "applied")).returning({ id: schema.imports.id });
-    return rows.map((r) => r.id);
-  }
-  const open = await db.select({ id: schema.imports.id, result: schema.imports.result }).from(schema.imports).where(eq(schema.imports.status, "applied"));
-  const live: number[] = [];
-  const back: number[] = [];
-  for (const r of open) (!r.result || importReflected(r.result, publishedData) ? live : back).push(r.id);
-  if (back.length) {
-    await db
-      .update(schema.imports)
-      .set({ status: "needs_mapping", decidedBy: null, decidedAt: null })
-      .where(and(inArray(schema.imports.id, back), eq(schema.imports.status, "applied")));
-  }
-  if (!live.length) return [];
-  const rows = await db
-    .update(schema.imports)
-    .set({ status: "published", appliedVersion: version })
-    .where(and(inArray(schema.imports.id, live), eq(schema.imports.status, "applied")))
-    .returning({ id: schema.imports.id });
+export async function markImportsPublished(version: number): Promise<number[]> {
+  const rows = await db.update(schema.imports).set({ status: "published", appliedVersion: version }).where(eq(schema.imports.status, "applied")).returning({ id: schema.imports.id });
   return rows.map((r) => r.id);
 }
 

@@ -13,8 +13,9 @@ export const dynamic = "force-dynamic";
 
 const FALLBACK = { name: "Speedat International Courier", tagline: "Speed Against Time" };
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: PageProps<"/admin/login">) {
   if (await getAdminUser()) redirect("/admin");
+  const { reason } = await searchParams;
   const dev = devBypassEmail();
   const serverReady = firebaseConfigured();
   const webReady = !!(process.env.NEXT_PUBLIC_FIREBASE_API_KEY && process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN && process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
@@ -37,6 +38,11 @@ export default async function LoginPage() {
           <p className="eyebrow">Admin</p>
           <h1>Rates admin</h1>
           <p className="lede">Sign in with the account that was added as an admin.</p>
+          {reason === "totp-on" && (
+            <div className="notice ok" role="status">
+              Two-factor sign-in is on. Sign in again with your password and the next code from your authenticator app.
+            </div>
+          )}
           {dev ? (
             <div className="notice warn">
               Development bypass is on for <strong>{dev}</strong>, but that address is not in the admins table. Run{" "}
