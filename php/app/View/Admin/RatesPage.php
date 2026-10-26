@@ -90,6 +90,8 @@ final class RatesPage
         public readonly ?RebaseNote $rebased = null,
         /** The clashes from that catch-up still waiting for the owner, as readable lines (`RebaseNote::openLines()`). */
         public readonly array $rebaseLines = [],
+        /** Why a behind draft could not be caught up, in words; "" when nothing was refused. */
+        public readonly string $rebaseRefused = '',
     ) {
     }
 

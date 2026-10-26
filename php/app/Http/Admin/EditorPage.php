@@ -6,6 +6,7 @@ namespace Speedat\Http\Admin;
 
 use Speedat\Core\App;
 use Speedat\Core\Clock;
+use Speedat\Core\Log;
 use Speedat\Core\Response;
 use Speedat\Core\Str;
 use Speedat\Domain\Pricing\Format;
@@ -63,10 +64,22 @@ final class EditorPage
      */
     public static function render(App $app, AdminUser $admin, bool $withReview = false, ?TestPricePanel $test = null): Response
     {
-        // Before the draft is read for the hidden fields, for the same reason
-        // `build()` does it first: every number on this page has to describe
-        // the draft as it will be published.
-        Repo::catchUpDraft();
+        // BEFORE ANYTHING READS THE DRAFT: one that fell behind the live
+        // version is carried onto it here, so the hidden fields, the table, the
+        // change count and the review card all describe a draft that
+        // publishing cannot use to undo a newer version. Nothing to do costs
+        // one indexed read.
+        //
+        // Once per request, never waiting (0) for the publisher's lock - a
+        // publish in progress means "try on the next page view", and the cron
+        // does the waiting - and never able to take the editor down with it:
+        // the owner can always see the page, with the "started from version N"
+        // warning as the fallback.
+        try {
+            Repo::catchUpDraft(0);
+        } catch (\Throwable $e) {
+            Log::exception('draft_catchup_failed', $e);
+        }
 
         $draft = Repo::getDraft();
 
@@ -128,15 +141,32 @@ final class EditorPage
         return $carried > 0 && $carried <= $draft->baseVersion ? $carried : $draft->baseVersion;
     }
 
+    /**
+     * The catch-up could not be done (`Repo::rebaseRefused()`), in words, or ""
+     * - the draft is still behind, and the owner has to know why before
+     * publishing, because every line on the review card will be applied.
+     */
+    private static function refusedSentence(): string
+    {
+        $r = Repo::rebaseRefused();
+        if ($r === null) {
+            return '';
+        }
+
+        $why = match ($r['reason']) {
+            'base_missing'  => 'version ' . $r['from'] . ', which this draft was started from, no longer exists',
+            'bad_base', 'bad_live' => 'a stored version is damaged (' . $r['detail'] . ')',
+            default         => 'the combined result would not be valid (' . $r['detail'] . ')',
+        };
+
+        return 'Version ' . $r['to'] . ' went live after this draft was started, and it could not be combined with your draft automatically: '
+            . $why . '. The review list shows every difference from version ' . $r['to'] . ', and publishing applies all of them -'
+            . ' including undoing anything version ' . $r['to'] . ' changed. If you do not recognise lines there, Discard all changes and key your edits again.';
+    }
+
     /** The whole view model. */
     public static function build(App $app, AdminUser $admin, bool $withReview = false, ?TestPricePanel $test = null): RatesPage
     {
-        // Before anything reads the draft: one that fell behind the live
-        // version is carried onto it here, so the table, the change count and
-        // the review card all describe a draft that publishing cannot use to
-        // undo a newer version. Nothing to do costs one indexed read.
-        Repo::catchUpDraft();
-
         $draft = Repo::getDraft();
         $live  = Repo::getLatestVersion() ?? PublishedVersion::sample();
 
@@ -156,7 +186,7 @@ final class EditorPage
 
         [$bulkKind, $bulkMessage] = Notice::bulk($app);
 
-        $draftMoved = $app->request->query('err', '', 24) === 'draftmoved';
+        $draftMoved = in_array($app->request->query('err', '', 24), ['draftmoved', 'draftrebased'], true);
 
         [$noticeKind, $noticeText] = self::outcome($app, $hold->on);
 
@@ -223,6 +253,7 @@ final class EditorPage
             rollback: self::rollbackAsk($app, $hold->on, $live->version, $diff->count),
             rebased: $rebased,
             rebaseLines: $rebased?->openLines($draft->data->toArray(), $live->data->toArray()) ?? [],
+            rebaseRefused: self::refusedSentence(),
         );
     }
 

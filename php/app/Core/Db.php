@@ -35,6 +35,65 @@ final class Db
      */
     private static array $statementParams = [];
 
+    /**
+     * How many times a transaction (or a lone autocommitted statement) is
+     * tried in all before a transient refusal is let through to the caller.
+     * Three, deliberately small: these errors clear in milliseconds when they
+     * are what they claim to be, and a request that has lost three times in a
+     * row is looking at something that is not transient.
+     */
+    public const ATTEMPTS = 3;
+
+    /**
+     * Server errors that mean "the SERVER rolled your work back - run it
+     * again", and nothing else:
+     *
+     *   1213 ER_LOCK_DEADLOCK  InnoDB picked this transaction as the victim of
+     *                          a deadlock and rolled the whole of it back.
+     *   1020 ER_CHECKREAD      "Record has changed since last read". MariaDB
+     *                          11.6+ turns innodb_snapshot_isolation ON by
+     *                          default, and the live host is on 11.8
+     *                          (2026-10-26): a transaction that read with a
+     *                          plain SELECT and then locks or writes a row
+     *                          somebody else committed since is refused with
+     *                          this, and - measured on 11.8.9, not assumed -
+     *                          the whole transaction is rolled back, exactly
+     *                          like a deadlock. 11.4 (local dev until now)
+     *                          defaults it OFF, which is why nothing here had
+     *                          ever seen it.
+     *
+     * NOT 1205 (lock wait timeout). It is not transient in the same sense:
+     * the statement already waited innodb_lock_wait_timeout (50 s by default)
+     * for a lock somebody is still holding, and trying twice more is up to two
+     * more of those waits on a web request that has long since timed out. It
+     * also rolls back only the statement, not the transaction, so "run it
+     * again" is not even what the server is asking for.
+     */
+    private const RETRYABLE = [1213, 1020];
+
+    /**
+     * True while Db::transaction() has a transaction open. Tracked here rather
+     * than asked of PDO because after a 1213/1020 the server has ALREADY
+     * rolled back and PDO::inTransaction() (which reads the server's status
+     * flag) says false - so it cannot tell "inside a transaction the server
+     * killed" from "autocommit".
+     */
+    private static bool $open = false;
+
+    /**
+     * The 1213/1020 that killed the open transaction, once one has.
+     *
+     * Every statement after it would run in AUTOCOMMIT - the transaction is
+     * gone - and commit for good, half a unit of work with the first half
+     * thrown away. That is reachable: Audit::log() catches every throwable by
+     * design and is called inside transactions (Repo::catchUpDraft), so a
+     * deadlock on its insert would be swallowed and the callback would carry
+     * on. So once this is set, run() refuses every further statement until the
+     * transaction is over, and transaction() retries or rethrows instead of
+     * committing.
+     */
+    private static ?\PDOException $lost = null;
+
     public static function pdo(): \PDO
     {
         if (self::$pdo instanceof \PDO) {
@@ -96,6 +155,8 @@ final class Db
         self::$statements      = [];
         self::$statementParams = [];
         self::$pdo             = null;
+        self::$open            = false;
+        self::$lost            = null;
     }
 
     /**
@@ -154,9 +215,53 @@ final class Db
             });
         }
 
-        $stmt->execute();
+        if (self::$lost !== null) {
+            throw new \RuntimeException(
+                'The server rolled this transaction back (error ' . self::errorCode(self::$lost)
+                . '); refusing to run more of it in autocommit.',
+                0,
+                self::$lost
+            );
+        }
 
-        return $stmt;
+        // Asked BEFORE the statement runs: afterwards a deadlock has already
+        // rolled the transaction back and PDO would report autocommit.
+        $inTransaction = self::$open || self::pdo()->inTransaction();
+
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                $stmt->execute();
+
+                return $stmt;
+            } catch (\PDOException $e) {
+                if (!self::retryable($e)) {
+                    throw $e;
+                }
+
+                if ($inTransaction) {
+                    // Not this statement's to retry: everything before it in
+                    // the transaction is gone too. Db::transaction() re-runs
+                    // the whole callback.
+                    if (self::$open) {
+                        self::$lost = $e;
+                    }
+
+                    throw $e;
+                }
+
+                // A LONE AUTOCOMMITTED STATEMENT that lost a deadlock committed
+                // nothing, so running it again is the same statement, not a
+                // second one. The page-view counter and the rate limiter are
+                // INSERT ... ON DUPLICATE KEY UPDATE on hot rows - the classic
+                // shape for a deadlock under a burst - and a visitor's page must
+                // not fail because two of them arrived together.
+                if ($attempt >= self::ATTEMPTS) {
+                    throw $e;
+                }
+
+                self::backoff($attempt);
+            }
+        }
     }
 
     /**
@@ -230,6 +335,39 @@ final class Db
     /**
      * Run a closure inside a transaction, rolling back on any throwable.
      *
+     * RE-RUN, WHOLE, WHEN THE SERVER THREW THE WORK AWAY (2026-10-26). A
+     * deadlock (1213) or MariaDB 11.8's "record has changed since last read"
+     * (1020, see RETRYABLE) means the server has already rolled the entire
+     * transaction back: nothing was committed and nothing is half-written. The
+     * callback is then run again from its first statement - up to ATTEMPTS
+     * times in all, with a short jittered pause - so it re-reads everything
+     * and decides again on what is there NOW. That is also what keeps the
+     * domain answers right: a publish that lost to a concurrent save comes
+     * round again, reads the newer draft under its row lock, and refuses with
+     * DraftConflict - the answer the editor knows how to show - instead of a
+     * bare "SQLSTATE[HY000]: 1020".
+     *
+     * What makes that safe is a rule every callback has to keep: EVERYTHING
+     * IT DOES IS IN THE DATABASE, so the rollback undoes all of it. Checked for
+     * every caller on 2026-10-26 (Session::rotate, ShipmentRepository::create
+     * and ::addEvent, DailyOnce::claim, Repo::saveDraft, ::catchUpDraft and
+     * ::publishVersion): mail, cache busting, the price hold and the audit
+     * lines about a publish all happen AFTER the commit. The one thing a
+     * callback writes outside the database is a Log line (catchUpDraft's
+     * "draft_repointed" / "draft_rebase_refused"), which a retry can write
+     * twice; a duplicated diagnostic line is the accepted cost. Anything with
+     * a real outside effect - mail, a file, an HTTP call - goes after this
+     * method returns, never inside the closure.
+     *
+     * NOT retried: anything the closure throws itself (DraftConflict,
+     * PublishConflict, a validation error), any other database error, and a
+     * failure of COMMIT itself - whether a commit that errored took effect is
+     * not something the client can know, and guessing "no" could write twice.
+     *
+     * Nested calls join the outer transaction and never retry on their own:
+     * the server rolled back the OUTER work too, so only the outermost call
+     * can run it again, and it does.
+     *
      * @template T
      * @param  \Closure():T $work
      * @return T
@@ -240,23 +378,94 @@ final class Db
 
         // Nested calls join the outer transaction rather than failing: MySQL
         // has no real nesting and a silent second BEGIN would commit early.
-        if ($pdo->inTransaction()) {
+        // `$open` as well as PDO's view: after a deadlock inside the outer
+        // call PDO already reports "not in a transaction", and a nested call
+        // must not then start a fresh one of its own.
+        if (self::$open || $pdo->inTransaction()) {
             return $work();
         }
 
-        $pdo->beginTransaction();
-        try {
-            $result = $work();
-            $pdo->commit();
+        for ($attempt = 1; ; $attempt++) {
+            $pdo->beginTransaction();
+            self::$open = true;
+            self::$lost = null;
 
-            return $result;
-        } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
+            try {
+                $result = $work();
+
+                // The callback swallowed the error that killed the
+                // transaction (Audit::log() does that by design). Its work is
+                // gone server-side, so this is a lost attempt, not a success.
+                if (self::$lost !== null) {
+                    throw self::$lost;
+                }
+            } catch (\Throwable $e) {
+                $killedBy = self::$lost;
+                self::$open = false;
+                self::$lost = null;
+
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+
+                if ($attempt < self::ATTEMPTS && ($killedBy !== null || self::retryable($e))) {
+                    Log::warn('db_transaction_retried', [
+                        'attempt' => $attempt,
+                        'code'    => self::errorCode($killedBy ?? $e),
+                    ]);
+                    self::backoff($attempt);
+
+                    continue;
+                }
+
+                throw $e;
             }
 
-            throw $e;
+            try {
+                $pdo->commit();
+            } finally {
+                self::$open = false;
+                self::$lost = null;
+            }
+
+            return $result;
         }
+    }
+
+    /**
+     * True when `$e`, or anything it wraps, is a 1213/1020 from the server.
+     * The chain is walked because a caller may wrap a PDOException in its own
+     * - the transaction is just as gone either way.
+     */
+    private static function retryable(\Throwable $e): bool
+    {
+        for ($at = $e; $at !== null; $at = $at->getPrevious()) {
+            if ($at instanceof \PDOException && in_array(self::errorCode($at), self::RETRYABLE, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** The server's own error number (1213, 1020, ...), or 0 when there is none. */
+    private static function errorCode(\Throwable $e): int
+    {
+        if ($e instanceof \PDOException && isset($e->errorInfo[1]) && is_numeric($e->errorInfo[1])) {
+            return (int) $e->errorInfo[1];
+        }
+
+        return $e->getPrevious() !== null ? self::errorCode($e->getPrevious()) : 0;
+    }
+
+    /**
+     * 20-50 ms, then 40-100 ms: long enough for the transaction that won to
+     * commit, short enough that a visitor never notices. Jittered so two
+     * losers of the same deadlock do not walk straight back into each other.
+     */
+    private static function backoff(int $attempt): void
+    {
+        usleep(random_int(20_000, 50_000) * $attempt);
     }
 
     /**

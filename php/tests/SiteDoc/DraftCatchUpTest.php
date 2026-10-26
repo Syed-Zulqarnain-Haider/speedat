@@ -22,7 +22,7 @@ final class DraftCatchUpTest extends SiteDocTestCase
         $this->useScratchCache();
         $this->needDatabase();
         $this->emptyStore();
-        Db::exec("DELETE FROM audit_log WHERE action = 'draft_rebased'");
+        Db::exec("DELETE FROM audit_log WHERE action IN ('draft_rebased', 'draft_rebase_clashes')");
 
         // Version 1 through the front door, so the draft is branched from it.
         $doc = $this->seedArray();
@@ -35,7 +35,7 @@ final class DraftCatchUpTest extends SiteDocTestCase
     {
         if (Db::healthy()) {
             $this->emptyStore();
-            Db::exec("DELETE FROM audit_log WHERE action = 'draft_rebased'");
+            Db::exec("DELETE FROM audit_log WHERE action IN ('draft_rebased', 'draft_rebase_clashes')");
         }
 
         $this->dropScratchCache();
@@ -222,6 +222,93 @@ final class DraftCatchUpTest extends SiteDocTestCase
         Repo::saveDraft(SiteData::fromArray($now), 'owner@test');
 
         $this->assertSame([], $note->openLines(Repo::getDraft()->data->toArray(), $live), 'a clash the owner already settled is still listed');
+    }
+
+    public function testADamagedLiveRowIsRefusedRememberedAndNotRetried(): void
+    {
+        $this->ownerRepricesUs(77777.0);
+        Db::exec("INSERT INTO versions (version, published_at, published_by, source, summary, change_count, data) VALUES (2, UTC_TIMESTAMP(), 'hand', 'sql', 'junk', 0, '{}')");
+        $before = Repo::getDraft();
+
+        $this->assertNull(Repo::catchUpDraft());
+
+        $after = Repo::getDraft();
+        $this->assertSame($before->revision, $after->revision, 'a junk version was merged into the draft');
+        $this->assertSame(1, $after->baseVersion);
+        $refused = Repo::rebaseRefused();
+        $this->assertSame(['from' => 1, 'to' => 2, 'reason' => 'bad_live'], array_intersect_key($refused, ['from' => 0, 'to' => 0, 'reason' => 0]));
+        $this->assertNull(Repo::catchUpDraft(), 'a refused pair of versions was tried again');
+    }
+
+    public function testRepointingAnAheadDraftClearsTheOldNoteAndKeepsTheAuthor(): void
+    {
+        $this->ownerRepricesUs(77777.0);
+        $this->versionWrittenBehindTheAppsBack();
+        Repo::catchUpDraft();
+        $this->assertNotNull(Repo::rebaseNote());
+
+        Db::exec('DELETE FROM versions WHERE version = 2');
+        Repo::catchUpDraft();
+
+        $this->assertNull(Repo::rebaseNote(), 'a note about a version that no longer exists was kept');
+        $this->assertSame(1, Repo::getDraft()->baseVersion);
+    }
+
+    public function testEveryReplacedValueReachesTheDiaryEvenWithHundredsOfClashes(): void
+    {
+        $draft = Repo::getDraft()->data->toArray();
+        $live  = Repo::getVersion(1)->data->toArray();
+        foreach ($draft['destinations'] as $i => $d) {
+            foreach ($d['rates'] as $svc => $r) {
+                foreach (['first', 'addl'] as $f) {
+                    if (is_numeric($r[$f] ?? null)) {
+                        $draft['destinations'][$i]['rates'][$svc][$f] = (float) $r[$f] + 1;
+                        $live['destinations'][$i]['rates'][$svc][$f]  = (float) $r[$f] + 2;
+                    }
+                }
+            }
+        }
+        Repo::saveDraft(SiteData::fromArray($draft), 'owner@test');
+        Db::exec(
+            'INSERT INTO versions (version, published_at, published_by, source, summary, change_count, data) VALUES (2, UTC_TIMESTAMP(), ?, ?, ?, 1, ?)',
+            ['hand', 'sql', 'every price', Db::json(SiteData::fromArray($live)->toArray())]
+        );
+
+        $note = Repo::catchUpDraft();
+        $logged = 0;
+        foreach (Db::all("SELECT detail FROM audit_log WHERE action = 'draft_rebase_clashes'") as $row) {
+            $logged += count(Db::unjson($row['detail'])['clashes'] ?? []);
+        }
+        Db::exec("DELETE FROM audit_log WHERE action = 'draft_rebase_clashes'");
+
+        $this->assertTrue(count($note->conflicts) > 20, 'the fixture did not clash enough to test the split');
+        $this->assertSame(count($note->conflicts), $logged, 'replaced values were lost from the diary');
+    }
+
+    public function testASaveFromATabOpenedBeforeTheCatchUpIsRefusedAndBlamesNoPerson(): void
+    {
+        $this->ownerRepricesUs(77777.0);
+        $stale = Repo::getDraft()->revision;
+        $this->versionWrittenBehindTheAppsBack();
+        Repo::catchUpDraft();
+
+        try {
+            Repo::saveDraft(Repo::getDraft()->data, 'owner@test', $stale);
+            $this->assertTrue(false, 'a save from before the catch-up went through');
+        } catch (\Speedat\Domain\SiteDoc\DraftConflict $e) {
+            $this->assertSame(Repo::SYSTEM, $e->current->updatedBy);
+        }
+    }
+
+    public function testTheHourlyCronCatchesTheDraftUp(): void
+    {
+        $this->ownerRepricesUs(77777.0);
+        $this->versionWrittenBehindTheAppsBack();
+
+        $result = \Speedat\Domain\Ops\Cron::fromConfig()->run();
+
+        $this->assertSame(2, Repo::getDraft()->baseVersion, 'the cron left the draft behind');
+        $this->assertStringContains('carried from version 1 onto 2', (string) ($result->jobs['draft'] ?? ''));
     }
 
     private function ownerRepricesUs(float $price): void

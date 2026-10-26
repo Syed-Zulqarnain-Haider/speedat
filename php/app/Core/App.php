@@ -85,6 +85,18 @@ final class App
     /** Apply the headers, write the cookies, send the body. Called once per request. */
     public function send(Response $response): void
     {
+        // PHP's own `X-Powered-By: PHP/8.2.x`. expose_php would stop it at the
+        // source, but it is PHP_INI_SYSTEM - neither .htaccess nor .user.ini can
+        // set it, only the host's php.ini - and on Apache + mod_php the
+        // .htaccess `Header always unset` never reached it either (measured on
+        // the sim, 2026-10-26). So it is removed here, for every response the
+        // application sends, whatever the host does with .htaccess. Behind the
+        // same headers_sent() guard Response::send() uses: once output has
+        // started the banner is already on the wire, and header_remove() would
+        // only add a warning to a response that can no longer be changed.
+        if (!headers_sent()) {
+            header_remove('X-Powered-By');
+        }
         $this->applySecurityHeaders($response);
         $this->cookies->flush();
         $response->send(!$this->request->isHead());
@@ -98,6 +110,14 @@ final class App
      * well because .htaccess is not guaranteed to be honoured on every host,
      * and because the CSP nonce changes per request and Apache cannot produce
      * one.
+     *
+     * Where .htaccess IS honoured, its copy is the one that goes out and this
+     * one is removed, so each header is sent once: LiteSpeed replaces PHP's
+     * value by itself, and on Apache public/.htaccess unsets it (PHP's
+     * header() and `Header always set` land in different tables there, and a
+     * doubled Cross-Origin-Opener-Policy is an invalid one). That only works
+     * because the values below are spelled exactly as the .htaccess spells
+     * them - tests/Security/HeaderParityTest holds all five.
      */
     private function applySecurityHeaders(Response $response): void
     {

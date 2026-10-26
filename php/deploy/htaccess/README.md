@@ -57,9 +57,11 @@ If `php/public/.htaccess` is ever missing, the builder falls back to
 release whose web root has no `.htaccess` has no front-controller rewrite and no
 deny rules, which is a site that serves its own source code.
 
-**Keep the two in step by hand.** They are separate files on purpose (one is the
-app's, one is the operator's) and nothing enforces that they agree, so a change
-to the deny rules belongs in both. `diff` them before a release you care about:
+**Keep the two in step.** They are separate files on purpose (one is the app's,
+one is the operator's), and since 2026-10-26
+`HtaccessTest::testTheDeployReferenceCopyHasExactlyTheShippedActiveRules` fails
+the suite when their active lines differ - so a change to the deny rules belongs
+in both. `php/public/.htaccess` is the one that ships. To see a difference by hand:
 
 ```bash
 diff <(grep -v '^\s*#' php/public/.htaccess) \

@@ -46,6 +46,9 @@ final class Repo
     /** The app_settings row that remembers the last catch-up (`catchUpDraft()`). */
     private const REBASE_NOTE = 'draft_rebase';
 
+    /** The app_settings row that remembers a catch-up that could not be done, and why. */
+    private const REBASE_REFUSED = 'draft_rebase_refused';
+
     /** Who the catch-up writes the draft as; `Draft::editedBy()` words it for people. */
     public const SYSTEM = 'system';
 
@@ -210,7 +213,7 @@ final class Repo
     public static function discardDraft(): void
     {
         Db::exec('DELETE FROM draft WHERE id = ?', [self::DRAFT_ID]);
-        Db::exec('DELETE FROM app_settings WHERE k = ?', [self::REBASE_NOTE]);
+        self::clearRebaseState();
     }
 
     /**
@@ -235,14 +238,28 @@ final class Repo
      * no way to tell whose change is whose, and the review card's "this draft
      * was started from version N" warning is the honest fallback.
      */
-    public static function catchUpDraft(): ?RebaseNote
+    public static function catchUpDraft(int $wait = self::LOCK_TIMEOUT): ?RebaseNote
     {
         $behind = Db::one('SELECT d.base_version AS base, (SELECT MAX(version) FROM versions) AS live FROM draft d WHERE d.id = ?', [self::DRAFT_ID]);
         if ($behind === null || $behind['live'] === null || (int) $behind['base'] === (int) $behind['live']) {
             return null;
         }
 
-        self::lock();
+        // Refused before for exactly this pair of versions: nothing has changed
+        // that could make it work now, so the editor does not queue on the
+        // publisher's lock on every page view to be refused again. A publish,
+        // discard or restore clears the refusal (see clearRebaseState()).
+        $refused = self::rebaseRefused();
+        if ($refused !== null && $refused['from'] === (int) $behind['base'] && $refused['to'] === (int) $behind['live']) {
+            return null;
+        }
+
+        // The editor passes 0: a page view must never wait ten seconds, or fail,
+        // because somebody is publishing. It simply tries again next time; the
+        // cron waits the full time.
+        if (!self::tryLock($wait)) {
+            return null;
+        }
 
         try {
             $note = Db::transaction(static function (): ?RebaseNote {
@@ -263,33 +280,49 @@ final class Repo
                     // deleted by hand. Nothing can be merged, and left alone
                     // every publish would be refused again. The draft is
                     // re-pointed at the live version with its contents kept,
-                    // so whatever differs shows as ordinary unpublished
-                    // changes on the review card, to be read before publishing.
+                    // so whatever differs - including the removed version's
+                    // changes - shows as ordinary unpublished changes on the
+                    // review card. The author is left as it was: nothing was
+                    // brought up to date, and any old note is no longer true.
                     Db::exec(
-                        'UPDATE draft SET base_version = ?, updated_at = ?, updated_by = ? WHERE id = ?',
-                        [$live->version, Clock::sql(), self::SYSTEM, self::DRAFT_ID]
+                        'UPDATE draft SET base_version = ?, updated_at = ? WHERE id = ?',
+                        [$live->version, Clock::sql(), self::DRAFT_ID]
                     );
-                    Log::warn('draft_base_missing', ['base' => $draft->baseVersion, 'live' => $live->version]);
+                    self::clearRebaseState();
+                    Log::warn('draft_repointed', ['from' => $draft->baseVersion, 'to' => $live->version]);
                     Audit::log(self::SYSTEM, 'draft_repointed', ['from' => $draft->baseVersion, 'to' => $live->version]);
 
                     return null;
                 }
-                $base  = self::getVersion($draft->baseVersion);
 
-                if ($base === null) {
-                    return null;
+                // BOTH STORED VERSIONS ARE CHECKED AS STORED, before anything is
+                // merged: a version row written by hand can be anything ("{}",
+                // a half-pasted JSON), and `fromArray()` would quietly turn it
+                // into an empty document - merged, that wipes every country out
+                // of the draft. The same raw-first check publishVersion() makes.
+                $baseRaw = Db::value('SELECT data FROM versions WHERE version = ?', [$draft->baseVersion]);
+                if ($baseRaw === null) {
+                    return self::refuseRebase($draft->baseVersion, $live->version, 'base_missing', 'version ' . $draft->baseVersion . ' no longer exists');
+                }
+                $liveRaw = Db::value('SELECT data FROM versions WHERE version = ?', [$live->version]);
+                foreach (['base' => $baseRaw, 'live' => $liveRaw] as $which => $raw) {
+                    $doc   = Db::unjson($raw);
+                    $issue = is_array($doc) && $doc !== [] ? Schema::firstIssue(Migrate::migrate($doc)->toArray()) : 'not a document';
+                    if ($issue !== null) {
+                        return self::refuseRebase($draft->baseVersion, $live->version, 'bad_' . $which, $issue);
+                    }
                 }
 
+                $base   = self::getVersion($draft->baseVersion);
                 $result = Rebase::merge($base->data->toArray(), $live->data->toArray(), $draft->data->toArray());
                 $merged = SiteData::fromArray($result['merged']);
-                $issue  = Schema::firstIssue($merged->toArray());
+                $issue  = Schema::firstIssue($merged->toArray()) ?? (Validate::errors($merged)[0] ?? null);
 
                 if ($issue !== null) {
-                    // Never store a document the schema refuses. The draft
-                    // stays behind and the review card's warning stands.
-                    Log::warn('draft_rebase_refused', ['from' => $draft->baseVersion, 'to' => $live->version, 'issue' => $issue]);
-
-                    return null;
+                    // Never store a document that could not be published. The
+                    // draft stays behind; the editor says why, and the review
+                    // card's "started from version N" warning stands.
+                    return self::refuseRebase($draft->baseVersion, $live->version, 'merge_invalid', $issue);
                 }
 
                 // Written as 'system', not as the last person who typed: the
@@ -301,6 +334,7 @@ final class Repo
                     'UPDATE draft SET data = ?, base_version = ?, updated_at = ?, updated_by = ? WHERE id = ?',
                     [Db::json($merged->toArray()), $live->version, $at, self::SYSTEM, self::DRAFT_ID]
                 );
+                Db::exec('DELETE FROM app_settings WHERE k = ?', [self::REBASE_REFUSED]);
 
                 $services = [];
                 foreach ($live->data->card->services as $service) {
@@ -315,6 +349,7 @@ final class Repo
                     at: self::iso($at),
                     currency: $live->data->card->settings->currency,
                     services: $services,
+                    liveAt: $live->publishedAt,
                 );
 
                 // A second catch-up before anybody published keeps what the
@@ -334,14 +369,7 @@ final class Repo
                     return $note;
                 }
 
-                Db::exec(
-                    'INSERT INTO app_settings (k, v, updated_at, updated_by) VALUES (:k, :v, :at, :by)'
-                    . ' ON DUPLICATE KEY UPDATE v = :v2, updated_at = :at2, updated_by = :by2',
-                    [
-                        ':k' => self::REBASE_NOTE, ':v' => Db::json($note->toArray()), ':at' => $at, ':by' => 'system',
-                        ':v2' => Db::json($note->toArray()), ':at2' => $at, ':by2' => 'system',
-                    ]
-                );
+                self::putSetting(self::REBASE_NOTE, $note->toArray(), $at);
 
                 return $note;
             });
@@ -350,10 +378,69 @@ final class Repo
         }
 
         if ($note !== null) {
-            Audit::log(self::SYSTEM, 'draft_rebased', $note->toArray());
+            // The diary keeps EVERY replaced value, in rows small enough that
+            // `Audit::log()` never truncates them (it replaces anything over
+            // 16 KB with a list of keys). The note in app_settings is deleted at
+            // the next publish; this is the copy that survives it.
+            $summary = $note->toArray();
+            unset($summary['conflicts']);
+            Audit::log(self::SYSTEM, 'draft_rebased', $summary + ['clashes' => count($note->conflicts)]);
+            foreach (array_chunk($note->conflicts, 25) as $i => $chunk) {
+                Audit::log(self::SYSTEM, 'draft_rebase_clashes', ['to' => $note->to, 'part' => $i + 1, 'clashes' => $chunk]);
+            }
         }
 
         return $note;
+    }
+
+    /**
+     * Why the last catch-up could not be done, for exactly which versions; null
+     * when nothing was refused (or it has since been cleared).
+     *
+     * @return array{from:int, to:int, reason:string, detail:string}|null
+     */
+    public static function rebaseRefused(): ?array
+    {
+        $raw = Db::unjson(Db::value('SELECT v FROM app_settings WHERE k = ?', [self::REBASE_REFUSED]));
+
+        if (!is_array($raw) || !is_numeric($raw['from'] ?? null) || !is_numeric($raw['to'] ?? null)) {
+            return null;
+        }
+
+        return [
+            'from'   => (int) $raw['from'],
+            'to'     => (int) $raw['to'],
+            'reason' => is_scalar($raw['reason'] ?? null) ? (string) $raw['reason'] : '',
+            'detail' => is_scalar($raw['detail'] ?? null) ? (string) $raw['detail'] : '',
+        ];
+    }
+
+    /** Remember a refusal (inside the catch-up's transaction), log it, and return the "nothing done" answer. */
+    private static function refuseRebase(int $from, int $to, string $reason, string $detail): ?RebaseNote
+    {
+        self::putSetting(self::REBASE_REFUSED, ['from' => $from, 'to' => $to, 'reason' => $reason, 'detail' => $detail], Clock::sql());
+        Log::warn('draft_rebase_refused', ['from' => $from, 'to' => $to, 'reason' => $reason, 'detail' => $detail]);
+
+        return null;
+    }
+
+    /** Forget the last catch-up: what it did and what it refused. Every path that replaces the draft calls this. */
+    private static function clearRebaseState(): void
+    {
+        Db::exec('DELETE FROM app_settings WHERE k IN (?, ?)', [self::REBASE_NOTE, self::REBASE_REFUSED]);
+    }
+
+    /** @param array<string,mixed> $value */
+    private static function putSetting(string $key, array $value, string $at): void
+    {
+        Db::exec(
+            'INSERT INTO app_settings (k, v, updated_at, updated_by) VALUES (:k, :v, :at, :by)'
+            . ' ON DUPLICATE KEY UPDATE v = :v2, updated_at = :at2, updated_by = :by2',
+            [
+                ':k' => $key, ':v' => Db::json($value), ':at' => $at, ':by' => self::SYSTEM,
+                ':v2' => Db::json($value), ':at2' => $at, ':by2' => self::SYSTEM,
+            ]
+        );
     }
 
     /** What the last catch-up did, until the next publish or discard; null when there is nothing to say. */
@@ -403,7 +490,7 @@ final class Repo
 
         // The draft is now an old version's rates, so a note saying "publishing
         // will not undo version N" is no longer true.
-        Db::exec('DELETE FROM app_settings WHERE k = ?', [self::REBASE_NOTE]);
+        self::clearRebaseState();
 
         return $restored;
     }
@@ -595,7 +682,12 @@ final class Repo
 
         try {
             $published = Db::transaction(static function () use ($args, $json, $by, $at): PublishedVersion {
-                $liveVersion = (int) (Db::value('SELECT MAX(version) FROM versions') ?? 0);
+                // FOR UPDATE (2026-10-26, MariaDB 11.8): a plain read here
+                // opened a snapshot, and the draft row a save committed after
+                // it was then refused with 1020 at the FOR UPDATE below. A
+                // locking read opens none, so this transaction reads only
+                // current rows and a racing save surfaces as DraftConflict.
+                $liveVersion = (int) (Db::value('SELECT MAX(version) FROM versions FOR UPDATE') ?? 0);
 
                 if ($args->expectedBase !== null && $args->expectedBase !== $liveVersion) {
                     throw new PublishConflict($liveVersion);
@@ -666,7 +758,7 @@ final class Repo
 
                 // The draft now IS the published document, so a note about
                 // how it was once carried onto an older version is history.
-                Db::exec('DELETE FROM app_settings WHERE k = ?', [self::REBASE_NOTE]);
+                self::clearRebaseState();
 
                 return new PublishedVersion(Migrate::migrate(json_decode($json, true) ?: []), $version, self::iso($at));
             });
@@ -802,6 +894,12 @@ final class Repo
      * publishes that both believed they had the lock would be worse than one
      * publish that failed and can be retried.
      */
+    /** The lock for a job that may simply skip this time; false when somebody else holds it. */
+    private static function tryLock(int $wait): bool
+    {
+        return (int) Db::value('SELECT GET_LOCK(?, ?)', [self::PUBLISH_LOCK, max(0, $wait)]) === 1;
+    }
+
     private static function lock(): void
     {
         $got = Db::value('SELECT GET_LOCK(?, ?)', [self::PUBLISH_LOCK, self::LOCK_TIMEOUT]);

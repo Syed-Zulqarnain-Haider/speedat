@@ -252,7 +252,9 @@ final class RatesController
             // over the colleague's prices - the exact overwrite this guard
             // exists to stop, performed automatically. The only way forward is
             // to look at what they wrote, which is what Reload is for.
-            return $this->answer($app, ['err' => 'draftmoved'], Notice::text('draftmoved'), $form->base, [
+            $code = $e->current->updatedBy === Repo::SYSTEM ? 'draftrebased' : 'draftmoved';
+
+            return $this->answer($app, ['err' => $code], Notice::text($code), $form->base, [
                 'conflict' => true,
                 'editedBy' => $e->current->editedBy(),
             ]);

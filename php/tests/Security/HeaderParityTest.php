@@ -30,8 +30,22 @@ use Speedat\Tests\TestCase;
  */
 final class HeaderParityTest extends TestCase
 {
-    /** The headers every layer sets and must agree on. */
-    private const SHARED = ['Cross-Origin-Opener-Policy', 'Permissions-Policy'];
+    /**
+     * The headers every layer sets and must agree on.
+     *
+     * All five, not only the two that once drifted. On Apache public/.htaccess
+     * now REMOVES App.php's copy of each of these and sends its own (a doubled
+     * COOP is an invalid COOP), so the .htaccess spelling is what an Apache
+     * visitor gets, just as it already was on LiteSpeed. A value that differed
+     * between the two would be a policy change that only one server makes.
+     */
+    private const SHARED = [
+        'X-Content-Type-Options',
+        'X-Frame-Options',
+        'Referrer-Policy',
+        'Cross-Origin-Opener-Policy',
+        'Permissions-Policy',
+    ];
 
     public function testAppAndBothHtaccessCopiesSendTheSameValues(): void
     {
@@ -64,6 +78,64 @@ final class HeaderParityTest extends TestCase
                 $this->assertSame(1, $count, $header . ' should be set once in ' . $label);
             }
         }
+    }
+
+    /**
+     * Apache + mod_php, measured on the sim 2026-10-26: `Header always set`
+     * writes err_headers_out, PHP's header() writes headers_out, and both go on
+     * the wire - every shared header twice, and COOP twice reads as unparseable
+     * and falls back to unsafe-none. A plain `Header unset` acts on headers_out
+     * only, so it removes PHP's copy and keeps this file's.
+     *
+     * Inside <IfModule !LiteSpeed>, and the test holds that too: LiteSpeed is
+     * the live host, it already sends one copy (measured 2026-09-30), and how
+     * it would order an unset against an `always set` has never been measured -
+     * so the live server is kept on exactly the directives it was measured on.
+     */
+    public function testApacheDropsPhpsCopySoEachHeaderIsSentOnce(): void
+    {
+        foreach ($this->htaccessFiles() as $label => $path) {
+            $source = $this->read($path);
+
+            $this->assertTrue(
+                preg_match('/^\s*<IfModule\s+!LiteSpeed>\s*$(.*?)^\s*<\/IfModule>/msi', $source, $block) === 1,
+                $label . ' has no <IfModule !LiteSpeed> block - on Apache every security header goes out twice'
+            );
+
+            foreach (self::SHARED as $header) {
+                $this->assertTrue(
+                    preg_match('/^\s*Header\s+unset\s+' . preg_quote($header, '/') . '\s*$/mi', $block[1]) === 1,
+                    $label . ': no Apache-only `Header unset ' . $header . '` - PHP\'s copy is sent beside this file\'s'
+                );
+            }
+
+            // Not `always`: that is the other table, and it would remove this
+            // file's own value instead of PHP's.
+            $this->assertSame(
+                0,
+                preg_match('/^\s*Header\s+always\s+unset\s+(' . implode('|', array_map(static fn (string $h): string => preg_quote($h, '/'), self::SHARED)) . ')\b/mi', $source),
+                $label . ' unsets a shared header with `always`, which removes the .htaccess copy'
+            );
+        }
+    }
+
+    /**
+     * X-Powered-By: PHP/8.2.35 went out on every page on the Apache sim: PHP
+     * writes it into headers_out, and `Header always unset` only ever looked
+     * at err_headers_out. expose_php cannot be set from .htaccess or .user.ini
+     * (PHP_INI_SYSTEM), so these three are the whole defence.
+     */
+    public function testThePhpVersionBannerIsRemovedFromBothTables(): void
+    {
+        foreach ($this->htaccessFiles() as $label => $path) {
+            $source = $this->read($path);
+
+            $this->assertTrue(preg_match('/^\s*Header\s+unset\s+X-Powered-By\s*$/mi', $source) === 1, $label . ': plain `Header unset X-Powered-By` (headers_out, where PHP puts it)');
+            $this->assertTrue(preg_match('/^\s*Header\s+always\s+unset\s+X-Powered-By\s*$/mi', $source) === 1, $label . ': `Header always unset X-Powered-By` (err_headers_out)');
+            $this->assertSame(0, preg_match('/^\s*php_(admin_)?flag\s+expose_php\b/mi', $source), $label . ': php_flag expose_php does nothing (PHP_INI_SYSTEM) and reads as protection');
+        }
+
+        $this->assertStringContains("header_remove('X-Powered-By')", $this->read(Paths::app() . '/Core/App.php'));
     }
 
     public function testCoopAllowsTheSignInPopup(): void

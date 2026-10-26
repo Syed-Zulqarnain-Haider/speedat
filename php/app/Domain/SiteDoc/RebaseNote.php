@@ -38,6 +38,8 @@ final class RebaseNote
         public readonly string $at,
         public readonly string $currency = 'PKR',
         public readonly array $services = [],
+        /** When the newer version went live (not when the draft was caught up, which is `at`). */
+        public readonly string $liveAt = '',
     ) {
     }
 
@@ -63,7 +65,7 @@ final class RebaseNote
             $byPath[$k] = $c;
         }
 
-        return new self($this->from, $next->to, $next->carried, array_values($byPath), $next->at, $next->currency, $next->services + $this->services);
+        return new self($this->from, $next->to, $next->carried, array_values($byPath), $next->at, $next->currency, $next->services + $this->services, $next->liveAt);
     }
 
     /** Nothing worth a box on the screen: no edits carried and nothing clashed. */
@@ -72,19 +74,28 @@ final class RebaseNote
         return $this->carried === 0 && $this->conflicts === [];
     }
 
-    /** The paragraph the editor leads with. Short sentences; the count kept away from the version number. */
-    public function sentence(): string
+    /**
+     * The paragraph the editor leads with. Short sentences, the count kept
+     * away from the version number, and true about the clashes: `$open` is how
+     * many are still waiting (`openLines()`), so the box never says "all your
+     * edits are here" while some were replaced, nor "listed below" once the
+     * owner has dealt with every one.
+     */
+    public function sentence(?int $open = null): string
     {
-        $when = $this->at === '' ? '' : Format::fmtDateTime($this->at);
-        $out  = 'The live website was updated (version ' . $this->to . ($when === '' ? '' : ', ' . $when)
-            . ') after you started this draft. Your draft now includes that update.';
+        $open ??= count($this->conflicts);
+        $when = $this->liveAt === '' ? '' : Format::fmtDateTime($this->liveAt);
+        $out  = 'The live website was changed' . ($when === '' ? '' : ' on ' . $when) . ' (version ' . $this->to
+            . '), after you started this draft. Your draft now includes that change.';
 
-        if ($this->carried > 0) {
-            $out .= ' All your own edits are still here (' . $this->carried . ' change' . ($this->carried === 1 ? '' : 's') . ').'
-                . ' Publishing adds your edits without removing the update.';
+        if ($open > 0) {
+            $out .= ' ' . $open . ' of your edits ' . ($open === 1 ? 'was' : 'were') . ' replaced, because that version'
+                . ' changed the same thing - listed below; check each before you publish.';
+            $out .= $this->carried > 0 ? ' Your other edits are still here.' : '';
         } elseif ($this->conflicts !== []) {
-            $out .= ' None of your edits could be kept automatically, because the update changed the same things.'
-                . ' They are listed below - type back any you still want before you publish.';
+            $out .= ' You have dealt with every item that clashed. You can publish when ready.';
+        } elseif ($this->carried > 0) {
+            $out .= ' All your own edits are still here. Publishing adds them without removing that change.';
         }
 
         return $out;
@@ -138,6 +149,7 @@ final class RebaseNote
             'at'        => $this->at,
             'currency'  => $this->currency,
             'services'  => $this->services,
+            'liveAt'    => $this->liveAt,
         ];
     }
 
@@ -188,6 +200,7 @@ final class RebaseNote
             is_scalar($raw['at'] ?? null) ? (string) $raw['at'] : '',
             is_scalar($raw['currency'] ?? null) && $raw['currency'] !== '' ? (string) $raw['currency'] : 'PKR',
             $services,
+            is_scalar($raw['liveAt'] ?? null) ? (string) $raw['liveAt'] : '',
         );
     }
 
@@ -200,10 +213,12 @@ final class RebaseNote
         $v = 'version ' . $this->to;
 
         if ($c['liveMissing']) {
-            return $label . ': ' . $v . ' removed it, so it stays removed - your draft had ' . $this->show($c['draft'], $money);
+            return $label . ': ' . $v . ' removed it, so it stays removed - your draft had ' . $this->show($c['draft'], $money)
+                . '. Add it again only if it should be on the website.';
         }
         if ($c['draftMissing']) {
-            return $label . ': your draft removed it, but ' . $v . ' changed it, so it was kept as ' . $this->show($c['live'], $money);
+            return $label . ': your draft removed it, but ' . $v . ' changed it, so it was kept as ' . $this->show($c['live'], $money)
+                . '. Delete it again if you still want it gone.';
         }
 
         return $label . ': kept ' . $this->show($c['live'], $money) . ' from ' . $v . ' - your draft had ' . $this->show($c['draft'], $money);
@@ -261,7 +276,7 @@ final class RebaseNote
             return '(blank)';
         }
         if (is_bool($v)) {
-            return $v ? 'on' : 'off';
+            return $v ? 'switched on' : 'switched off';
         }
         if ($money && is_numeric($v)) {
             return Money::fmtMoney(Num::jsNumber($v), $this->currency);
@@ -270,8 +285,25 @@ final class RebaseNote
             return '"' . mb_strimwidth((string) $v, 0, 80, '...') . '"';
         }
 
-        // An object or a list (a whole country, the reviews): its plain values,
-        // capped, so the owner can still see and retype what it held.
+        // A list of named items (countries, services, reviews): how many and
+        // which, so the owner can see what it held without a wall of numbers.
+        if (array_is_list($v)) {
+            $names = [];
+            foreach ($v as $item) {
+                if (is_array($item)) {
+                    $n = $item['name'] ?? $item['author'] ?? $item['id'] ?? null;
+                    if (is_scalar($n) && (string) $n !== '') {
+                        $names[] = (string) $n;
+                    }
+                }
+            }
+            if ($names !== []) {
+                return count($v) . ' item' . (count($v) === 1 ? '' : 's') . ': "' . mb_strimwidth(implode(', ', $names), 0, 120, '...') . '"';
+            }
+        }
+
+        // An object (a whole country): its plain values, capped, so the owner
+        // can still see and retype what it held.
         $parts = [];
         array_walk_recursive($v, static function (mixed $x, mixed $k) use (&$parts): void {
             if (is_scalar($x) && $x !== '') {

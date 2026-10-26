@@ -1209,6 +1209,17 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
         ? 'Test suite: PASSED at build time (bin/test.php, run by the builder).'
         : "Test suite: *** NOT RUN *** - built with --skip-tests, from an\n    UNPROVEN tree. Run bin/test.php before trusting this archive.";
 
+    // "AFTER AN UPGRADE" exists because File Manager's Extract only ever adds
+    // and overwrites. The migration night left var/*.sql, var/*.sql.gz and
+    // var/nextjs-dump.json - leads, quotes, shipments, admins - in the account,
+    // and nothing in any release said to remove them. Unreachable over the web
+    // (var/ is outside public_html and 700), but kept in every nightly backup
+    // forever. The list is written for the owner, in File Manager, with no
+    // shell: what to delete, by name, and - just as important - what must
+    // never go. Patterns are exact suffixes (_old, -old, .old) and never the
+    // bare word "old", because app/ ships Hold.php and HoldController.php.
+    // tests/Core/BuildReleaseTest holds the section's key lines.
+
     return <<<TXT
     SPEEDAT - INSTALL
     =================
@@ -1293,6 +1304,9 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
        the zip from the server.
        SEE: public_html/, speedat_main/ and INSTALL.txt side by side, and
        inside speedat_main/php/ the seven folders listed above.
+       UPGRADING an existing site? Extracting over it leaves every old file
+       in place. Once the new release is working (step 10), do "AFTER AN
+       UPGRADE" below the ten steps.
 
     3. SET THE PERMISSIONS. DO THIS NOW, AND AGAIN AFTER EVERY UPGRADE.
        The zip carries no permissions - File Manager writes every extracted
@@ -1393,6 +1407,62 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
        GOES" above.
        Last of all, key in the REAL prices and publish with "Rates are live"
        ticked. Until you do, the site serves sample rates and says so.
+
+    AFTER AN UPGRADE: CLEAR OUT WHAT THE OLD RELEASE LEFT BEHIND
+    -------------------------------------------------------------
+    Extracting a zip over an older install adds and replaces files. It never
+    deletes one. So once step 10 has passed on the new release, open
+    File Manager -> domains/<your-domain>/speedat_main/php/ and remove the
+    leftovers below. Delete only what is on this list. If you are unsure about
+    a file, leave it and ask: a leftover costs disk space, a wrong delete can
+    take the site down.
+
+    DELETE - customer data. These must not stay in the account, because every
+    nightly backup Hostinger takes copies them again:
+      var/*.sql   var/*.sql.gz     Database dumps from the move to this site
+                                   or from a backup you made: leads, quotes,
+                                   shipments and admin accounts. This
+                                   includes var/speedat-rates-*.sql once it
+                                   has been imported.
+      var/*dump*.json              The same data in another form, for example
+                                   var/nextjs-dump.json.
+      config/first-password.txt    If it is still there (step 8).
+    Take a copy to your own computer first if you want to keep one - but not
+    into public_html, and not anywhere else in this account.
+
+    DELETE - old copies of the code. Nothing runs them any more:
+      *.zip anywhere in speedat_main/php (old release zips, often in var/)
+      public/app_old   db/app-old, and any folder or file whose name ends in
+                       _old, -old, .old or .bak, or has "backup" in it
+      var/permissions-report.txt   bin/harden.php writes a fresh one each run
+    Careful with the word "old": app/ has real files called Hold.php and
+    HoldController.php. Only names ENDING in _old / -old / .old count.
+
+    storage/logs/  Files named app-YYYY-MM-DD.log are deleted for you by the
+                   hourly cron once they are 30 days old. Any OTHER file in
+                   storage/logs was left by hand or by an old release, and can
+                   be deleted once you have read it. Files only, never the
+                   folder.
+
+    NEVER DELETE:
+      config/config.php      The application key and every password. It is in
+                             no release zip, so a deleted one cannot be put
+                             back from a release - only rebuilt by hand.
+      config/config.sample.php
+      These FOLDERS, even when you empty them:
+                             config/  storage/  storage/cache/  storage/logs/
+                             storage/tmp/  storage/uploads/  var/
+                             app/  bin/  db/  db/migrations/  public/
+                             (public/app_old and db/app-old go; public/ and
+                             db/ themselves stay.)
+      Any file named .htaccess or index.html, in any folder. They are the
+                             locks on these folders.
+    File Manager may hide names starting with a dot. That is fine: you do not
+    need to see .htaccess to leave it alone.
+
+    SEE: var/ holds nothing but .htaccess, no .sql, .sql.gz, dump .json or .zip
+    is left anywhere under speedat_main/php, and the site still answers
+    /health with {"ok":true}.
 
     WHAT MUST NEVER BE WORLD-READABLE
     ---------------------------------

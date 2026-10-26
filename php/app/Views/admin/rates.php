@@ -153,9 +153,9 @@ $keys = [
   <?php if ($page->rebased !== null) { ?>
   <?php $shown = array_slice($page->rebaseLines, 0, \Speedat\Domain\SiteDoc\RebaseNote::SHOWN); ?>
   <div class="notice <?= $page->rebaseLines === [] ? 'ok' : 'warn' ?> rebase-box" data-rebase-box>
-    <p><?= e($page->rebased->sentence()) ?></p>
+    <p><?= e($page->rebased->sentence(count($page->rebaseLines))) ?></p>
     <?php if ($page->rebaseLines !== []) { ?>
-    <p><strong>Changed in your draft and in version <?= e($page->rebased->to) ?> - the version <?= e($page->rebased->to) ?> value was kept. If yours was right, type it in again before you publish:</strong></p>
+    <p><strong>You and version <?= e($page->rebased->to) ?> both changed these. The website's version was kept. If yours was right, change it back before you publish:</strong></p>
     <ul>
       <?php foreach ($shown as $line) { ?>
       <li><?= e($line) ?></li>
@@ -166,6 +166,10 @@ $keys = [
     </ul>
     <?php } ?>
   </div>
+  <?php } ?>
+
+  <?php if ($page->rebaseRefused !== '') { ?>
+  <div class="notice err rebase-refused" data-rebase-refused><p><?= e($page->rebaseRefused) ?></p></div>
   <?php } ?>
 
   <?php /* THE DRAFT MOVED UNDER THIS PAGE. Filled by the server after a

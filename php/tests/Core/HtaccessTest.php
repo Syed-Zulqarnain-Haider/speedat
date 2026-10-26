@@ -241,6 +241,76 @@ final class HtaccessTest extends TestCase
     }
 
     /**
+     * /favicon.ico and /llms.txt answered `Cache-Control: max-age=0` on the
+     * Apache sim (2026-10-26): no ExpiresByType named either type, so both fell
+     * to the zero default and every page view refetched the icon.
+     *
+     * The .txt rule is held to its SHAPE as well as its presence. It must go by
+     * file name, never `ExpiresByType text/plain`: mod_expires acts on PHP's
+     * output too, and index.php answers text/plain for robots.txt, /health,
+     * /api/metrics and plain-text errors - a type rule would cache a 500 for a
+     * day.
+     */
+    public function testTheFaviconAndStaticTextFilesAreCachedButPhpsTextIsNot(): void
+    {
+        foreach ($this->shippedHtaccessSources() as $label => $text) {
+            foreach (['image/x-icon', 'image/vnd.microsoft.icon'] as $type) {
+                $this->assertTrue(
+                    preg_match('/^\s*ExpiresByType\s+' . preg_quote($type, '/') . '\s+"access plus [1-9]\d* (day|days|month|months)"/mi', $text) === 1,
+                    $label . ' gives ' . $type . ' no expiry, so /favicon.ico falls to max-age=0'
+                );
+            }
+
+            $this->assertTrue(
+                preg_match('/<FilesMatch\s+"\(\?i\)\\\\\.txt\$">\s*ExpiresDefault\s+"access plus 1 day"\s*<\/FilesMatch>/i', $text) === 1,
+                $label . ' has no by-name expiry for static .txt files (llms.txt)'
+            );
+            $this->assertSame(
+                0,
+                preg_match('/^\s*ExpiresByType\s+text\/plain\b/mi', $text),
+                $label . ' caches text/plain by TYPE, which also caches PHP\'s text answers - robots.txt, /health, error pages'
+            );
+        }
+    }
+
+    /**
+     * The reference copy is the shipped file plus COMMENTED-OUT blocks, and
+     * nothing else.
+     *
+     * The two drifted for weeks with nothing to notice: the deploy copy kept
+     * case-sensitive deny patterns, a 2.2 block that missed half the names and
+     * no Authorization pass-through, while carrying active rules the live
+     * server never ran (a method block, an `immutable` Cache-Control on every
+     * asset). It is also what bin/build-release.php ships if public/.htaccess
+     * goes missing, and what the owner pastes from in File Manager - so a
+     * difference in an active line is a change to the live site that no test
+     * and no curl has ever seen. Comments and blank lines may differ; nothing
+     * else may, not even order.
+     */
+    public function testTheDeployReferenceCopyHasExactlyTheShippedActiveRules(): void
+    {
+        $sources = $this->shippedHtaccessSources();
+        $active  = [];
+
+        foreach ($sources as $label => $text) {
+            $lines = [];
+            foreach (preg_split('/\R/', $text) ?: [] as $line) {
+                $line = trim($line);
+                if ($line !== '' && $line[0] !== '#') {
+                    $lines[] = $line;
+                }
+            }
+            $active[$label] = $lines;
+        }
+
+        $this->assertSame(
+            $active['public/.htaccess'],
+            $active['deploy/htaccess/public_html.htaccess'],
+            'deploy/htaccess/public_html.htaccess has drifted from public/.htaccess - change public/.htaccess, then copy it across'
+        );
+    }
+
+    /**
      * The belt-and-braces claim, which is the only one that holds when neither
      * authorisation module is present: there is nothing in the web root worth
      * denying.

@@ -124,6 +124,28 @@ final class BuildReleaseTest extends TestCase
         sort($tops);
         $this->assertSame(['INSTALL.txt', 'public_html', 'speedat_main'], $tops, 'the archive top level');
 
+        // THE UPGRADE CLEAN-UP. An extract over an old install deletes nothing,
+        // and the migration night left customer-data dumps in var/ that no
+        // release ever told the owner to remove. The section must name them,
+        // and must say what is never to be deleted - a clean-up list without
+        // its "never" half is how config.php gets deleted in File Manager.
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($this->out . '/clean.zip') === true, 'cannot reopen clean.zip');
+        $install = (string) $zip->getFromName('INSTALL.txt');
+        $zip->close();
+
+        foreach ([
+            'AFTER AN UPGRADE: CLEAR OUT WHAT THE OLD RELEASE LEFT BEHIND',
+            'var/*.sql   var/*.sql.gz', 'var/*dump*.json', '*.zip anywhere in speedat_main/php',
+            'public/app_old   db/app-old', 'storage/logs/',
+            'NEVER DELETE:', 'config/config.php      The application key',
+            'Any file named .htaccess or index.html',
+        ] as $line) {
+            $this->assertStringContains($line, $install, 'INSTALL.txt upgrade clean-up');
+        }
+        // Never the bare word: app/ ships Hold.php and HoldController.php.
+        $this->assertSame(0, preg_match('/\*old\*/', $install), 'INSTALL.txt must not tell the owner to delete *old*');
+
         // app/Core is application code, all of it - so all of it ships. This is
         // the invariant that would have caught the case-folding mistake that
         // refused app/Core/Config.php and app/Core/Router.php as "configuration"

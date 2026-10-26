@@ -146,9 +146,26 @@ final class Rebase
         $l = self::byId($live);
         $d = self::byId($draft);
 
-        // The draft's order when the draft reordered (Sort A-Z, a moved row),
-        // otherwise the live order. Items only one side added go after it.
-        $order = array_keys($d) !== array_keys($b) ? array_keys($d) : array_keys($l);
+        // Whose ORDER wins is decided like any other field: by who changed it.
+        // "Reordered" is judged only on the items a side shares with the base,
+        // so adding or removing a country is not mistaken for a re-sort (it
+        // was, and a draft that added one country threw away the live order).
+        $draftMoved = self::reordered(array_keys($b), array_keys($d));
+        $liveMoved  = self::reordered(array_keys($b), array_keys($l));
+
+        if ($draftMoved && $liveMoved && self::shared(array_keys($l), array_keys($d)) !== self::shared(array_keys($d), array_keys($l))) {
+            $this->conflicts[] = [
+                'path'         => implode(' > ', [...$path, '(order)']),
+                'keys'         => [],
+                'live'         => implode(', ', array_keys($l)),
+                'draft'        => implode(', ', array_keys($d)),
+                'liveMissing'  => false,
+                'draftMissing' => false,
+            ];
+        }
+
+        // Items only one side added go after it.
+        $order = $draftMoved && !$liveMoved ? array_keys($d) : array_keys($l);
         foreach ([array_keys($l), array_keys($d)] as $ids) {
             foreach ($ids as $id) {
                 if (!in_array($id, $order, true)) {
@@ -168,6 +185,29 @@ final class Rebase
         }
 
         return $out;
+    }
+
+    /**
+     * Did this side change the order of the items it shares with the base?
+     *
+     * @param list<string> $base
+     * @param list<string> $side
+     */
+    private static function reordered(array $base, array $side): bool
+    {
+        return self::shared($base, $side) !== self::shared($side, $base);
+    }
+
+    /**
+     * The ids of `$a` that are also in `$b`, in `$a`'s order.
+     *
+     * @param list<string> $a
+     * @param list<string> $b
+     * @return list<string>
+     */
+    private static function shared(array $a, array $b): array
+    {
+        return array_values(array_filter($a, static fn (string $id): bool => in_array($id, $b, true)));
     }
 
     /**
@@ -194,10 +234,18 @@ final class Rebase
         if (!is_array($v) || !array_is_list($v)) {
             return false;
         }
+        // A repeated id is not a list of distinct items: merged by id, the
+        // second row and its prices would vanish. Such a list is one value.
+        $seen = [];
         foreach ($v as $item) {
             if (!is_array($item) || !isset($item['id']) || !is_scalar($item['id'])) {
                 return false;
             }
+            $id = (string) $item['id'];
+            if (isset($seen[$id])) {
+                return false;
+            }
+            $seen[$id] = true;
         }
 
         return true;

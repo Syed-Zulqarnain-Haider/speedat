@@ -38,22 +38,34 @@ final class RebaseNoteTest extends TestCase
         $this->assertStringNotContains('(a list)', $line);
     }
 
-    public function testTheLeadSentenceKeepsTheCountAwayFromTheVersionNumber(): void
+    public function testTheLeadSentenceNamesTheVersionAndSaysEveryEditIsKept(): void
     {
-        $s = $this->note([], 18)->sentence();
+        $s = $this->note([], 18)->sentence(0);
 
-        $this->assertStringContains('version 18', $s);
-        $this->assertStringContains('(18 changes)', $s);
+        $this->assertStringContains('(version 18)', $s);
+        $this->assertStringContains('All your own edits are still here', $s);
         $this->assertStringNotContains('version 18: 18', $s);
     }
 
-    public function testNothingCarriedButClashesSaysSo(): void
+    public function testOpenClashesAreCountedAndTheBoxNeverSaysEverythingWasKept(): void
     {
         $note = $this->note([['path' => 'settings > addons', 'keys' => ['settings', 'addons'], 'live' => 'a', 'draft' => 'b', 'liveMissing' => false, 'draftMissing' => false]], 0);
 
-        $this->assertStringContains('None of your edits could be kept automatically', $note->sentence());
+        $open = $note->sentence(1);
+        $this->assertStringContains('1 of your edits was replaced', $open);
+        $this->assertStringNotContains('All your own edits', $open);
+
+        $this->assertStringContains('You have dealt with every item that clashed', $note->sentence(0));
         $this->assertFalse($note->isEmpty());
         $this->assertTrue($this->note([], 0)->isEmpty());
+    }
+
+    public function testTheDateIsWhenTheWebsiteChangedNotWhenTheDraftWasCaughtUp(): void
+    {
+        $note = new RebaseNote(17, 18, 1, [], '2026-10-26T08:00:00.000Z', 'PKR', [], '2026-10-11T08:41:29.000Z');
+
+        $this->assertStringContains('11 Oct', $note->sentence(0));
+        $this->assertStringNotContains('26 Oct', $note->sentence(0));
     }
 
     public function testADamagedRowReadsAsNothingRatherThanAnError(): void

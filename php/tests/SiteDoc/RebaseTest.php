@@ -108,6 +108,39 @@ final class RebaseTest extends TestCase
         $this->assertCount(1, $clash['conflicts']);
     }
 
+    public function testTheLiveOrderSurvivesADraftThatOnlyAddedOrRemovedAnItem(): void
+    {
+        $base = ['d' => [['id' => 'a'], ['id' => 'b'], ['id' => 'c']]];
+        $live = ['d' => [['id' => 'c'], ['id' => 'b'], ['id' => 'a']]];
+
+        $added = Rebase::merge($base, $live, ['d' => [['id' => 'a'], ['id' => 'b'], ['id' => 'c'], ['id' => 'x']]]);
+        $this->assertSame([['id' => 'c'], ['id' => 'b'], ['id' => 'a'], ['id' => 'x']], $added['merged']['d'], 'an addition was taken for a re-sort');
+
+        $removed = Rebase::merge($base, $live, ['d' => [['id' => 'a'], ['id' => 'c']]]);
+        $this->assertSame([['id' => 'c'], ['id' => 'a']], $removed['merged']['d'], 'a removal was taken for a re-sort');
+    }
+
+    public function testBothSidesReorderingDifferentlyKeepsTheLiveOrderAndSaysSo(): void
+    {
+        $base = ['d' => [['id' => 'a'], ['id' => 'b'], ['id' => 'c']]];
+
+        $r = Rebase::merge($base, ['d' => [['id' => 'c'], ['id' => 'b'], ['id' => 'a']]], ['d' => [['id' => 'b'], ['id' => 'a'], ['id' => 'c']]]);
+
+        $this->assertSame([['id' => 'c'], ['id' => 'b'], ['id' => 'a']], $r['merged']['d']);
+        $this->assertCount(1, $r['conflicts']);
+        $this->assertStringContains('(order)', $r['conflicts'][0]['path']);
+    }
+
+    public function testRepeatedIdsAreNotMergedItemByItemSoNoRowVanishes(): void
+    {
+        $dupe = ['d' => [['id' => 'a', 'p' => 1], ['id' => 'a', 'p' => 2]]];
+
+        $r = Rebase::merge(['d' => [['id' => 'a', 'p' => 1]]], ['d' => [['id' => 'a', 'p' => 9]]], $dupe);
+
+        $this->assertSame([['id' => 'a', 'p' => 9]], $r['merged']['d']);
+        $this->assertCount(1, $r['conflicts'], 'the draft\'s duplicate rows were dropped without a word');
+    }
+
     public function testAClashInsideACountryIsNamedByTheCountry(): void
     {
         $base  = ['destinations' => [['id' => 'us', 'name' => 'United States', 'rates' => ['normal' => ['grid' => ['21' => 100]]]]]];

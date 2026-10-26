@@ -123,8 +123,9 @@ final class Cron
 
         /** @var array<string,\Closure():array{string,array<string,mixed>}> $work */
         $work = [
-            // First, so the stale-rates check below reads a draft that is
-            // on the live version. Nothing to do on every ordinary run.
+            // A draft left behind the live version is carried onto it even if
+            // nobody opens the admin (Repo::catchUpDraft()). Nothing to do on
+            // every ordinary run.
             'draft'       => fn (): array => [self::draftSummary(Repo::catchUpDraft()), []],
             'rates'       => fn (): array => $this->staleRates(),
             'hold'        => fn (): array => $this->longHold(),
@@ -164,9 +165,18 @@ final class Cron
     /** The cron log's line for the draft job. */
     private static function draftSummary(?RebaseNote $note): string
     {
-        return $note === null
-            ? 'on the live version'
-            : 'carried from version ' . $note->from . ' onto ' . $note->to . ' (' . count($note->conflicts) . ' clash(es))';
+        if ($note !== null) {
+            return 'carried from version ' . $note->from . ' onto ' . $note->to . ' (' . count($note->conflicts) . ' clash(es))';
+        }
+
+        // "Nothing done" is only "on the live version" when it is true: a
+        // refused catch-up leaves the draft behind and needs a person.
+        $refused = Repo::rebaseRefused();
+        if ($refused !== null) {
+            return 'STILL BEHIND: version ' . $refused['to'] . ' is live, draft from ' . $refused['from'] . ' (' . $refused['reason'] . ': ' . $refused['detail'] . ')';
+        }
+
+        return 'on the live version';
     }
 
     /**

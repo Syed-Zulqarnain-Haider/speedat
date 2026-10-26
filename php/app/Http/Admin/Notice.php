@@ -103,6 +103,10 @@ final class Notice
         // transaction that would have done the writing.
         'draftmoved' => 'Somebody else changed the draft while this page was open, so nothing was saved. '
             . 'Reload the page to see their version, then make your change again.',
+        // The same refusal when the "somebody" was the automatic catch-up
+        // (`Repo::catchUpDraft()`): the owner must not be told a colleague did it.
+        'draftrebased' => 'The draft was brought up to date with the live website while this page was open, so nothing was saved. '
+            . 'Reload the page to see it, then make your change again.',
         // The draft changed between drawing the review card and pressing
         // Publish - a colleague's autosave, most often. Nothing went live:
         // publishing what the card did not list is the one thing it must

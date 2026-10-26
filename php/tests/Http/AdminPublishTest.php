@@ -128,9 +128,15 @@ final class AdminPublishTest extends AdminTestCase
         // (`Repo::catchUpDraft()`), so the editor says what it did instead of
         // warning about a draft that is no longer behind.
         $this->assertStringContains('name="expectedBase" value="2"', $body, 'the card does not publish against the version it compared with');
-        $this->assertStringContains('The live website was updated (version 2', $body, 'the editor does not say the draft was carried onto version 2');
+        $this->assertStringContains('Your draft now includes that change', $body, 'the editor does not say the draft was carried onto version 2');
         $this->assertStringNotContains('has gone live since', $body, 'the card still warns about a draft that was just caught up');
         $this->assertSame(2, (int) Db::value('SELECT base_version FROM draft'), 'opening the editor did not catch the draft up');
+
+        // A bookmark or Back button still carrying ?base=1 from before the
+        // catch-up must not bring the "behind" warning or the old number back.
+        $stale = $this->adminGet(Routes::REVIEW, ['base' => '1'])->body();
+        $this->assertStringContains('name="expectedBase" value="2"', $stale, 'a stale ?base= changed what the card publishes against');
+        $this->assertStringNotContains('has gone live since', $stale, 'a stale ?base= brought the behind warning back');
 
         $answer = $this->adminPost(Routes::PUBLISH, ['expectedBase' => '2']);
 

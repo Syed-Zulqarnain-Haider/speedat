@@ -747,7 +747,7 @@
     paintSaveButtons();
     if (!stateEl) return;
     stateEl.textContent = conflicted
-      ? "Not saved - somebody else changed this draft"
+      ? "Not saved - this draft changed while the page was open"
       : saving()
         ? "Saving…"
         : firstDirty()
@@ -786,7 +786,9 @@
 
     var box = document.querySelector("[data-conflict-box]");
     if (!box) {
-      toast(message || "Somebody else changed this draft - reload the page");
+      toast(message || (who && who.indexOf("brought up to date") === 0
+        ? "This draft was brought up to date with the live website - reload the page"
+        : "Somebody else changed this draft - reload the page"));
       return;
     }
 
