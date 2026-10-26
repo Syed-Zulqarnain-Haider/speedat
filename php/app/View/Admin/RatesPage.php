@@ -88,6 +88,8 @@ final class RatesPage
         public readonly ?RollbackAsk $rollback = null,
         /** The draft was carried onto a newer live version (`Repo::catchUpDraft()`); null when it never had to be. */
         public readonly ?RebaseNote $rebased = null,
+        /** The clashes from that catch-up still waiting for the owner, as readable lines (`RebaseNote::openLines()`). */
+        public readonly array $rebaseLines = [],
     ) {
     }
 

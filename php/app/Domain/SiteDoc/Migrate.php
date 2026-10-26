@@ -81,10 +81,6 @@ final class Migrate
                 ]),
             ],
             'servicesTitle' => ['What we carry', 'Two ways to send'],
-            'servicesLede'  => [
-                'Every service is door to door: we collect from you and deliver to the receiver. '
-                    . 'Prices are on the quote page.',
-            ],
             'ctaTitle' => ['Ready to send something?', 'Ready to send?'],
             'ctaSub'   => [
                 'Get an instant price and book on WhatsApp in two minutes.',
@@ -101,7 +97,12 @@ final class Migrate
              * it - and because this list is matched character for character,
              * an owner who typed his own lede keeps it.
              */
+            // ONE key, both retired texts. It used to be written twice in this
+            // array, and PHP keeps only the last duplicate key: the v1/v2 lede
+            // ("Every service is door to door ...") was silently never retired.
             'servicesLede' => [
+                'Every service is door to door: we collect from you and deliver to the receiver. '
+                    . 'Prices are on the quote page.',
                 'Two air services from Lahore, both door to door: Express and Normal. '
                     . 'Documents have a flat rate. Heavier cargo is quoted on WhatsApp.',
             ],

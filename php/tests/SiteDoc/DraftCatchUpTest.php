@@ -118,7 +118,7 @@ final class DraftCatchUpTest extends SiteDocTestCase
         $this->assertCount(1, $note->conflicts);
         $this->assertStringContains('addons', $note->conflicts[0]['path']);
         $this->assertSame('Delivery | 1000 | on', Repo::getDraft()->data->toArray()['settings']['addons'], 'a clash put the unreviewed draft value live-bound');
-        $this->assertStringContains('Pickup | 500 | on', implode("\n", $note->conflictLines()), 'the owner\'s own value is not shown back');
+        $this->assertStringContains('Pickup | 500 | on', implode("\n", $note->openLines()), 'the owner\'s own value is not shown back');
     }
 
     public function testRunningItTwiceDoesNothingTheSecondTime(): void
@@ -140,6 +140,88 @@ final class DraftCatchUpTest extends SiteDocTestCase
 
         $this->assertNull(Repo::catchUpDraft());
         $this->assertSame(1, Repo::getDraft()->baseVersion, 'a draft with no known origin was merged anyway');
+    }
+
+    public function testTheCatchUpIsWrittenAsTheSystemNotAsTheLastPerson(): void
+    {
+        $this->ownerRepricesUs(77777.0);
+        $this->versionWrittenBehindTheAppsBack();
+        Repo::catchUpDraft();
+
+        $draft = Repo::getDraft();
+        $this->assertSame(Repo::SYSTEM, $draft->updatedBy);
+        $this->assertStringContains('brought up to date with the live website automatically', $draft->editedBy());
+    }
+
+    public function testASecondCatchUpKeepsTheFirstStartingVersionAndItsClashes(): void
+    {
+        $draft = Repo::getDraft()->data->toArray();
+        $draft['settings']['addons'] = 'Pickup | 500 | on';
+        Repo::saveDraft(SiteData::fromArray($draft), 'owner@test');
+        $this->versionWrittenBehindTheAppsBack();
+        Repo::catchUpDraft();
+
+        // Version 3, also behind the app's back, changing something else.
+        $doc = Repo::getVersion(2)->data->toArray();
+        $doc['company']['tagline'] = 'Third version';
+        Db::exec(
+            'INSERT INTO versions (version, published_at, published_by, source, summary, change_count, data) VALUES (3, UTC_TIMESTAMP(), ?, ?, ?, 1, ?)',
+            ['hand', 'sql', 'tagline', Db::json(SiteData::fromArray($doc)->toArray())]
+        );
+        Repo::catchUpDraft();
+
+        $note = Repo::rebaseNote();
+        $this->assertSame(1, $note->from, 'the second move forgot where the draft started');
+        $this->assertSame(3, $note->to);
+        $this->assertStringContains('Pickup | 500 | on', implode("\n", $note->openLines()), 'the first move\'s clash vanished');
+    }
+
+    public function testRestoreIntoEditorClearsTheNote(): void
+    {
+        $this->ownerRepricesUs(77777.0);
+        $this->versionWrittenBehindTheAppsBack();
+        Repo::catchUpDraft();
+
+        Repo::restore(1, 'owner@test');
+
+        $this->assertNull(Repo::rebaseNote(), 'the note still promised publishing would not undo version 2');
+    }
+
+    public function testADraftWithNoEditsIsCaughtUpWithoutAnEmptyNote(): void
+    {
+        $this->versionWrittenBehindTheAppsBack();
+
+        Repo::catchUpDraft();
+
+        $this->assertSame(2, Repo::getDraft()->baseVersion);
+        $this->assertNull(Repo::rebaseNote(), 'a "0 changes were kept" box was stored');
+    }
+
+    public function testADraftAheadOfLiveIsRepointedSoPublishingWorksAgain(): void
+    {
+        Db::exec('UPDATE draft SET base_version = 9');
+
+        $this->assertNull(Repo::catchUpDraft());
+
+        $this->assertSame(1, Repo::getDraft()->baseVersion, 'a draft pointing at a deleted version was left blocking every publish');
+    }
+
+    public function testAClashLineDisappearsOnceTheOwnerTypesTheirValueBack(): void
+    {
+        $draft = Repo::getDraft()->data->toArray();
+        $draft['settings']['addons'] = 'Pickup | 500 | on';
+        Repo::saveDraft(SiteData::fromArray($draft), 'owner@test');
+        $this->versionWrittenBehindTheAppsBack();
+        $note = Repo::catchUpDraft();
+        $live = Repo::getLatestVersion()->data->toArray();
+
+        $this->assertCount(1, $note->openLines(Repo::getDraft()->data->toArray(), $live));
+
+        $now = Repo::getDraft()->data->toArray();
+        $now['settings']['addons'] = 'Pickup | 500 | on';
+        Repo::saveDraft(SiteData::fromArray($now), 'owner@test');
+
+        $this->assertSame([], $note->openLines(Repo::getDraft()->data->toArray(), $live), 'a clash the owner already settled is still listed');
     }
 
     private function ownerRepricesUs(float $price): void

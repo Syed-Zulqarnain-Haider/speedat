@@ -212,14 +212,25 @@ final class Validate
                     $keys = self::sortedBoxKeys($rate);
 
                     // A heavier parcel should not be cheaper than a lighter one.
-                    for ($i = 1; $i < count($keys); $i++) {
-                        $prev = $rate->boxes()[$keys[$i - 1]] ?? null;
-                        $here = $rate->boxes()[$keys[$i]] ?? null;
-
-                        if (Num::isNum($prev) && Num::isNum($here) && $here < $prev) {
-                            $w[] = $label . ': ' . $keys[$i] . ' kg (' . Money::fmtMoney($here, $cur) . ') is cheaper than '
-                                . $keys[$i - 1] . ' kg (' . Money::fmtMoney($prev, $cur) . ').';
-                            break;
+                    // Measured against the dearest LIGHTER box so far, not just
+                    // the one before, and every drop reported: speedat.co's UK
+                    // Express Saver had 13 kg 27,300, 14 kg 2,900 (a dropped
+                    // zero) and 15 kg 26,500, and stopping at the first drop
+                    // hid that 15 kg was cheaper than 13 kg too.
+                    $topKey = null;
+                    $top    = null;
+                    foreach ($keys as $key) {
+                        $here = $rate->boxes()[$key] ?? null;
+                        if (!Num::isNum($here)) {
+                            continue;
+                        }
+                        if ($top !== null && $here < $top) {
+                            $w[] = $label . ': ' . $key . ' kg (' . Money::fmtMoney($here, $cur) . ') is cheaper than '
+                                . $topKey . ' kg (' . Money::fmtMoney($top, $cur) . ').';
+                        }
+                        if ($top === null || $here > $top) {
+                            $top    = $here;
+                            $topKey = $key;
                         }
                     }
 

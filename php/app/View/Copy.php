@@ -211,9 +211,15 @@ final class Copy
         $settings = $doc->settings();
         $out      = '1' . self::NBSP . 'kg parcel';
 
+        // Named by the owner's own add-on label: the live site's charge is
+        // "Delivery", and the caption used to call every charge "pickup" on a
+        // site that advertises free pickup. Two or more on together read as
+        // "charges".
         $addons = self::addonsOnTotal($doc);
         if ($addons > 0) {
-            $out .= ' · pickup ' . self::hard(Format::fmtMoney($addons, $settings->currency)) . ' included';
+            $on = array_values(array_filter(Engine::addonsList($settings), static fn ($a): bool => $a->on && $a->amount > 0));
+            $name = count($on) === 1 ? mb_strtolower(trim($on[0]->label)) : 'charges';
+            $out .= ' · ' . ($name === '' ? 'charges' : $name) . ' ' . self::hard(Format::fmtMoney($addons, $settings->currency)) . ' included';
         }
 
         return $out;

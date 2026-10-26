@@ -235,6 +235,11 @@ $bars     = $page->bars();
   <?php if (!$whatsApp['has']) { ?>
   <p class="hint empty">No data yet for these dates. No prices were shown, so there was no button to press.</p>
   <?php } else { ?>
+  <?php if ($page->quotesBookedOnly()) { ?>
+  <p class="hint">Not measurable for these dates: before <?= e($page->shownSince === '' ? 'the latest update' : \Speedat\Domain\Pricing\Format::fmtDate($page->shownSince)) ?>
+    a price was recorded only when Book on WhatsApp was tapped, so every recorded price ended on WhatsApp by definition.
+    Pick dates from then on to see the real share.</p>
+  <?php } else { ?>
   <p class="hint">
     <strong><?= e($page->whatsAppShare()) ?></strong> of the prices the calculator showed ended with the
     customer pressing &#8220;Book on WhatsApp&#8221; - <?= e($page->whatsAppSentence()) ?>.
@@ -243,5 +248,6 @@ $bars     = $page->bars();
     <a href="<?= e($this->url(Routes::SHIPMENTS)) ?>">Shipments</a>, and the messages people sent are in the
     <a href="<?= e($this->url(Routes::INBOX)) ?>">Inbox</a>.
   </p>
+  <?php } ?>
   <?php } ?>
 </section>

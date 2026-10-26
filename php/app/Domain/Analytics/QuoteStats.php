@@ -112,6 +112,26 @@ final class QuoteStats
     }
 
     /**
+     * The local date of the first quote recorded WITHOUT the Book button, or
+     * "" when there is none yet.
+     *
+     * Until 2026-10-25 the browser logged a quote only when "Book on WhatsApp"
+     * was tapped, so every older row is booked = 1: "prices shown" was really
+     * "prices booked" and the WhatsApp share read 100%. The first unbooked row
+     * is the first day the log counts every price shown - asked of the data,
+     * like the landings counter's first day, rather than typed in as a date.
+     */
+    public function shownSince(): string
+    {
+        $first = Db::value('SELECT MIN(created_at) FROM quotes WHERE booked = 0');
+        if ($first === null || $first === '') {
+            return '';
+        }
+
+        return (new \DateTimeImmutable((string) $first, new \DateTimeZone('UTC')))->setTimezone(Clock::zone())->format('Y-m-d');
+    }
+
+    /**
      * Quotes per destination id, busiest first.
      *
      * @param  int                $limit rows at most, 1..100

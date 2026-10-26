@@ -151,16 +151,17 @@ $keys = [
            clashes are the part that needs a decision, so they are listed
            value for value rather than counted. */ ?>
   <?php if ($page->rebased !== null) { ?>
-  <div class="notice <?= $page->rebased->conflicts === [] ? 'ok' : 'warn' ?> rebase-box" data-rebase-box>
+  <?php $shown = array_slice($page->rebaseLines, 0, \Speedat\Domain\SiteDoc\RebaseNote::SHOWN); ?>
+  <div class="notice <?= $page->rebaseLines === [] ? 'ok' : 'warn' ?> rebase-box" data-rebase-box>
     <p><?= e($page->rebased->sentence()) ?></p>
-    <?php if ($page->rebased->conflicts !== []) { ?>
-    <p><strong>Changed in both - check these before publishing:</strong></p>
+    <?php if ($page->rebaseLines !== []) { ?>
+    <p><strong>Changed in your draft and in version <?= e($page->rebased->to) ?> - the version <?= e($page->rebased->to) ?> value was kept. If yours was right, type it in again before you publish:</strong></p>
     <ul>
-      <?php foreach ($page->rebased->conflictLines() as $line) { ?>
+      <?php foreach ($shown as $line) { ?>
       <li><?= e($line) ?></li>
       <?php } ?>
-      <?php if ($page->rebased->moreConflicts() > 0) { ?>
-      <li>...and <?= e($page->rebased->moreConflicts()) ?> more</li>
+      <?php if (count($page->rebaseLines) > count($shown)) { ?>
+      <li>...and <?= e(count($page->rebaseLines) - count($shown)) ?> more</li>
       <?php } ?>
     </ul>
     <?php } ?>
@@ -174,8 +175,13 @@ $keys = [
   <div class="notice err conflict-box" data-conflict-box<?= $page->draftMoved ? '' : ' hidden' ?>>
     <?php if ($page->draftMoved) { ?>
     <strong>Nothing was saved.</strong>
+    <?php if (str_starts_with($page->draftEditedBy, 'brought up to date')) { ?>
+    <span data-conflict-text>While the page was open this draft was <?= e($page->draftEditedBy) ?>.
+    Reload to see it, then make your change again.</span>
+    <?php } else { ?>
     <span data-conflict-text>Somebody else changed this draft while the page was open<?= $page->draftEditedBy === '' ? '' : ' - it was ' . e($page->draftEditedBy) ?>.
     Reload to see their version, then make your change again.</span>
+    <?php } ?>
     <a class="btn small" href="<?= e($this->url(Routes::RATES)) ?>" data-conflict-reload>Reload</a>
     <?php } ?>
   </div>

@@ -156,7 +156,7 @@ final class CalculatorMarkupTest extends ViewTestCase
         $this->assertStringContains('<span class="ctile-from">from PKR 4,600', $html);
         $this->assertStringContains("<b>PKR 4,600</b><span>8\u{2013}12 days</span>", $html);
         $this->assertStringContains('<caption><strong>Rates</strong>', $html);
-        $this->assertStringContains('pickup PKR', $html);
+        $this->assertStringContains('pickup and service charges PKR', $html);
 
         // No Documents column and no document clause in the caption: the flat
         // document rate left the product on 2026-09-27 (owner).

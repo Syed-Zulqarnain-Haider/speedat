@@ -46,6 +46,9 @@ final class Repo
     /** The app_settings row that remembers the last catch-up (`catchUpDraft()`). */
     private const REBASE_NOTE = 'draft_rebase';
 
+    /** Who the catch-up writes the draft as; `Draft::editedBy()` words it for people. */
+    public const SYSTEM = 'system';
+
     /** The named lock every publisher queues on. */
     private const PUBLISH_LOCK = 'speedat.site.publish';
 
@@ -235,7 +238,7 @@ final class Repo
     public static function catchUpDraft(): ?RebaseNote
     {
         $behind = Db::one('SELECT d.base_version AS base, (SELECT MAX(version) FROM versions) AS live FROM draft d WHERE d.id = ?', [self::DRAFT_ID]);
-        if ($behind === null || $behind['live'] === null || (int) $behind['base'] >= (int) $behind['live']) {
+        if ($behind === null || $behind['live'] === null || (int) $behind['base'] === (int) $behind['live']) {
             return null;
         }
 
@@ -249,11 +252,28 @@ final class Repo
                 );
                 $live = self::getLatestVersion();
 
-                if ($row === null || $live === null || (int) $row['base_version'] >= $live->version) {
+                if ($row === null || $live === null || (int) $row['base_version'] === $live->version) {
                     return null;
                 }
 
                 $draft = self::toDraft($row);
+
+                if ($draft->baseVersion > $live->version) {
+                    // AHEAD, not behind: the version the draft came from was
+                    // deleted by hand. Nothing can be merged, and left alone
+                    // every publish would be refused again. The draft is
+                    // re-pointed at the live version with its contents kept,
+                    // so whatever differs shows as ordinary unpublished
+                    // changes on the review card, to be read before publishing.
+                    Db::exec(
+                        'UPDATE draft SET base_version = ?, updated_at = ?, updated_by = ? WHERE id = ?',
+                        [$live->version, Clock::sql(), self::SYSTEM, self::DRAFT_ID]
+                    );
+                    Log::warn('draft_base_missing', ['base' => $draft->baseVersion, 'live' => $live->version]);
+                    Audit::log(self::SYSTEM, 'draft_repointed', ['from' => $draft->baseVersion, 'to' => $live->version]);
+
+                    return null;
+                }
                 $base  = self::getVersion($draft->baseVersion);
 
                 if ($base === null) {
@@ -272,11 +292,20 @@ final class Repo
                     return null;
                 }
 
+                // Written as 'system', not as the last person who typed: the
+                // editor then says the draft was brought up to date
+                // automatically, and an open tab's refused save does not blame
+                // its own owner as "somebody else".
                 $at = Clock::sql();
                 Db::exec(
-                    'UPDATE draft SET data = ?, base_version = ?, updated_at = ? WHERE id = ?',
-                    [Db::json($merged->toArray()), $live->version, $at, self::DRAFT_ID]
+                    'UPDATE draft SET data = ?, base_version = ?, updated_at = ?, updated_by = ? WHERE id = ?',
+                    [Db::json($merged->toArray()), $live->version, $at, self::SYSTEM, self::DRAFT_ID]
                 );
+
+                $services = [];
+                foreach ($live->data->card->services as $service) {
+                    $services[$service->id] = $service->name;
+                }
 
                 $note = new RebaseNote(
                     from: $draft->baseVersion,
@@ -284,7 +313,26 @@ final class Repo
                     carried: Diff::of($live->data, $merged)->count,
                     conflicts: $result['conflicts'],
                     at: self::iso($at),
+                    currency: $live->data->card->settings->currency,
+                    services: $services,
                 );
+
+                // A second catch-up before anybody published keeps what the
+                // first one reported: its starting version, and the values it
+                // took away from the owner.
+                $older = RebaseNote::fromArray(Db::unjson(Db::value('SELECT v FROM app_settings WHERE k = ? FOR UPDATE', [self::REBASE_NOTE])));
+                if ($older !== null) {
+                    $note = $older->followedBy($note);
+                }
+
+                if ($note->isEmpty()) {
+                    // Nothing carried and nothing clashed: the draft simply
+                    // became the live version. A green box saying "0 changes
+                    // were kept" would only raise a question.
+                    Db::exec('DELETE FROM app_settings WHERE k = ?', [self::REBASE_NOTE]);
+
+                    return $note;
+                }
 
                 Db::exec(
                     'INSERT INTO app_settings (k, v, updated_at, updated_by) VALUES (:k, :v, :at, :by)'
@@ -302,7 +350,7 @@ final class Repo
         }
 
         if ($note !== null) {
-            Audit::log('system', 'draft_rebased', $note->toArray());
+            Audit::log(self::SYSTEM, 'draft_rebased', $note->toArray());
         }
 
         return $note;
@@ -351,7 +399,13 @@ final class Repo
 
         $current = self::getDraft();
 
-        return self::saveDraft(self::rebuild($old->data, $current->data), $by, $expectedRevision);
+        $restored = self::saveDraft(self::rebuild($old->data, $current->data), $by, $expectedRevision);
+
+        // The draft is now an old version's rates, so a note saying "publishing
+        // will not undo version N" is no longer true.
+        Db::exec('DELETE FROM app_settings WHERE k = ?', [self::REBASE_NOTE]);
+
+        return $restored;
     }
 
     /**

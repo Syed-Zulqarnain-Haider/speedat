@@ -95,7 +95,9 @@ final class CopyTest extends ViewTestCase
         $note = Copy::boardNote($this->doc());
 
         $this->assertStringContains('kg parcel', $note);
-        $this->assertStringContains('pickup PKR', $note);
+        // Named by the owner's add-on label ("Pickup and service charges" in
+        // this fixture), not a hard-coded "pickup".
+        $this->assertStringContains('pickup and service charges PKR', $note);
         // The hard space keeps "1 kg" whole where the line wraps.
         $this->assertStringContains("1\u{00A0}kg", $note);
 

@@ -147,6 +147,7 @@ final class EditorPage
         ]);
 
         $diff     = Diff::of($live->data, $draft->data);
+        $rebased  = Repo::rebaseNote();
         $versions = Repo::listVersions(self::HISTORY);
         $hold     = Live::hold();
 
@@ -220,7 +221,8 @@ final class EditorPage
             draftEditedBy: $draft->editedBy(),
             draftMoved: $draftMoved,
             rollback: self::rollbackAsk($app, $hold->on, $live->version, $diff->count),
-            rebased: Repo::rebaseNote(),
+            rebased: $rebased,
+            rebaseLines: $rebased?->openLines($draft->data->toArray(), $live->data->toArray()) ?? [],
         );
     }
 

@@ -239,6 +239,22 @@ with your name, the time and a one-line summary.
 is live. There is no undo for discard, so use *History* instead if you might want
 the work back.
 
+### "The live website was updated after you started this draft"
+
+You may see this box at the top of the editor. It means a new version went live
+while your draft was open (for example, somebody changed the database directly,
+as happened on 11 October). The admin has already **moved your draft onto that
+new version for you**: your own edits are still there, and everything the new
+version changed is kept too, so publishing will not undo it.
+
+If the box also lists lines under **"Changed in your draft and in version N"**,
+those are fields you and the new version both changed. The new version's value
+was kept. If yours was the right one, type it back in and publish. A line
+disappears from the list once you have typed your value back.
+
+The box goes away after your next publish (or Discard, or Restore into editor).
+You never need to discard a draft because of it.
+
 ### "Rates are live"
 
 Until this is ticked once, the website carries a notice saying the prices shown

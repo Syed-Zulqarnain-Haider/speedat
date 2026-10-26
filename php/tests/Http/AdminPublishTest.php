@@ -128,7 +128,7 @@ final class AdminPublishTest extends AdminTestCase
         // (`Repo::catchUpDraft()`), so the editor says what it did instead of
         // warning about a draft that is no longer behind.
         $this->assertStringContains('name="expectedBase" value="2"', $body, 'the card does not publish against the version it compared with');
-        $this->assertStringContains('Version 2 went live after this draft was started from version 1', $body, 'the editor does not say the draft was carried onto version 2');
+        $this->assertStringContains('The live website was updated (version 2', $body, 'the editor does not say the draft was carried onto version 2');
         $this->assertStringNotContains('has gone live since', $body, 'the card still warns about a draft that was just caught up');
         $this->assertSame(2, (int) Db::value('SELECT base_version FROM draft'), 'opening the editor did not catch the draft up');
 

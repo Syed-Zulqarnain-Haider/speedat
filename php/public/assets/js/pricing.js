@@ -942,13 +942,19 @@
           w.push(label + ": the per-step price (" + fmtMoney(q.addl, cur) + ") is higher than the first slab (" + fmtMoney(q.first, cur) + ").");
 
         if (grid && q.grid) {
+          // Against the dearest lighter box so far, every drop reported:
+          // twin of Validate::warnings (see the comment there).
           var ks = sortedGridKeys(q.grid);
-          for (var k = 1; k < ks.length; k++) {
-            var prev = q.grid[ks[k - 1]];
+          var topKey = null;
+          var top = null;
+          for (var k = 0; k < ks.length; k++) {
             var here = q.grid[ks[k]];
-            if (isNum(prev) && isNum(here) && here < prev) {
-              w.push(label + ": " + ks[k] + " kg (" + fmtMoney(here, cur) + ") is cheaper than " + ks[k - 1] + " kg (" + fmtMoney(prev, cur) + ").");
-              break;
+            if (!isNum(here)) continue;
+            if (top !== null && here < top)
+              w.push(label + ": " + ks[k] + " kg (" + fmtMoney(here, cur) + ") is cheaper than " + topKey + " kg (" + fmtMoney(top, cur) + ").");
+            if (top === null || here > top) {
+              top = here;
+              topKey = ks[k];
             }
           }
 

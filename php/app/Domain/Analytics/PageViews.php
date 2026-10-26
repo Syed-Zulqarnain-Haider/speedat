@@ -6,6 +6,7 @@ namespace Speedat\Domain\Analytics;
 
 use Speedat\Core\Caps;
 use Speedat\Core\Clock;
+use Speedat\Core\Config;
 use Speedat\Core\Db;
 use Speedat\Core\Log;
 use Speedat\Domain\Seo\Routes;
@@ -328,8 +329,8 @@ final class PageViews
         [$start, $end] = self::range($from, $to);
 
         return (int) Db::value(
-            'SELECT COALESCE(SUM(views), 0) FROM page_views WHERE day BETWEEN ? AND ?',
-            [$start, $end],
+            'SELECT COALESCE(SUM(views), 0) FROM page_views WHERE day BETWEEN ? AND ? AND referrer_host <> ?',
+            [$start, $end, self::ownHost()],
             0
         );
     }
@@ -349,7 +350,7 @@ final class PageViews
         return $this->map(
             'SELECT day AS label, SUM(views) AS views
                FROM page_views
-              WHERE day BETWEEN ? AND ?
+              WHERE day BETWEEN ? AND ? AND referrer_host <> ?
            GROUP BY day
            ORDER BY day',
             $from,
@@ -367,7 +368,7 @@ final class PageViews
         return $this->map(
             'SELECT path AS label, SUM(views) AS views
                FROM page_views
-              WHERE day BETWEEN ? AND ?
+              WHERE day BETWEEN ? AND ? AND referrer_host <> ?
            GROUP BY path
            ORDER BY SUM(views) DESC, path',
             $from,
@@ -385,7 +386,7 @@ final class PageViews
         return $this->map(
             'SELECT device AS label, SUM(views) AS views
                FROM page_views
-              WHERE day BETWEEN ? AND ?
+              WHERE day BETWEEN ? AND ? AND referrer_host <> ?
            GROUP BY device
            ORDER BY SUM(views) DESC, device',
             $from,
@@ -412,11 +413,11 @@ final class PageViews
         $rows = Db::all(
             'SELECT referrer_host AS label, SUM(views) AS views
                FROM page_views
-              WHERE day BETWEEN ? AND ?
+              WHERE day BETWEEN ? AND ? AND referrer_host <> ?
            GROUP BY referrer_host
            ORDER BY SUM(views) DESC, referrer_host
               LIMIT ?',
-            [$start, $end, max(1, min(200, $limit))]
+            [$start, $end, self::ownHost(), max(1, min(200, $limit))]
         );
 
         return self::labelled($rows);
@@ -435,7 +436,21 @@ final class PageViews
     {
         [$start, $end] = self::range($from, $to);
 
-        return self::labelled(Db::all($sql, [$start, $end]));
+        return self::labelled(Db::all($sql, [$start, $end, self::ownHost()]));
+    }
+
+    /**
+     * The site's own host, left out of every count. `record()` has refused
+     * own-site referrals since 2026-10-25, but the rows written before that
+     * stay in the table: on speedat.co they were 296 of 1,071 views, with the
+     * site itself the second-biggest "referrer". Filtering on the way out
+     * fixes the old rows and needs no data migration on the server.
+     */
+    private static function ownHost(): string
+    {
+        $host = self::referrerHost(Config::str('app.url'));
+
+        return $host === '' ? "\0no-own-host" : $host;
     }
 
     /**

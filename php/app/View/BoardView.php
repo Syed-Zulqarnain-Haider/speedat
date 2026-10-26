@@ -42,7 +42,10 @@ final class BoardView
         return new self(
             rows: $rows,
             title: $doc->trimmed('routesTitle') !== '' ? $doc->trimmed('routesTitle') : 'Rates',
-            note: $doc->trimmed('routesNote') !== '' ? $doc->trimmed('routesNote') : Copy::boardNote($doc),
+            // Under a hold the board shows days only, so the owner's caption
+            // ("1 kg parcel - rates apply ...") would describe prices that are
+            // not there; the automatic one says what the board does show.
+            note: !$doc->holdOn() && $doc->trimmed('routesNote') !== '' ? $doc->trimmed('routesNote') : Copy::boardNote($doc),
             currency: $doc->currency(),
             services: $doc->services(),
             sampleNotice: $doc->sampleNotice(),

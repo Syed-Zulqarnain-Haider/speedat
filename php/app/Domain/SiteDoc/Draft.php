@@ -98,6 +98,12 @@ final class Draft
         $who  = trim($this->updatedBy);
         $when = Format::fmtDateTime($this->updatedAt);
 
+        // `Repo::catchUpDraft()` writes the draft as 'system' when it moves it
+        // onto a newer live version; that is not a person to be named.
+        if ($who === Repo::SYSTEM) {
+            return 'brought up to date with the live website automatically' . ($when === '' ? '' : ' at ' . $when);
+        }
+
         if ($who !== '' && $when !== '') {
             return 'edited by ' . $who . ' at ' . $when;
         }

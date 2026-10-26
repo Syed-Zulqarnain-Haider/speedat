@@ -41,7 +41,12 @@ final class Rebase
     /** Stands in for "this key or item is not there" on one side of the merge. */
     private const MISSING = "\0missing";
 
-    /** @var list<array{path:string, live:mixed, draft:mixed}> */
+    /**
+     * `path` is for people (countries by name), `keys` is for the program
+     * (countries by id) so the editor can look the field up again later.
+     *
+     * @var list<array{path:string, keys:list<string>, live:mixed, draft:mixed, liveMissing:bool, draftMissing:bool}>
+     */
     private array $conflicts = [];
 
     private function __construct()
@@ -52,18 +57,21 @@ final class Rebase
      * @param array<string,mixed> $base  the version the draft was branched from
      * @param array<string,mixed> $live  the version customers see now
      * @param array<string,mixed> $draft the working copy
-     * @return array{merged: array<string,mixed>, conflicts: list<array{path:string, live:mixed, draft:mixed}>}
+     * @return array{merged: array<string,mixed>, conflicts: list<array{path:string, keys:list<string>, live:mixed, draft:mixed, liveMissing:bool, draftMissing:bool}>}
      */
     public static function merge(array $base, array $live, array $draft): array
     {
         $run    = new self();
-        $merged = $run->value($base, $live, $draft, []);
+        $merged = $run->value($base, $live, $draft, [], []);
 
         return ['merged' => is_array($merged) ? $merged : $live, 'conflicts' => $run->conflicts];
     }
 
-    /** @param list<string> $path */
-    private function value(mixed $base, mixed $live, mixed $draft, array $path): mixed
+    /**
+     * @param list<string> $path labels, for the report
+     * @param list<string> $keys raw keys and ids, for finding the field again
+     */
+    private function value(mixed $base, mixed $live, mixed $draft, array $path, array $keys): mixed
     {
         if (self::same($draft, $base)) {
             return $live;
@@ -73,16 +81,21 @@ final class Rebase
         }
 
         if (self::isIdList($base) && self::isIdList($live) && self::isIdList($draft)) {
-            return $this->idList($base, $live, $draft, $path);
+            return $this->idList($base, $live, $draft, $path, $keys);
         }
         if (self::isObject($live) && self::isObject($draft)) {
-            return $this->object(self::isObject($base) ? $base : [], $live, $draft, $path);
+            return $this->object(self::isObject($base) ? $base : [], $live, $draft, $path, $keys);
         }
 
+        // A removal is kept as a flag, not as null: "version 18 removed this
+        // country" and "version 18 blanked this box" are different news.
         $this->conflicts[] = [
-            'path'  => implode(' > ', $path),
-            'live'  => $live === self::MISSING ? null : $live,
-            'draft' => $draft === self::MISSING ? null : $draft,
+            'path'         => implode(' > ', $path),
+            'keys'         => $keys,
+            'live'         => $live === self::MISSING ? null : $live,
+            'draft'        => $draft === self::MISSING ? null : $draft,
+            'liveMissing'  => $live === self::MISSING,
+            'draftMissing' => $draft === self::MISSING,
         ];
 
         return $live;
@@ -93,9 +106,10 @@ final class Rebase
      * @param array<array-key,mixed> $live
      * @param array<array-key,mixed> $draft
      * @param list<string>           $path
+     * @param list<string>           $keys
      * @return array<array-key,mixed>
      */
-    private function object(array $base, array $live, array $draft, array $path): array
+    private function object(array $base, array $live, array $draft, array $path, array $keys): array
     {
         $out = [];
 
@@ -107,6 +121,7 @@ final class Rebase
                 array_key_exists($key, $live) ? $live[$key] : self::MISSING,
                 array_key_exists($key, $draft) ? $draft[$key] : self::MISSING,
                 [...$path, (string) $key],
+                [...$keys, (string) $key],
             );
 
             if ($merged !== self::MISSING) {
@@ -122,9 +137,10 @@ final class Rebase
      * @param list<array<string,mixed>> $live
      * @param list<array<string,mixed>> $draft
      * @param list<string>              $path
+     * @param list<string>              $keys
      * @return list<array<string,mixed>>
      */
-    private function idList(array $base, array $live, array $draft, array $path): array
+    private function idList(array $base, array $live, array $draft, array $path, array $keys): array
     {
         $b = self::byId($base);
         $l = self::byId($live);
@@ -144,7 +160,7 @@ final class Rebase
         $out = [];
         foreach ($order as $id) {
             $label  = (string) (($l[$id]['name'] ?? $d[$id]['name'] ?? $b[$id]['name'] ?? null) ?: $id);
-            $merged = $this->value($b[$id] ?? self::MISSING, $l[$id] ?? self::MISSING, $d[$id] ?? self::MISSING, [...$path, $label]);
+            $merged = $this->value($b[$id] ?? self::MISSING, $l[$id] ?? self::MISSING, $d[$id] ?? self::MISSING, [...$path, $label], [...$keys, '#' . $id]);
 
             if ($merged !== self::MISSING) {
                 $out[] = $merged;

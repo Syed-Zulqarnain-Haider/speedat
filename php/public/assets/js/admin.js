@@ -795,9 +795,13 @@
     lead.textContent = "Nothing was saved. ";
     var text = document.createElement("span");
     // textContent: `who` carries a colleague's address out of the database.
+    // "brought up to date ..." is Repo::catchUpDraft(), not a colleague
+    // (Draft::editedBy()); it must not be called "somebody else".
     text.textContent =
-      (who ? "Somebody else changed this draft while the page was open - it was " + who + ". " : "Somebody else changed this draft while the page was open. ") +
-      "Reload to see their version, then make your change again. Your edits are still in the boxes until you do.";
+      who && who.indexOf("brought up to date") === 0
+        ? "While the page was open this draft was " + who + ". Reload to see it, then make your change again. Your edits are still in the boxes until you do."
+        : (who ? "Somebody else changed this draft while the page was open - it was " + who + ". " : "Somebody else changed this draft while the page was open. ") +
+          "Reload to see their version, then make your change again. Your edits are still in the boxes until you do.";
     var reload = document.createElement("a");
     reload.className = "btn small";
     reload.href = location.pathname;

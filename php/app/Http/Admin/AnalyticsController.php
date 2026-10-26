@@ -105,6 +105,7 @@ final class AnalyticsController
             services: $this->named($this->quotes->byService($from, $to), $names, NameLookup::SERVICES),
             bands: $this->quotes->byWeightBand($from, $to),
             firstCountedDay: $this->firstCountedDay(),
+            shownSince: $this->quotes->shownSince(),
             countingFrom: self::COUNTING_FROM,
             rangeNotice: $notice,
             // Stored on every landing since the counter shipped and, until

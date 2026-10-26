@@ -80,6 +80,8 @@ final class AnalyticsPage
          * the note under the chart can be specific instead of apologetic.
          */
         public readonly string $firstCountedDay = '',
+        /** First local day every price shown was logged, not only booked ones (`QuoteStats::shownSince()`); "" = not yet. */
+        public readonly string $shownSince = '',
         /** The day the counter shipped; see Http\Admin\AnalyticsController::COUNTING_FROM. */
         public readonly string $countingFrom = '',
         /** Set when the dates asked for were adjusted, and why. "" when they were taken as given. */
@@ -309,9 +311,22 @@ final class AnalyticsPage
             $note .= ' The first day with a landing on it is ' . Format::fmtDate($this->firstCountedDay) . '.';
         }
 
-        // The quote numbers below have no such gap, and saying so is what stops
-        // the whole screen being distrusted because one half of it is young.
-        return $note . ' The quote figures below are complete: every price the site has ever shown is in them.';
+        // The quote numbers had a gap of their own: before shownSince only
+        // booked quotes were logged. Saying where it ends is what stops a 100%
+        // WhatsApp share being read as every visitor booking.
+        if ($this->quotesBookedOnly()) {
+            return $note . ' Quotes are only partly counted for these dates: until '
+                . ($this->shownSince === '' ? 'the latest update' : Format::fmtDate($this->shownSince))
+                . ' a price was recorded only when Book on WhatsApp was tapped, so the quote figures and the WhatsApp share below count bookings, not every price shown.';
+        }
+
+        return $note . ' The quote figures below are complete: every price the site showed in these dates is in them.';
+    }
+
+    /** Does the range reach back to when only booked quotes were logged? */
+    public function quotesBookedOnly(): bool
+    {
+        return $this->shownSince === '' || $this->from->format('Y-m-d') < $this->shownSince;
     }
 
     /** Does the range reach back before anything was counted? */

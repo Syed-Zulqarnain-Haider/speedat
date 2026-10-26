@@ -245,7 +245,19 @@ for a plan that can only fetch a URL, and for `/ops/opcache-reset`; set it
 anyway — an empty token must never be the only thing between the internet and a
 scheduled job.
 
-What runs: the housekeeping in `bin/cron.php` (expired sessions, old rate-limit
+What runs, first: `draft` - if a version was published that the editor's draft
+was not branched from, the draft is moved onto it with a three-way merge
+(`Repo::catchUpDraft()`, audited as `draft_rebased`; the cron log says
+`carried from version N onto M`). A draft pointing at a version that no longer
+exists is re-pointed at the live one (`draft_base_missing` in the log,
+`draft_repointed` in the audit). Normally it reports `on the live version`.
+
+**Never INSERT into `versions` by hand.** Publish through the admin, or for an
+emergency use the hold switch. A version written by SQL is what blocked every
+publish from 2026-10-16 to the October upgrade; the catch-up now repairs it, but
+the admin is still the only path that records who changed what.
+
+Then: the housekeeping in `bin/cron.php` (expired sessions, old rate-limit
 windows, logs over 30 days) and the checks in `app/Domain/Ops/Cron.php` (rates
 older than 7 days, a hold longer than 12 hours — each emailed at most once a day
 — the day's numbers, and the cache sweep). Every job is wrapped: one that fails
