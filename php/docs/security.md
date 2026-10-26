@@ -357,15 +357,18 @@ Cheap. Generate a new one and save:
 1. `UPDATE admins SET password_hash = NULL WHERE email = '...';` — that admin
    can no longer sign in with a password. Firebase sign-in is unaffected.
 2. `DELETE FROM sessions WHERE email = '...';`
-3. Set a new one through the password-setup flow. The policy is 12 characters
-   minimum, 128 maximum, no long runs, no known-weak strings.
+3. Set a new one with `bin/seed.php --owner=<email> --password-file=<file>`,
+   run once from an hPanel cron entry - the exact steps are section 7.7,
+   part B. The seed script requires at least 12 characters; use a long
+   random one from a password manager.
 4. If you are not sure it was only that one account, do all of them.
 
 ### 7.5 A TOTP secret leaked, or a phone was lost
 
-1. `UPDATE admins SET totp_secret_enc = NULL, totp_enabled = 0 WHERE email = '...';`
+1. `UPDATE admins SET totp_secret_enc = NULL, totp_enabled = 0, totp_last_step = NULL WHERE email = '...';`
 2. `DELETE FROM sessions WHERE email = '...';`
-3. Re-enrol from a device you can see.
+3. Sign in (with Google, or with the password if that is switched on - section
+   7.7) and re-enrol under **Admin -> Security** from a device you can see.
 
 `totp_last_step` already stops a code being replayed inside its own window, so a
 code shoulder-surfed thirty seconds ago is dead. That is not a substitute for
@@ -384,6 +387,87 @@ Do all of the above, in order, and additionally:
 4. Rebuild from the release zip rather than patching what is there. You cannot
    review your way to confidence in a tree somebody else had write access to.
 5. `SELECT * FROM admins;` — an account you did not add is the whole incident.
+
+### 7.7 Google sign-in is broken
+
+For the day **Continue with Google** stops working and
+`allow_password_login` is `false` - a Firebase setting changed, the project was
+deleted, Google is down, a value in `config.php` got mangled. Nothing has
+leaked; you just cannot get in. This works without a terminal and **even if
+your admin account has never had a password**. Print it and keep it with your
+hPanel login, outside the website. (Set-up guide:
+[`firebase-setup.md`](./firebase-setup.md).)
+
+If you also lost the phone with the 6-digit code app, do section 7.5 step 1
+and 2 in phpMyAdmin first (with your email), then come back here.
+
+**A. Switch passwords back on**
+
+1. hPanel -> **Files -> File Manager** -> `speedat_main/php/config/config.php`
+   -> right-click -> **Edit**. In the `'auth' => [` part change
+   `'allow_password_login' => false,` to `'allow_password_login' => true,`
+   -> **Save**.
+2. Wait five minutes, or reset OPcache
+   ([`deploy-hostinger.md` section 14](./deploy-hostinger.md#14-after-every-deploy-reset-opcache)).
+3. Open `https://speedat.co/admin/login`. The email-and-password form is back.
+   **If you know your password**, sign in with it (plus the 6-digit code if
+   two-factor is on) and go to part C. **If you have no password, or it is
+   refused**, do part B.
+
+**B. Give your account a password (no terminal needed)**
+
+`bin/seed.php` sets an owner's password from a file and then wipes and deletes
+that file in the same run. It never removes an admin, never demotes one, and
+never touches prices that are already there, so running it on the live site is
+safe.
+
+1. **Find your account's path.** hPanel -> **Advanced -> Cron Jobs**. The hourly
+   entry shows a command like
+   `/usr/bin/php /home/u123456789/domains/speedat.co/speedat_main/php/bin/cron.php`.
+   The part before `/bin/cron.php` is your path; below it is written as
+   `/home/uXXXXXXXX/domains/speedat.co/speedat_main/php` - use yours.
+2. **Write the password into a file.** File Manager -> open
+   `speedat_main/php/config/` -> **New File** -> name it `break-glass.txt` ->
+   type the new password on the first line and nothing else (at least 12
+   characters; a long random one from your password manager) -> **Save**.
+   Right-click the file -> **Permissions** -> `600`.
+3. **Run the seed once from cron.** Cron Jobs -> **Create New Cron Job** ->
+   type **Custom** -> command (one line, your path and your Google email):
+   ```
+   /usr/bin/php /home/uXXXXXXXX/domains/speedat.co/speedat_main/php/bin/seed.php --owner=your.name@gmail.com --password-file=/home/uXXXXXXXX/domains/speedat.co/speedat_main/php/config/break-glass.txt
+   ```
+   Both paths must be full paths starting with `/home/`: cron does not start in
+   the site's folder, so a short path like `../config/break-glass.txt` is not
+   found. Do not add `>` or `2>&1`; hPanel rejects them. Schedule: every minute
+   (`* * * * *`) -> **Save**.
+4. **Wait two minutes**, then look in `speedat_main/php/config/` again.
+   `break-glass.txt` is **gone**: the script ran, set the password and deleted
+   the file. If the file is still there after five minutes, the run failed: open
+   the cron job's output in hPanel (or `speedat_main/php/storage/logs/`), and in
+   any case delete `break-glass.txt` yourself - a password must not sit in a
+   file in every nightly backup.
+5. **Delete the cron entry now.** Cron Jobs -> the seed line -> **Delete**. Left
+   in place it runs every minute and fails, because the file is gone.
+6. Sign in at `https://speedat.co/admin/login` with your email, the new
+   password, and the 6-digit code if two-factor is on.
+
+The email in `--owner=` must be exactly the one in `admins` (lowercase). If it
+was not there, the script adds it as an owner - which is also how to recover
+from "my Google email was never added".
+
+**C. Fix Google, then lock the door again**
+
+1. While signed in, work through [`firebase-setup.md`](./firebase-setup.md)
+   sections 1-4 to find what broke. `storage/logs/app-<today>.log`,
+   lines `login_google_refused`, usually name it (section 4 of that guide).
+2. Test **Continue with Google** in a normal window while the password form is
+   still on.
+3. Only when Google works again: set `'allow_password_login' => false,`, save,
+   wait five minutes or reset OPcache, and reload the login page - only the
+   Google button shows.
+4. Keep the password in your password manager. Do not set `password_hash` to
+   NULL: with passwords switched off nobody can use it, and it is the spare
+   key for next time.
 
 ---
 

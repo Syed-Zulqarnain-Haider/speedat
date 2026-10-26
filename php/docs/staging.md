@@ -185,7 +185,8 @@ Staging-specific values worth knowing:
 - `app.env = 'local'`, `app.debug = false`, `app.url = http://127.0.0.1:8085`
 - `db.host = 'db'` (the compose service name), database and user `speedat`
 - `auth.allow_password_login = true` and no Firebase project — sign-in on
-  staging is the password + TOTP path, with its own admin and its own 2FA
+  staging is password sign-in (plus the six-digit code if that admin has
+  two-factor on), with its own admin and its own 2FA
 - `mail.transport = 'log'`: nothing is ever sent. A staging box that emails the
   office every time somebody tests the lead form is a staging box people turn
   off

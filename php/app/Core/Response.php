@@ -15,6 +15,9 @@ final class Response
     /** @var array<string,string> header name (as sent) => value */
     private array $headers = [];
 
+    /** See allowFirebaseAuth(). */
+    private bool $firebaseAuth = false;
+
     private function __construct(
         public readonly int $status,
         private readonly string $body,
@@ -166,6 +169,31 @@ final class Response
     {
         return $this->header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
             ->header('Pragma', 'no-cache');
+    }
+
+    /**
+     * Mark this response as the page that runs Google sign-in, so Core\App
+     * widens ITS Content-Security-Policy - and nobody else's - by the Firebase
+     * SDK's sources (Domain\Auth\FirebaseBrowser::cspSources()) and the
+     * optional security.csp_* extras.
+     *
+     * A marker on the response rather than a header a handler writes
+     * (2026-10-26): the policy is still decided in one place, from config,
+     * and a handler can only say "I am the sign-in page", never which hosts
+     * to trust. Only Http\Admin\LoginController calls it. An error page that
+     * replaces the login response is a new Response and keeps the plain
+     * policy.
+     */
+    public function allowFirebaseAuth(): self
+    {
+        $this->firebaseAuth = true;
+
+        return $this;
+    }
+
+    public function allowsFirebaseAuth(): bool
+    {
+        return $this->firebaseAuth;
     }
 
     public function cacheFor(int $seconds): self

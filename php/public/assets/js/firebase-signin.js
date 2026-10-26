@@ -37,6 +37,11 @@
   var CONFIG_ID = "firebase-config";
   var CDN = "https://www.gstatic.com/firebasejs/";
 
+  var IN_APP =
+    "Google does not allow sign-in inside apps like WhatsApp, Facebook or Instagram. " +
+    "Open this page in Chrome or Safari: tap the app's menu (the three dots or the share button) " +
+    "and choose Open in browser, then press Continue with Google there.";
+
   var wrapper = document.querySelector("[data-google-signin]");
   var form = wrapper && wrapper.querySelector("[data-google-form]");
   var field = form && form.querySelector("[data-google-token]");
@@ -97,10 +102,36 @@
       });
 
       reveal();
+
+      /* Said up front, not after a failed try. Google refuses sign-in inside
+         an app's built-in browser (Facebook, Instagram, an Android web view),
+         and it does so on its own page inside the popup, so all this file
+         ever hears back is "the window was closed". The owner opens admin
+         links from WhatsApp on a phone (2026-10-26); without this the button
+         looks broken. The button stays, because the guess can be wrong. */
+      if (inAppBrowser()) notify(IN_APP);
     })
-    .catch(function () {
-      /* Left hidden on purpose. See the note at the top of this file. */
+    .catch(function (err) {
+      /* Left hidden on purpose. See the note at the top of this file. Logged
+         because it was silent: a CSP missing gstatic, a mistyped sdkVersion
+         and a blocked CDN all looked the same from the outside, and the
+         console is the first place anyone helping the owner will look
+         (review, 2026-10-26). */
+      if (window.console && console.error) console.error("firebase-signin: SDK load failed", err);
     });
+
+  /* Back from the next page restores this one from the browser's page cache
+     exactly as it was left: button disabled and reading "Waiting for Google",
+     and the token still in the field, so the next press would skip the popup
+     and post a stale token (review, 2026-10-26). `persisted` is true only
+     for that restore; a normal load has nothing to undo. */
+  window.addEventListener("pageshow", function (event) {
+    if (!event.persisted) return;
+    field.value = "";
+    busy(false);
+    clearNotice();
+    if (inAppBrowser() && !wrapper.hasAttribute("hidden")) notify(IN_APP);
+  });
 
   /* ------------------------------------------------------------------ */
 
@@ -147,6 +178,15 @@
     button.textContent = on ? "Waiting for Google…" : "Continue with Google";
   }
 
+  /* A guess from the user-agent string, and only used to show advice early.
+     FBAN/FBAV/FB_IAB is Facebook and Messenger, "; wv)" is any Android app's
+     embedded web view (WhatsApp's own viewer among them when Custom Tabs are
+     off), and the rest are the in-app browsers people forward links through. */
+  function inAppBrowser() {
+    var ua = (navigator && navigator.userAgent) || "";
+    return /FBAN|FBAV|FB_IAB|FBIOS|Instagram|WhatsApp|Line\/|MicroMessenger|Snapchat|musical_ly|TikTok|; wv\)/i.test(ua);
+  }
+
   function clearNotice() {
     var existing = wrapper.querySelector("[data-google-notice]");
     if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
@@ -166,18 +206,33 @@
     var orPassword = passwordsOffered();
     var says;
 
-    if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+    if (inAppBrowser() && (code === "auth/popup-closed-by-user" || code === "auth/popup-blocked")) {
+      /* Inside an app's browser a closed or blocked popup is almost always
+         Google's own refusal page, so "try again" or "allow pop-ups" would
+         send the owner round in a circle. */
+      says = IN_APP;
+    } else if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
       says = "That sign-in window was closed before it finished. Try again.";
     } else if (code === "auth/popup-blocked") {
       says = orPassword
         ? "Your browser blocked the Google sign-in window. Allow pop-ups for this site, or sign in with your email and password below."
         : "Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.";
+    } else if (code === "auth/web-storage-unsupported" || code === "auth/operation-not-supported-in-this-environment") {
+      /* Firebase needs browser storage to carry the popup's answer back, and
+         private windows and in-app browsers refuse it. These two codes used to
+         fall through to "did not finish. Try again", which can never work
+         (review, 2026-10-26). The fix is a different browser, so say that. */
+      says = inAppBrowser()
+        ? IN_APP
+        : "This browser is blocking what Google sign-in needs (private windows and in-app browsers do this). Open this page in a normal Chrome or Safari window.";
     } else if (code === "auth/unauthorized-domain") {
       /* The one misconfiguration that is invisible from the server: this
-         domain is not in the Firebase project's Authorised domains list.
-         docs/firebase-setup.md step 6 is the fix, and naming it here is the
-         difference between a five-minute fix and an afternoon. */
-      says = "This website is not on the Firebase project's list of authorised domains, so Google refused the sign-in. An administrator has to add it (docs/firebase-setup.md step 6).";
+         domain is not in the Firebase project's Authorized domains list.
+         docs/firebase-setup.md section 1, step 3 is the fix, and naming it
+         here is the difference between a five-minute fix and an afternoon.
+         It used to point at a sixth step that does not exist (review, 2026-10-26),
+         and it now names the console path and the exact host to add. */
+      says = "This website is not on the Firebase project's list of authorized domains, so Google refused the sign-in. An administrator has to add it: Firebase console -> Authentication -> Settings -> Authorized domains: add " + location.hostname + " (docs/firebase-setup.md section 1, step 3).";
     } else if (code === "auth/network-request-failed") {
       says = orPassword
         ? "Google could not be reached. Check the connection, or sign in with your email and password below."
@@ -188,6 +243,13 @@
         : "That Google sign-in did not finish. Try again.";
     }
 
+    notify(says);
+  }
+
+  /* One notice at a time, under the button: a second failure replaces the
+     first instead of stacking. */
+  function notify(says) {
+    clearNotice();
     var notice = document.createElement("div");
     notice.className = "notice err";
     notice.setAttribute("role", "alert");

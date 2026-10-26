@@ -29,7 +29,7 @@ site ends up live.
 | An application key | `php -r "echo base64_encode(random_bytes(32)), PHP_EOL;"` |
 | A cron token | `php -r "echo bin2hex(random_bytes(24)), PHP_EOL;"` |
 | A metrics token | same command, a *different* value |
-| The Firebase project id | Firebase console → Project settings |
+| The four Firebase web-app values (`projectId`, `apiKey`, `authDomain`, `appId`) | Firebase console → Project settings → Your apps → Web app ([`firebase-setup.md`](./firebase-setup.md) section 1) |
 | Your hPanel login | — |
 
 Write the key and the tokens into a password manager **now**, before they go
@@ -385,13 +385,23 @@ it is faster and safer to redo it.
 | `db.name` | the **prefixed** name, `u123456789_speedat` |
 | `db.user` | the **prefixed** user |
 | `db.pass` | the password from section 2 |
-| `auth.firebase_project_id` | from the Firebase console |
+| `auth.firebase_project_id` | `projectId` — [`firebase-setup.md`](./firebase-setup.md) section 2 |
+| `auth.firebase_api_key` | `apiKey` — same place. **Add this line** if your `config.php` does not have it |
+| `auth.firebase_auth_domain` | `authDomain`, e.g. `<project-id>.firebaseapp.com`, no `https://`. **Add this line** if missing |
+| `auth.firebase_app_id` | `appId`. **Add this line** if missing |
+| `auth.allow_password_login` | `true` until a Google sign-in has worked ([`firebase-setup.md`](./firebase-setup.md) section 7); then `false` |
 | `tokens.cron` | the cron token from section 0 |
 | `tokens.metrics` | the metrics token from section 0 |
 | `mail.from` | an address **on this domain**, or the host refuses to send |
 | `mail.office` | where new leads are reported |
 
 Leave `security.hsts` as `false` for now. Section 9 turns it on, once.
+
+The Google button needs **all four** `auth.firebase_*` values; with any one
+missing it is not drawn. You do **not** set `security.csp_script`,
+`csp_connect` or `csp_frame` for Firebase: the login page adds Google's
+addresses to its own Content-Security-Policy when the four values are set. The
+`csp_*` keys are optional extras and normally stay empty.
 
 4. Save.
 
@@ -564,7 +574,9 @@ place that tells you.
 **Firebase console → Authentication → Settings → Authorised domains → Add
 domain**
 
-Add `your-domain` (and `www.your-domain` if it resolves).
+Add `your-domain` and `www.your-domain` (for this site: `speedat.co` and
+`www.speedat.co`). The full Firebase set-up, in the safe order, is
+[`firebase-setup.md`](./firebase-setup.md).
 
 Without it, admin sign-in fails with `auth/unauthorized-domain` and nothing in
 the PHP logs explains why, because the failure happens in the browser before any
@@ -625,7 +637,7 @@ the admin, the calculator and booking arrive with the later phases.
 |---|---|---|
 | 1 | Open `/` | the calculator, with prices, no PHP notices |
 | 2 | Look for the data-as-of / hold banner | matches what section 4c showed |
-| 3 | Sign in at `/admin` with your Google account | the dashboard, not a 403 |
+| 3 | Sign in at `/admin` with your Google account | the dashboard, not a 403; `storage/cache/google-certs/firebase-certs-*.json` now exists |
 | 4 | Sign in with an account **not** in `admins` | refused |
 | 5 | Edit the draft and **publish a version** | appears in the history; `SELECT MAX(version)` moves |
 | 6 | Price a quote on `/` and **book it** | a row in `leads`, an email to `mail.office` |

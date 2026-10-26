@@ -520,8 +520,12 @@ the full one.
    phpMyAdmin. Then count the tables: **twelve**.
 6. **Copy `config/config.php` from the sample** and fill `app.key`, `app.url`,
    `db.*`, `tokens.cron`. Then `chmod 600`.
-7. **Choose a sign-in method and switch it on** — `auth.firebase_project_id`
-   for Google, or `auth.allow_password_login => true` for password + TOTP.
+7. **Choose a sign-in method and switch it on** — all four `auth.firebase_*`
+   values (`firebase_project_id`, `firebase_api_key`, `firebase_auth_domain`,
+   `firebase_app_id`; see [`firebase-setup.md`](./firebase-setup.md)) for
+   Google, and/or `auth.allow_password_login => true` for password sign-in
+   (plus the six-digit code if that admin has two-factor on). Keep passwords on
+   until a Google sign-in has worked.
    **Without one of these the login page has no form on it.** (§3.2)
 8. **Create the first owner** — `bin/seed.php --owner=<email>`, with
    `SPEEDAT_SEED_PASSWORD` set if you chose passwords.

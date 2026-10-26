@@ -53,8 +53,6 @@ final class AdminLoginTest extends AdminTestCase
         $this->assertStringContains('action="' . Routes::LOGIN_PASSWORD . '"', $body, 'no password form');
         $this->assertStringContains('type="password"', $body, 'no password box');
         $this->assertStringContains('name="' . Csrf::FIELD . '"', $body, 'no CSRF token');
-
-        Config::set('auth.firebase_project_id', '');
     }
 
     public function testTheSignInPageSaysSoWhenNobodyCanSignIn(): void
@@ -256,7 +254,11 @@ final class AdminLoginTest extends AdminTestCase
 
     public function testAForgedGoogleTokenIsRefusedAndSetsNoCookie(): void
     {
-        Config::set('auth.firebase_project_id', 'speedat-test-1234');
+        // The planted certificate cache is what keeps this off the network:
+        // with none, the verifier's first act was a live HTTPS call to Google
+        // (2026-10-26). Config is put back by AdminTestCase::tearDown(), so a
+        // failing assertion no longer leaves Google sign-in on for the next test.
+        $this->googleSignInReady();
         $this->admin();
 
         // Three base64url segments that parse as a JWT and are signed by nobody.
@@ -268,10 +270,9 @@ final class AdminLoginTest extends AdminTestCase
         $answer = $this->postWithToken(Routes::LOGIN_GOOGLE, ['idToken' => $forged], []);
 
         $this->assertSame(401, $answer->response->status, 'a token signed by nobody was not refused');
+        $this->assertSame('That Google sign-in was refused. Try again, or use your email and password.', $this->notice($answer));
         $this->assertFalse($this->anySession(), 'a forged token produced a session');
         $this->assertNull($answer->cookie(Session::COOKIE), 'a forged token set a session cookie');
-
-        Config::set('auth.firebase_project_id', '');
     }
 
     public function testTheGoogleButtonSaysWhatItNeedsWhenNoTokenIsPosted(): void
@@ -284,8 +285,6 @@ final class AdminLoginTest extends AdminTestCase
         $this->assertSame(401, $answer->response->status, 'status');
         $this->assertStringContains('needs JavaScript', $this->notice($answer), 'the no-JavaScript answer');
         $this->assertFalse($this->anySession(), 'a tokenless Google post signed somebody in');
-
-        Config::set('auth.firebase_project_id', '');
     }
 
     public function testGoogleSignInSaysSoWhenItIsNotConfigured(): void
@@ -296,6 +295,51 @@ final class AdminLoginTest extends AdminTestCase
 
         $this->assertSame(401, $answer->response->status, 'status');
         $this->assertStringContains('not configured', $this->notice($answer), 'the unconfigured answer');
+    }
+
+    /* ------------------------------------------- passwords switched off */
+
+    /**
+     * auth.allow_password_login = false is the owner's target configuration
+     * (Google only), and nothing tested that the switch actually shuts the
+     * password route rather than just hiding the form (2026-10-26). The
+     * CORRECT password is the case that matters: a wrong one is refused
+     * anyway.
+     */
+    public function testWithPasswordsOffEvenTheRightPasswordGetsNothing(): void
+    {
+        foreach (['no second factor' => '', 'with a second factor' => self::SECRET] as $why => $secret) {
+            $this->empty();
+            $this->admin(self::OWNER, 'owner', self::PASSWORD, $secret);
+            Config::set('auth.allow_password_login', false);
+            // The deployment this switch exists for: Google on. It is also what
+            // puts a form - and so a CSRF token - on the page to borrow; a
+            // stale tab or a script posting to the old route is the attack.
+            Config::set('auth.firebase_project_id', self::FIREBASE_PROJECT);
+
+            $answer = $this->attempt(self::OWNER, self::PASSWORD);
+
+            $this->assertSame(401, $answer->response->status, $why . ': status');
+            $this->assertStringContains('switched off', $this->notice($answer), $why . ': the refusal says why');
+            $this->assertFalse($this->anySession(), $why . ': a session was started');
+            $this->assertNull($answer->cookie(PendingLogin::COOKIE), $why . ': a pending login was started');
+            $this->assertSame(0, $this->pendingRows(), $why . ': a pending login was stored');
+            $this->assertSame(0, $this->audited('login_first_factor'), $why . ': the password was counted as a first factor');
+            $this->assertSame(0, $this->audited('login'), $why . ': audited as a sign-in');
+        }
+    }
+
+    public function testWithPasswordsOffAGoogleRefusalDoesNotMentionPasswords(): void
+    {
+        $this->googleSignInReady();
+        $this->admin();
+        Config::set('auth.allow_password_login', false);
+
+        $answer = $this->postWithToken(Routes::LOGIN_GOOGLE, ['idToken' => $this->googleToken('stranger@example.com')], []);
+
+        $this->assertSame(401, $answer->response->status, 'status');
+        $this->assertSame('That Google sign-in was refused. Try again.', $this->notice($answer));
+        $this->assertStringNotContains('email and password', $answer->body(), 'a Google-only deployment pointing at a form it does not have');
     }
 
     /* ------------------------------------------------------------ internals */

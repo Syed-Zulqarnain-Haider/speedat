@@ -96,8 +96,13 @@ the day it all happened.
       (copy, then rename the copy, so the sample stays). `app.key`, `app.url`
       (absolute, no trailing slash), `app.env = production`, `app.debug = false`,
       `app.timezone = Asia/Karachi`, `app.trust_proxy = false`, the **prefixed**
-      `db.*`, `auth.firebase_project_id`, `tokens.cron`, `tokens.metrics`,
-      `mail.from` (an address on this domain), `mail.office`.
+      `db.*`, `auth.firebase_project_id`, `auth.firebase_api_key`,
+      `auth.firebase_auth_domain`, `auth.firebase_app_id` (all four, values
+      from [`firebase-setup.md`](./firebase-setup.md) section 2 — add the
+      lines if the file lacks them), `auth.allow_password_login => true`
+      (until Google is proven, item 17b), `tokens.cron`, `tokens.metrics`,
+      `mail.from` (an address on this domain), `mail.office`. No `security.csp_*`
+      value is needed for Firebase; the login page builds its own.
       *Evidence:* `curl -sS -H "Authorization: Bearer <tokens.metrics>" https://<domain>/health`
       returning `"database":"up"` with the expected `php` and `"env":"production"`.
       The token goes in the header: `/health?token=…` is ignored and answers
@@ -128,8 +133,9 @@ the day it all happened.
       absent (`mod_headers` is not active — not fatal, but it decides where HSTS
       must come from later).
 - [ ] **13. Domain added to Firebase's authorised domains.**
-      Firebase console → Authentication → Settings → Authorised domains: the apex,
-      and `www.` if it resolves.
+      Firebase console → Authentication → Settings → Authorized domains:
+      `speedat.co` and `www.speedat.co`
+      ([`firebase-setup.md`](./firebase-setup.md) section 1 step 3).
       *Evidence:* a screenshot of the list. Without it sign-in fails in the
       browser with `auth/unauthorized-domain` and **nothing appears in any server
       log**.
@@ -147,7 +153,7 @@ the day it all happened.
 
 - [ ] **14b. A SIGN-IN METHOD IS SWITCHED ON.** Do this **before** item 16, or
       you will be looking at a login page with no form on it.
-      `config.sample.php` ships `auth.firebase_project_id` empty **and**
+      `config.sample.php` ships the four `auth.firebase_*` values empty **and**
       `auth.allow_password_login => false`, and with both unset
       `Http\Admin\LoginController` prints no sign-in form at all — only
       *"Sign-in is not configured on this deployment yet."* That is the code
@@ -155,10 +161,16 @@ the day it all happened.
       release looks like until you choose. Pick one in
       `speedat_main/php/config/config.php`:
       ```php
-      'firebase_project_id'  => 'your-firebase-project',   // Google sign-in
-      // or
-      'allow_password_login' => true,                      // password + TOTP
+      // Google sign-in needs ALL FOUR (any one empty = no Google button):
+      'firebase_project_id'  => 'your-project-id',
+      'firebase_api_key'     => 'your-api-key',
+      'firebase_auth_domain' => 'your-project-id.firebaseapp.com',
+      'firebase_app_id'      => 'your-app-id',
+      // and/or password sign-in (plus the six-digit code if that admin has
+      // two-factor on). Keep it true until Google has worked, item 17b:
+      'allow_password_login' => true,
       ```
+      Values: [`firebase-setup.md`](./firebase-setup.md) section 2.
       *Evidence:* `/admin/login` showing the method you chose.
       *(Found by the 2026-09-29 go-live rehearsal, which seeded an owner and
       then could not get in — [`go-live-rehearsal.md`](./go-live-rehearsal.md)
@@ -177,9 +189,20 @@ the day it all happened.
 - [ ] **16. The owner signs in at `/admin`**, and an account that is **not** in
       `admins` is refused.
       *Evidence:* both outcomes, and the two rows they wrote in `audit_log`.
+      After the first Google sign-in,
+      `storage/cache/google-certs/firebase-certs-*.json` exists (the server
+      fetched Google's certificates).
 - [ ] **17. Two-factor enrolled for every owner.** *Security* → scan the code →
       type the 6 digits.
       *Evidence:* `SELECT email, totp_enabled FROM admins;` — every row `1`.
+- [ ] **17b. Passwords off — last, and only after Google is proven.** Google
+      sign-in worked (item 16), two-factor is on (item 17), and the owner has
+      signed in once with email + password + code (or set a password via
+      [`security.md`](./security.md) section 7.7 part B). Then
+      `allow_password_login => false`, wait or reset OPcache, and confirm
+      `/admin/login` shows only the Google button.
+      *Evidence:* the login page, and a printed copy of `security.md` 7.7
+      kept outside the website.
 - [ ] **18. Real rates published with "Rates are live" ticked.** A fresh database
       serves the sample document and carries the sample notice until this is done.
       Key the real prices in, review, publish, tick the box.

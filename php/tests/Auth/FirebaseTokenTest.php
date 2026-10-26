@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Speedat\Tests\Auth;
 
+use Speedat\Domain\Auth\CertificatesUnavailable;
 use Speedat\Domain\Auth\FirebaseToken;
 use Speedat\Domain\Auth\FirebaseTokenError;
 use Speedat\Tests\Auth\Support\RsaKeyPair;
@@ -119,8 +120,13 @@ final class FirebaseTokenTest extends TestCase
             $this->claims(),
         );
 
-        $error = $this->assertThrows(FirebaseTokenError::class, fn () => $this->verifier()->verify($token));
+        $source = new StubCertificates([self::KID => $this->keys->certificatePem]);
+        $error  = $this->assertThrows(
+            FirebaseTokenError::class,
+            fn () => (new FirebaseToken(self::PROJECT, $source, 60, static fn (): int => self::NOW))->verify($token),
+        );
         $this->assertStringContains('unknown key id', $error->getMessage());
+        $this->assertSame(1, $source->refreshes, 'an unknown kid is worth exactly one refresh, then a refusal');
 
         // A missing kid is refused as well.
         $noKid = $this->keys->sign(['alg' => 'RS256', 'typ' => 'JWT'], $this->claims());
@@ -203,6 +209,14 @@ final class FirebaseTokenTest extends TestCase
             'no exp'           => ['exp' => null],
             'exp as text'      => ['exp' => '1700000000'],
             'no iat'           => ['iat' => null],
+            // Required since 2026-10-26: the controller's freshness check reads it.
+            'no auth_time'     => ['auth_time' => null],
+            'auth_time text'   => ['auth_time' => '1699999940'],
+            // 128 is the most Firebase allows a uid; one more is not a uid.
+            'subject too long' => ['sub' => str_repeat('a', 129)],
+            // An array audience is how a token for several parties is written;
+            // ours is for exactly one project.
+            'aud as an array'  => ['aud' => [self::PROJECT]],
             'email not text'   => ['email' => ['owner@speedat.pk']],
         ];
 
@@ -302,7 +316,82 @@ final class FirebaseTokenTest extends TestCase
             static fn (): int => self::NOW,
         );
 
-        $this->assertThrows(FirebaseTokenError::class, fn () => $verifier->verify($this->token()));
+        // CertificatesUnavailable, and still a FirebaseTokenError: a caller
+        // that knows the difference can say "try later", and one that does
+        // not still refuses.
+        $error = $this->assertThrows(CertificatesUnavailable::class, fn () => $verifier->verify($this->token()));
+        $this->assertTrue($error instanceof FirebaseTokenError);
+    }
+
+    // ------------------------------------------------------- edges (2026-10-26)
+
+    public function testASubjectOfExactly128CharactersIsAccepted(): void
+    {
+        $uid = str_repeat('a', 128);
+
+        $this->assertSame($uid, $this->verifier()->verify($this->token(['sub' => $uid]))->uid);
+    }
+
+    public function testATypeOtherThanJwtIsRefusedEvenWhenProperlySigned(): void
+    {
+        // Signed with its own header, so the signature is good and only the
+        // typ can be what refuses it.
+        $token = $this->keys->sign(['alg' => 'RS256', 'kid' => self::KID, 'typ' => 'JWS'], $this->claims());
+
+        $error = $this->assertThrows(FirebaseTokenError::class, fn () => $this->verifier()->verify($token));
+        $this->assertStringContains('not JWT', $error->getMessage());
+    }
+
+    public function testAnIssuedAtInsideTheSkewAllowanceIsAcceptedAndBeyondItIsNot(): void
+    {
+        $this->assertSame(self::UID, $this->verifier()->verify($this->token(['iat' => self::NOW + 30]))->uid);
+
+        $error = $this->assertThrows(
+            FirebaseTokenError::class,
+            fn () => $this->verifier()->verify($this->token(['iat' => self::NOW + 120])),
+        );
+        $this->assertStringContains('future', $error->getMessage());
+    }
+
+    public function testATokenWithNoAuthTimeIsRefusedAndTheIdentityCarriesIt(): void
+    {
+        $claims = $this->claims();
+        unset($claims['auth_time']);
+        $token = $this->keys->sign(['alg' => 'RS256', 'kid' => self::KID, 'typ' => 'JWT'], $claims);
+
+        $error = $this->assertThrows(FirebaseTokenError::class, fn () => $this->verifier()->verify($token));
+        $this->assertStringContains('auth_time', $error->getMessage());
+
+        $this->assertSame(self::NOW - 60, $this->verifier()->verify($this->token())->authTime);
+    }
+
+    public function testTheProviderIsUnknownWhenTheFirebaseClaimIsMissing(): void
+    {
+        $claims = $this->claims();
+        unset($claims['firebase']);
+        $token = $this->keys->sign(['alg' => 'RS256', 'kid' => self::KID, 'typ' => 'JWT'], $claims);
+
+        $this->assertSame('unknown', $this->verifier()->verify($token)->signInProvider);
+        $this->assertSame(
+            'password',
+            $this->verifier()->verify($this->token(['firebase' => ['sign_in_provider' => 'password']]))->signInProvider,
+        );
+    }
+
+    public function testAKeyThatAppearsOnRefreshIsAcceptedAfterOneRefresh(): void
+    {
+        // Google rotated after our copy was cached: the kid is not in the set
+        // in hand, and is in the one refresh() fetches.
+        $source = new StubCertificates(['old-key' => 'irrelevant'], refreshed: [self::KID => $this->keys->certificatePem]);
+        $identity = (new FirebaseToken(self::PROJECT, $source, 60, static fn (): int => self::NOW))->verify($this->token());
+
+        $this->assertSame(self::UID, $identity->uid);
+        $this->assertSame(1, $source->refreshes);
+
+        // And a kid the set already has costs no refresh at all.
+        $known = new StubCertificates([self::KID => $this->keys->certificatePem]);
+        (new FirebaseToken(self::PROJECT, $known, 60, static fn (): int => self::NOW))->verify($this->token());
+        $this->assertSame(0, $known->refreshes);
     }
 
     public function testAMisconfiguredProjectIdIsRefusedAtConstruction(): void

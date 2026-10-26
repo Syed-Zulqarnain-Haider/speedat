@@ -15,10 +15,13 @@ presses the button. Ask an owner to add you if you cannot get in.
 
 Open `/admin`. Two ways in, and both end the same way:
 
-- **Continue with Google** — the account that was added as an admin.
-- **Email and password** — if the owner asked for that way to be switched on.
+- **Continue with Google** — the account that was added as an admin. Use a
+  normal Chrome or Safari window, not the browser inside WhatsApp, Instagram
+  or Facebook: Google refuses sign-in there.
+- **Email and password** — only while the owner has this switched on.
 
-Then it asks for the **6-digit code** from the authenticator app on your phone.
+If you have turned on two-factor under *Security*, it then asks for the
+**6-digit code** from the authenticator app on your phone.
 The code changes every thirty seconds; type the one showing now. A code only
 works once, so if you mistype it, wait for the next one.
 
@@ -29,7 +32,12 @@ has drifted. Turn on automatic date and time on the phone and try again.
 one step in the runbook), then you set it up again under *Security*.
 
 **Google says the domain is not authorised.** The site is fine; one setting in
-Firebase is missing. That is section 11 of [`deploy-hostinger.md`](./deploy-hostinger.md).
+Firebase is missing. That is section 1 step 3 of
+[`firebase-setup.md`](./firebase-setup.md).
+
+**Google sign-in does not work at all and there is no password form.** The
+owner follows section 7.7 of [`security.md`](./security.md) ("Google sign-in
+is broken"). It works even for an account that never had a password.
 
 You are signed out after eight hours of doing nothing, and after five days
 whatever happens. Signing out on purpose is the button at the bottom of the menu.

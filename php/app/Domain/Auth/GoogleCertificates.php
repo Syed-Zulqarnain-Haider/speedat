@@ -29,7 +29,11 @@ use Closure;
  * for far longer than its max-age, so a stale set still verifies today's
  * tokens - and locking the owner out of his own admin because Google had a bad
  * minute is a worse failure than verifying against a set that is six hours old.
- * Past the grace window it fails closed.
+ * Past the grace window it fails closed, with CertificatesUnavailable - "we
+ * could not check", which LoginController answers with a 503 rather than the
+ * "refused" a bad token gets (2026-10-26). A failed fetch is remembered on disk
+ * for a minute (FAIL_BACKOFF), so an outage costs one timeout a minute rather
+ * than one per click.
  */
 final class GoogleCertificates implements CertificateSource
 {
@@ -41,8 +45,33 @@ final class GoogleCertificates implements CertificateSource
     /** Never trust a max-age longer than this, however generous the header. */
     private const MAX_MAX_AGE = 86400;
 
+    /**
+     * After a failed fetch, how long every request skips the network and goes
+     * straight to the grace copy (or the 503).
+     *
+     * WHY (2026-10-26). An outage used to cost every sign-in attempt a full
+     * cURL timeout - eight seconds to connect plus eight to read - because
+     * nothing remembered that the last request had just failed the same way.
+     * On a shared host that is a PHP worker held per click, and the owner
+     * clicking "Continue with Google" again because nothing happened.
+     */
+    private const FAIL_BACKOFF = 60;
+
+    /**
+     * refresh() refetches only a set older than this. Google publishes a new
+     * key well before signing with it, so a set this young already has it,
+     * and a token naming a kid it lacks is a forgery, not a rotation.
+     */
+    private const REFRESH_AFTER = 300;
+
     /** @var array<string,string>|null in-process memo, so two verifies in one request read the disk once */
     private ?array $memo = null;
+
+    /** When the memoised set was fetched from Google, unix seconds. */
+    private int $fetchedAt = 0;
+
+    /** Did the last fetch fail to reach the disk cache? See cacheWriteFailed(). */
+    private bool $cacheWriteFailed = false;
 
     /**
      * @param string       $cacheDir  absolute path to a writable directory OUTSIDE the web root
@@ -52,6 +81,9 @@ final class GoogleCertificates implements CertificateSource
      * @param list<string> $webRoots  directories the web server is KNOWN to serve
      *                                (the caller passes Paths::publicDir()); the
      *                                live DOCUMENT_ROOT is always added
+     *
+     * @throws CertificatesUnavailable when $cacheDir is inside a web root - a
+     *                                 configuration error, not a bad token
      */
     public function __construct(
         private readonly string $cacheDir,
@@ -74,30 +106,103 @@ final class GoogleCertificates implements CertificateSource
         $cached = $this->readCache();
 
         if ($cached !== null && $cached['expires_at'] > $now) {
+            $this->fetchedAt = $cached['fetched_at'];
+
             return $this->memo = $cached['keys'];
         }
 
-        try {
-            $fresh = $this->fetch();
-        } catch (FirebaseTokenError $e) {
-            // Google is unreachable. An old set is better than no sign-in at all,
-            // within the grace window.
-            if ($cached !== null && $cached['fetched_at'] + $this->graceSeconds > $now) {
-                return $this->memo = $cached['keys'];
-            }
+        return $this->memo = $this->fetchOrFallBack($cached, $now);
+    }
 
-            throw $e;
+    /**
+     * See CertificateSource::refresh(). Fetches only when the set in hand is
+     * more than REFRESH_AFTER old and no fetch failed in the last minute -
+     * between them, a flood of made-up key ids costs Google one request every
+     * five minutes at most.
+     */
+    public function refresh(): array
+    {
+        $keys = $this->keys();
+        $now  = $this->now();
+
+        if ($this->fetchedAt + self::REFRESH_AFTER > $now) {
+            return $keys;
         }
 
-        $this->writeCache($fresh['keys'], $now, $fresh['maxAge']);
+        return $this->memo = $this->fetchOrFallBack(['keys' => $keys, 'fetched_at' => $this->fetchedAt], $now);
+    }
 
-        return $this->memo = $fresh['keys'];
+    /**
+     * True when this instance fetched a fresh set and could not write it to
+     * the cache directory. Sign-in still works - the set is in hand - but
+     * every request is now a round trip to Google, and that used to be
+     * completely silent (2026-10-26). LoginController logs
+     * `cert_cache_unwritable` when it sees this.
+     */
+    public function cacheWriteFailed(): bool
+    {
+        return $this->cacheWriteFailed;
     }
 
     /** Forget the in-process memo (used by tests, and after a rotation). */
     public function forget(): void
     {
-        $this->memo = null;
+        $this->memo      = null;
+        $this->fetchedAt = 0;
+    }
+
+    /**
+     * Ask Google, or survive not being able to.
+     *
+     * @param array{keys: array<string,string>, fetched_at: int}|null $cached what is in hand, however old
+     *
+     * @return array<string,string>
+     *
+     * @throws CertificatesUnavailable
+     */
+    private function fetchOrFallBack(?array $cached, int $now): array
+    {
+        $inGrace = $cached !== null && $cached['fetched_at'] + $this->graceSeconds > $now;
+
+        if ($this->failedRecently($now)) {
+            if ($inGrace) {
+                $this->fetchedAt = $cached['fetched_at'];
+
+                return $cached['keys'];
+            }
+
+            throw new CertificatesUnavailable(
+                'Fetching Google certificates failed less than ' . self::FAIL_BACKOFF
+                . ' seconds ago and no usable cached set is left; not retrying yet',
+            );
+        }
+
+        try {
+            $fresh = $this->fetch();
+        } catch (\Throwable $e) {
+            // \Throwable, not FirebaseTokenError: a fetcher that dies with an
+            // Error (a missing extension, a TypeError) is still Google being
+            // unreachable from here, and must not become a 500.
+            $this->markFailure($now);
+
+            // Google is unreachable. An old set is better than no sign-in at
+            // all, within the grace window.
+            if ($inGrace) {
+                $this->fetchedAt = $cached['fetched_at'];
+
+                return $cached['keys'];
+            }
+
+            throw $e instanceof CertificatesUnavailable
+                ? $e
+                : new CertificatesUnavailable('Could not obtain Google certificates: ' . $e->getMessage(), $e);
+        }
+
+        $this->clearFailure();
+        $this->cacheWriteFailed = !$this->writeCache($fresh['keys'], $now, $fresh['maxAge']);
+        $this->fetchedAt        = $now;
+
+        return $fresh['keys'];
     }
 
     /**
@@ -112,14 +217,14 @@ final class GoogleCertificates implements CertificateSource
         $body     = is_string($response['body'] ?? null) ? $response['body'] : '';
 
         if ($body === '') {
-            throw new FirebaseTokenError('Google returned an empty certificate list');
+            throw new CertificatesUnavailable('Google returned an empty certificate list');
         }
 
         /** @var mixed $decoded */
         $decoded = json_decode($body, true);
 
         if (!is_array($decoded) || $decoded === []) {
-            throw new FirebaseTokenError('Google certificate list is not a JSON object');
+            throw new CertificatesUnavailable('Google certificate list is not a JSON object');
         }
 
         $keys = [];
@@ -138,7 +243,7 @@ final class GoogleCertificates implements CertificateSource
         }
 
         if ($keys === []) {
-            throw new FirebaseTokenError('Google certificate list held no usable certificates');
+            throw new CertificatesUnavailable('Google certificate list held no usable certificates');
         }
 
         $maxAge = $response['maxAge'] ?? null;
@@ -151,27 +256,46 @@ final class GoogleCertificates implements CertificateSource
      * The real fetcher. cURL because file_get_contents() over HTTPS is disabled
      * by allow_url_fopen=0 on plenty of shared hosts.
      *
+     * Three seconds to connect and five in all (2026-10-26; it was eight and
+     * eight). The person waiting is watching a button that says "Waiting for
+     * Google", and a host that cannot connect in three seconds is not going to
+     * in eight - after which FAIL_BACKOFF stops the next minute's requests from
+     * waiting at all.
+     *
      * @return Closure(string): array{body: string, maxAge: int|null}
      */
-    public static function curlFetcher(int $timeoutSeconds = 8): Closure
+    public static function curlFetcher(int $timeoutSeconds = 5): Closure
     {
         return static function (string $url) use ($timeoutSeconds): array {
+            if (!function_exists('curl_init')) {
+                throw new CertificatesUnavailable('The PHP cURL extension is not installed, so certificates cannot be fetched');
+            }
+
             $handle = curl_init($url);
 
             if ($handle === false) {
-                throw new FirebaseTokenError('cURL is unavailable, so certificates cannot be fetched');
+                throw new CertificatesUnavailable('cURL is unavailable, so certificates cannot be fetched');
             }
 
-            curl_setopt_array($handle, [
+            $options = [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_HEADER         => true,
                 CURLOPT_TIMEOUT        => $timeoutSeconds,
-                CURLOPT_CONNECTTIMEOUT => $timeoutSeconds,
+                CURLOPT_CONNECTTIMEOUT => min(3, $timeoutSeconds),
                 CURLOPT_FOLLOWLOCATION => false,
                 CURLOPT_SSL_VERIFYPEER => true,
                 CURLOPT_SSL_VERIFYHOST => 2,
                 CURLOPT_USERAGENT      => 'speedat-php/1.0',
-            ]);
+            ];
+
+            // A host that forces an HTTP proxy prepends the proxy's own
+            // "HTTP/1.1 200 Connection established" block. Asked not to, where
+            // this libcurl knows how; maxAgeFrom() copes either way.
+            if (defined('CURLOPT_SUPPRESS_CONNECT_HEADERS')) {
+                $options[CURLOPT_SUPPRESS_CONNECT_HEADERS] = true;
+            }
+
+            curl_setopt_array($handle, $options);
 
             $raw = curl_exec($handle);
 
@@ -179,7 +303,7 @@ final class GoogleCertificates implements CertificateSource
                 $message = curl_error($handle);
                 curl_close($handle);
 
-                throw new FirebaseTokenError('Could not reach Google to fetch certificates: ' . $message);
+                throw new CertificatesUnavailable('Could not reach Google to fetch certificates: ' . $message);
             }
 
             $status     = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
@@ -187,19 +311,45 @@ final class GoogleCertificates implements CertificateSource
             curl_close($handle);
 
             if ($status !== 200) {
-                throw new FirebaseTokenError('Google returned HTTP ' . $status . ' for the certificate list');
+                throw new CertificatesUnavailable('Google returned HTTP ' . $status . ' for the certificate list');
             }
 
-            $headers = substr($raw, 0, $headerSize);
-            $body    = substr($raw, $headerSize);
-            $maxAge  = null;
-
-            if (preg_match('/max-age\s*=\s*(\d+)/i', $headers, $m) === 1) {
-                $maxAge = (int) $m[1];
-            }
-
-            return ['body' => $body, 'maxAge' => $maxAge];
+            return [
+                'body'   => substr($raw, $headerSize),
+                'maxAge' => self::maxAgeFrom(substr($raw, 0, $headerSize)),
+            ];
         };
+    }
+
+    /**
+     * The max-age of the response, read from the Cache-Control line of the
+     * FINAL header block only.
+     *
+     * WHY THIS IS NOT ONE preg_match ANY MORE (2026-10-26). The old pattern
+     * took the first "max-age=" anywhere in the raw headers, and
+     * `Strict-Transport-Security: max-age=31536000` comes before Cache-Control
+     * in Google's response - so the cache life was whatever HSTS said, clamped
+     * to a day, instead of the few hours Google asks for. A proxy's CONNECT
+     * block or a 100-continue in front would have been read too. So: split on
+     * the blank line between blocks, keep the last block with anything in it,
+     * and only believe a Cache-Control line.
+     */
+    public static function maxAgeFrom(string $rawHeaders): ?int
+    {
+        $blocks = preg_split('/\r?\n\r?\n/', $rawHeaders) ?: [];
+        $final  = '';
+
+        foreach ($blocks as $block) {
+            if (trim($block) !== '') {
+                $final = $block;
+            }
+        }
+
+        if (preg_match('/^cache-control:[^\r\n]*\bmax-age\s*=\s*(\d+)/im', $final, $m) !== 1) {
+            return null;
+        }
+
+        return (int) $m[1];
     }
 
     /**
@@ -247,14 +397,18 @@ final class GoogleCertificates implements CertificateSource
 
     /**
      * @param array<string,string> $keys
+     *
+     * @return bool false when the cache could not be written (2026-10-26: it
+     *              used to return nothing, so a full disk or a directory owned
+     *              by another user made every sign-in a round trip to Google
+     *              and nobody could tell)
      */
-    private function writeCache(array $keys, int $now, int $maxAge): void
+    private function writeCache(array $keys, int $now, int $maxAge): bool
     {
         $file = $this->cacheFile();
-        $dir  = dirname($file);
 
-        if (!is_dir($dir) && !@mkdir($dir, 0o750, true) && !is_dir($dir)) {
-            return; // A cache that cannot be written is slow, not broken.
+        if (!$this->ensureDir()) {
+            return false; // A cache that cannot be written is slow, not broken.
         }
 
         $payload = json_encode([
@@ -264,7 +418,7 @@ final class GoogleCertificates implements CertificateSource
         ], JSON_UNESCAPED_SLASHES);
 
         if ($payload === false) {
-            return;
+            return false;
         }
 
         // Write-then-rename: a half-written cache file must never be read back
@@ -272,14 +426,59 @@ final class GoogleCertificates implements CertificateSource
         $temp = $file . '.' . bin2hex(random_bytes(6)) . '.tmp';
 
         if (@file_put_contents($temp, $payload, LOCK_EX) === false) {
-            return;
+            return false;
         }
 
         @chmod($temp, 0o640);
 
         if (!@rename($temp, $file)) {
             @unlink($temp);
+
+            return false;
         }
+
+        return true;
+    }
+
+    private function ensureDir(): bool
+    {
+        $dir = rtrim($this->cacheDir, '/\\');
+
+        return is_dir($dir) || @mkdir($dir, 0o750, true) || is_dir($dir);
+    }
+
+    /** Did a fetch fail within FAIL_BACKOFF? Read from disk, so it holds across requests. */
+    private function failedRecently(int $now): bool
+    {
+        $raw = @file_get_contents($this->failFile());
+
+        if (!is_string($raw) || preg_match('/^[0-9]{1,12}$/', trim($raw)) !== 1) {
+            return false;
+        }
+
+        $age = $now - (int) trim($raw);
+
+        return $age >= 0 && $age < self::FAIL_BACKOFF;
+    }
+
+    private function markFailure(int $now): void
+    {
+        if ($this->ensureDir()) {
+            @file_put_contents($this->failFile(), (string) $now, LOCK_EX);
+        }
+    }
+
+    private function clearFailure(): void
+    {
+        if (is_file($this->failFile())) {
+            @unlink($this->failFile());
+        }
+    }
+
+    /** Beside the cache file, named the same way, so a test URL has its own. */
+    private function failFile(): string
+    {
+        return substr($this->cacheFile(), 0, -strlen('.json')) . '.fail';
     }
 
     private function cacheFile(): string
@@ -313,7 +512,7 @@ final class GoogleCertificates implements CertificateSource
         $normalised = str_replace('\\', '/', $dir);
 
         if ($normalised === '') {
-            throw new FirebaseTokenError('The certificate cache directory must be given');
+            throw new CertificatesUnavailable('Configuration error: the certificate cache directory must be given');
         }
 
         $segments = explode('/', trim($normalised, '/'));
@@ -322,11 +521,11 @@ final class GoogleCertificates implements CertificateSource
             $name = strtolower($segment);
 
             if ($name === 'public' || $name === 'public_html' || $name === 'htdocs') {
-                throw new FirebaseTokenError('The certificate cache must not live inside the web root (' . $segment . ')');
+                throw new CertificatesUnavailable('Configuration error: the certificate cache must not live inside the web root (' . $segment . ')');
             }
 
             if ($name === 'www' && !($i === 1 && strtolower($segments[0]) === 'var')) {
-                throw new FirebaseTokenError('The certificate cache must not live inside the web root (' . $segment . ')');
+                throw new CertificatesUnavailable('Configuration error: the certificate cache must not live inside the web root (' . $segment . ')');
             }
         }
 
@@ -354,7 +553,7 @@ final class GoogleCertificates implements CertificateSource
             }
 
             if ($here === $root || str_starts_with($here . '/', $root . '/')) {
-                throw new FirebaseTokenError('The certificate cache must not live inside the web root (' . $root . ')');
+                throw new CertificatesUnavailable('Configuration error: the certificate cache must not live inside the web root (' . $root . ')');
             }
         }
     }

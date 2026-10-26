@@ -24,8 +24,11 @@ final class FirebaseIdentity
      * @param bool                 $emailVerified the `email_verified` claim
      * @param int                  $issuedAt      `iat`, unix seconds
      * @param int                  $expiresAt     `exp`, unix seconds
-     * @param int|null             $authTime      when the person actually authenticated
-     * @param string               $signInProvider e.g. "google.com" or "password"
+     * @param int                  $authTime      `auth_time`: when the person actually
+     *                                            authenticated. Required since 2026-10-26 -
+     *                                            the sign-in's freshness check reads it
+     * @param string               $signInProvider e.g. "google.com" or "password"; "unknown"
+     *                                            when the token has no firebase claim
      * @param array<string,mixed>  $claims        every claim, for anything phase 3 needs
      */
     public function __construct(
@@ -34,7 +37,7 @@ final class FirebaseIdentity
         public readonly bool $emailVerified,
         public readonly int $issuedAt,
         public readonly int $expiresAt,
-        public readonly ?int $authTime,
+        public readonly int $authTime,
         public readonly string $signInProvider,
         public readonly array $claims,
     ) {

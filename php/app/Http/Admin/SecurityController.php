@@ -198,16 +198,7 @@ final class SecurityController
         $admins    = Admins::count();
 
         return [
-            [
-                'label' => 'Admin sign-in (Google)',
-                'ok'    => $google,
-                'note'  => $google ? 'configured' : 'no Firebase project set - password sign-in only',
-            ],
-            [
-                'label' => 'Password sign-in',
-                'ok'    => $passwords,
-                'note'  => $passwords ? 'on, hashed with ' . Password::algorithm() : 'off',
-            ],
+            ...self::signInChecks($google, $passwords),
             [
                 'label' => 'Two-factor on your account',
                 'ok'    => $admin->totpEnabled,
@@ -234,6 +225,43 @@ final class SecurityController
                 'label' => 'Admins listed',
                 'ok'    => $admins > 0,
                 'note'  => $admins === 1 ? '1 account can sign in' : $admins . ' accounts can sign in',
+            ],
+        ];
+    }
+
+    /**
+     * The two sign-in lines of the deployment list. Public and static so a test
+     * can hold them to the rule below without a database or a config file.
+     *
+     * PASSWORD SIGN-IN OFF IS NOT A FAILURE WHEN GOOGLE IS THERE. Google-only is
+     * the intended setup (`auth.allow_password_login` false is the sample
+     * config's default), and the line used to go red for it, so the page never
+     * said "all checks pass" on a correctly configured site and the owner
+     * learned to ignore the pill (review, 2026-10-26). The line fails only when
+     * there is no way in at all.
+     *
+     * @return list<array{label:string,ok:bool,note:string}>
+     */
+    public static function signInChecks(bool $google, bool $passwords): array
+    {
+        if ($passwords) {
+            $passwordNote = 'on, hashed with ' . Password::algorithm();
+        } elseif ($google) {
+            $passwordNote = 'off - Google only (break-glass: docs/security.md 7.7)';
+        } else {
+            $passwordNote = 'off - and no Firebase project is set, so nobody can sign in';
+        }
+
+        return [
+            [
+                'label' => 'Admin sign-in (Google)',
+                'ok'    => $google,
+                'note'  => $google ? 'configured' : ($passwords ? 'no Firebase project set - password sign-in only' : 'no Firebase project set'),
+            ],
+            [
+                'label' => 'Password sign-in',
+                'ok'    => $passwords || $google,
+                'note'  => $passwordNote,
             ],
         ];
     }

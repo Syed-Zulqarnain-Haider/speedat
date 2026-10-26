@@ -117,8 +117,12 @@ $this->layout('admin/layouts/plain', [
             <?= $csrf->field() ?>
             <?php /* Filled by the script from the popup's result, posted once,
                      and never written back into a rendered page - the code step
-                     is a fresh request with nothing but a cookie. */ ?>
-            <input type="hidden" name="idToken" value="" data-google-token>
+                     is a fresh request with nothing but a cookie. autocomplete
+                     off because a browser that restores form values on Back
+                     would otherwise hand the script a stale token and skip the
+                     popup (review, 2026-10-26); the script also clears it on
+                     a page-cache restore. */ ?>
+            <input type="hidden" name="idToken" value="" autocomplete="off" data-google-token>
             <button class="btn outline big" type="submit">Continue with Google</button>
           </form>
           <?php if ($page->passwordsEnabled) { ?>
@@ -140,7 +144,7 @@ $this->layout('admin/layouts/plain', [
         <?php /* Visible until js/firebase-signin.js has shown the button, which
                  covers JavaScript off and a Google CDN that never answered -
                  the two cases where this card would otherwise be empty. */ ?>
-        <p class="login-step" data-google-fallback>Sign-in here is with Google only. If no Continue with Google button appears, this browser has JavaScript switched off or cannot reach Google - turn JavaScript on, check the connection, and reload this page.</p>
+        <p class="login-step" data-google-fallback>Sign-in here is with Google only. If no Continue with Google button appears, this browser has JavaScript switched off or cannot reach Google - turn JavaScript on, check the connection, and reload this page. If you opened the link from WhatsApp or Facebook, open it in Chrome or Safari instead.</p>
         <?php } ?>
         <?php } ?>
         <?php if ($page->passwordsEnabled) { ?>

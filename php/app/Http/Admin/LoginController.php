@@ -6,12 +6,15 @@ namespace Speedat\Http\Admin;
 
 use Speedat\Core\App;
 use Speedat\Core\Audit;
+use Speedat\Core\Clock;
 use Speedat\Core\Config;
 use Speedat\Core\Log;
 use Speedat\Core\Paths;
 use Speedat\Core\RateLimit;
 use Speedat\Core\Response;
 use Speedat\Core\Str;
+use Speedat\Domain\Auth\CertificatesUnavailable;
+use Speedat\Domain\Auth\FirebaseBrowser;
 use Speedat\Domain\Auth\FirebaseToken;
 use Speedat\Domain\Auth\FirebaseTokenError;
 use Speedat\Domain\Auth\GoogleCertificates;
@@ -37,6 +40,13 @@ use Speedat\View\Admin\Routes;
  *                person's forgotten password must not lock out the other three;
  *                a single machine working through a word list still hits it.
  *
+ * The Google path has its own per-account bucket, `login_google_account`, of
+ * the same size (2026-10-26). It used to share `login_account`, so ten wrong
+ * passwords typed at the owner's address by anybody also locked the OWNER out
+ * of Google sign-in for fifteen minutes - the one way in that the password
+ * guesser cannot use. Code guessing is capped separately, per account, by
+ * `login_code`, so a second bucket does not buy a code guesser anything.
+ *
  * Both fail CLOSED when the counter is unreachable - `Core\RateLimit`'s
  * allow-list does not contain these buckets, deliberately.
  *
@@ -54,6 +64,25 @@ final class LoginController
     private const CODE_ATTEMPTS = 6;
 
     private const WINDOW = 900;
+
+    /**
+     * How long ago the Google sign-in itself may have happened, in seconds.
+     *
+     * A Firebase ID token lives for an hour, and nothing stopped one copied out
+     * of a browser (a shared laptop's devtools, a proxy log, a support
+     * screenshot) being posted here at minute fifty-nine (2026-10-26). The
+     * sign-in page always runs a fresh signInWithPopup with in-memory
+     * persistence (public/assets/js/firebase-signin.js) and posts the token
+     * seconds later, so a real sign-in is never close to this.
+     */
+    private const GOOGLE_FRESH = 300;
+
+    /** Clock skew allowed on top of GOOGLE_FRESH - the verifier's own leeway. */
+    private const GOOGLE_LEEWAY = 60;
+
+    /** What a 503 from the Google path says. About the server, never the person. */
+    private const GOOGLE_UNAVAILABLE = 'The server could not reach Google to check sign-ins. Try again in a few minutes; '
+        . 'if it keeps happening, check storage/logs for login_google_unavailable.';
 
     /** The refusal, worded the same whichever half failed. */
     private const REFUSED = 'Email or password is wrong.';
@@ -136,8 +165,10 @@ final class LoginController
      * it against Google's published certificates (no service account, no
      * Composer - `Domain\Auth\FirebaseToken`), and only then asks the `admins`
      * table whether that address may sign in. A token signed by anybody else,
-     * for another project, or for an unverified address never reaches the
-     * table.
+     * for another project, for an unverified address, through any provider but
+     * Google, or for a sign-in more than five minutes old never reaches the
+     * table. When the certificates cannot be had at all the answer is a 503
+     * about the server, not a refusal (2026-10-26).
      *
      * WITH JAVASCRIPT OFF there is no token to post, because only the browser
      * can get one from Google. The button still submits, and the answer says so
@@ -166,28 +197,80 @@ final class LoginController
             );
         }
 
+        $certs = null;
+
         try {
             // The app's own public/ is named as a web root because on Hostinger
             // it is NOT the DOCUMENT_ROOT (public_html is), and a cache under
             // either would be served by somebody's misconfigured vhost.
-            $certs    = new GoogleCertificates(Paths::cache() . '/google-certs', webRoots: [Paths::publicDir()]);
-            $verifier = new FirebaseToken($project, $certs);
-            $email    = Str::email($verifier->verifiedEmailFrom($idToken));
+            $clock    = static fn (): int => Clock::timestamp();
+            $certs    = new GoogleCertificates(Paths::cache() . '/google-certs', clock: $clock, webRoots: [Paths::publicDir()]);
+            $verifier = new FirebaseToken($project, $certs, self::GOOGLE_LEEWAY, $clock);
+            $identity = $verifier->verify($idToken);
+        } catch (CertificatesUnavailable $e) {
+            // "We could not check", not "you were refused" (2026-10-26). Caught
+            // before FirebaseTokenError, which it extends: the owner used to
+            // get the forged-token sentence during a Google outage and on a
+            // host that blocks outbound HTTPS, and retried into the same wall.
+            // Thrown before any claim is read, so it says nothing about who is
+            // an admin.
+            Log::error('login_google_unavailable', ['reason' => $e->getMessage()]);
+
+            return $this->render($app, LoginPage::STEP_CREDENTIALS, self::GOOGLE_UNAVAILABLE, '', 503)
+                ->header('Retry-After', '60');
         } catch (FirebaseTokenError $e) {
             Log::warn('login_google_refused', ['reason' => $e->getMessage()]);
 
             return $this->refuse($app, $this->googleRefused());
+        } finally {
+            // Sign-in works without the disk cache, but every request becomes
+            // a round trip to Google - which used to be silent.
+            if ($certs !== null && $certs->cacheWriteFailed()) {
+                Log::warn('cert_cache_unwritable', ['dir' => Paths::cache() . '/google-certs']);
+            }
         }
 
-        // The per-account cap the password path has had all along. Without it
-        // the Google path was capped only per address (forty in fifteen
-        // minutes), and every pass through here mints a fresh pending login -
-        // so anybody holding the owner's Google account could work through
-        // second-factor codes four times faster than with the password. Counted
-        // only once Google has vouched for the address: an unverified token
-        // must not be able to spend the owner's allowance.
+        // GOOGLE AND ONLY GOOGLE (2026-10-26). The token proves Firebase signed
+        // somebody in, not how: a project with Email/Password or email-link
+        // turned on in the console - by a teammate, for another app sharing
+        // the project - mints tokens with email_verified true that never went
+        // near Google's account checks. This page offers Google alone, so
+        // anything else is refused, worded like any other refusal.
+        if ($identity->signInProvider !== 'google.com') {
+            Log::warn('login_google_refused', ['reason' => 'provider', 'provider' => Str::limit($identity->signInProvider, 40)]);
+
+            return $this->refuse($app, $this->googleRefused());
+        }
+
+        // A FRESH SIGN-IN, NOT A TOKEN THAT WAS LYING AROUND. See GOOGLE_FRESH.
+        // auth_time is required by the verifier, so this cannot be skipped by
+        // leaving the claim out.
+        $age = Clock::timestamp() - $identity->authTime;
+
+        if ($age > self::GOOGLE_FRESH + self::GOOGLE_LEEWAY) {
+            Log::warn('login_google_refused', ['reason' => 'stale', 'ageSeconds' => $age]);
+
+            return $this->refuse($app, $this->googleRefused());
+        }
+
+        $verified = $identity->verifiedEmail();
+
+        if ($verified === null) {
+            Log::warn('login_google_refused', ['reason' => 'unverified_email']);
+
+            return $this->refuse($app, $this->googleRefused());
+        }
+
+        $email = Str::email($verified);
+
+        // The per-account cap the password path has had all along, in a bucket
+        // of its own (see the class docblock). Without it the Google path was
+        // capped only per address (forty in fifteen minutes), and every pass
+        // through here mints a fresh pending login. Counted only once Google
+        // has vouched for the address: an unverified token must not be able to
+        // spend the owner's allowance.
         if ($email !== '') {
-            RateLimit::enforceKey('login_account', $email, $this->accountAttempts(), self::WINDOW);
+            RateLimit::enforceKey('login_google_account', $email, $this->accountAttempts(), self::WINDOW);
         }
 
         $row = $email === '' ? null : Admins::row($email);
@@ -324,7 +407,9 @@ final class LoginController
      * cannot reach Google, and the person in front of it has no way to tell that
      * from a Google outage. Missing one is a configuration mistake with a
      * documented fix (docs/firebase-setup.md), so the button simply does not
-     * appear.
+     * appear. An auth domain that is not a bare hostname counts as missing
+     * (2026-10-26): it is also a frame-src source, and a button whose popup
+     * the page's own CSP would block is the same dead button.
      *
      * Public and static because that is what makes it testable without a
      * request, a session or a database - the visibility rule is the thing worth
@@ -332,17 +417,13 @@ final class LoginController
      */
     public static function firebaseConfigJson(): string
     {
-        $config = [
-            'apiKey'     => Str::squish(Config::str('auth.firebase_api_key')),
-            'authDomain' => Str::squish(Config::str('auth.firebase_auth_domain')),
-            'projectId'  => Str::squish(Config::str('auth.firebase_project_id')),
-            'appId'      => Str::squish(Config::str('auth.firebase_app_id')),
-        ];
+        // The rule itself lives in FirebaseBrowser (2026-10-26), because Core\App
+        // asks the same question to decide the login page's CSP, and the
+        // button and the policy that lets it work must never disagree.
+        $config = FirebaseBrowser::config();
 
-        foreach ($config as $value) {
-            if ($value === '') {
-                return '';
-            }
+        if ($config === null) {
+            return '';
         }
 
         $config['sdkVersion'] = Str::squish(Config::str('auth.firebase_sdk_version', self::SDK_VERSION));
@@ -468,10 +549,12 @@ final class LoginController
             passwordsEnabled: $passwords,
         );
 
+        // allowFirebaseAuth(): this page, and only this page, gets the Firebase
+        // SDK's sources in its CSP - see Core\App::applySecurityHeaders().
         return $app->page('admin/login', [
             'page'     => $page,
             'firebase' => self::firebaseConfigJson(),
             'theme'    => $app->request->cookie('theme') === 'dark' ? 'dark' : 'light',
-        ], $status);
+        ], $status)->allowFirebaseAuth();
     }
 }

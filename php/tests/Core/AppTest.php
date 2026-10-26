@@ -6,6 +6,7 @@ namespace Speedat\Tests\Core;
 
 use Speedat\Core\App;
 use Speedat\Core\Config;
+use Speedat\Core\Paths;
 use Speedat\Core\Request;
 use Speedat\Core\Response;
 use Speedat\Tests\TestCase;
@@ -26,9 +27,23 @@ use Speedat\Tests\TestCase;
  * upgrade-insecure-requests are conditional in the direction that cannot lock
  * anybody out. And that a config value cannot smuggle a directive of its own
  * into the policy.
+ *
+ * AND WHO GETS FIREBASE (2026-10-26). Only a response the sign-in page marked
+ * (Response::allowFirebaseAuth()) is widened, only when all four auth.firebase_*
+ * values are set, and then by the complete list from code - including
+ * https://apis.google.com, which the documented csp_script value lacked and
+ * without which the Google popup never finished.
  */
 final class AppTest extends TestCase
 {
+    /** A complete Firebase web config, as the console hands it out. */
+    private const FIREBASE = [
+        'auth.firebase_project_id'  => 'speedat-test-1234',
+        'auth.firebase_api_key'     => 'AIzaSy-test-not-a-real-key',
+        'auth.firebase_auth_domain' => 'speedat-test-1234.firebaseapp.com',
+        'auth.firebase_app_id'      => '1:1234567890:web:abcdef123456',
+    ];
+
     /** @var array<string,mixed> */
     private array $savedConfig = [];
 
@@ -41,7 +56,17 @@ final class AppTest extends TestCase
             'security.hsts'        => Config::bool('security.hsts', false),
             'security.csp_script'  => Config::str('security.csp_script'),
             'security.csp_connect' => Config::str('security.csp_connect'),
+            'security.csp_frame'   => Config::str('security.csp_frame'),
         ];
+
+        foreach (self::FIREBASE as $key => $value) {
+            $this->savedConfig[$key] = Config::get($key);
+            Config::set($key, '');
+        }
+
+        Config::set('security.csp_script', '');
+        Config::set('security.csp_connect', '');
+        Config::set('security.csp_frame', '');
 
         $this->savedServer = $_SERVER;
     }
@@ -62,9 +87,9 @@ final class AppTest extends TestCase
      */
     public function tearDown(): void
     {
-        Config::set('security.hsts', $this->savedConfig['security.hsts']);
-        Config::set('security.csp_script', $this->savedConfig['security.csp_script']);
-        Config::set('security.csp_connect', $this->savedConfig['security.csp_connect']);
+        foreach ($this->savedConfig as $key => $value) {
+            Config::set($key, $value);
+        }
 
         $_SERVER = $this->savedServer;
     }
@@ -232,7 +257,7 @@ final class AppTest extends TestCase
         Config::set('security.csp_script', 'https://www.gstatic.com');
         Config::set('security.csp_connect', 'https://identitytoolkit.googleapis.com');
 
-        $response = Response::html('x');
+        $response = Response::html('x')->allowFirebaseAuth();
         $this->send(new App($this->request()), $response);
 
         $csp = $response->headers()['Content-Security-Policy'];
@@ -255,7 +280,8 @@ final class AppTest extends TestCase
         foreach (["'unsafe-inline'", "; script-src *", "https://a.test; object-src *", "'unsafe-eval'"] as $hostile) {
             Config::set('security.csp_script', $hostile);
 
-            $response = Response::html('x');
+            // Marked: the one response the extras are allowed to reach.
+            $response = Response::html('x')->allowFirebaseAuth();
             $this->send(new App($this->request()), $response);
 
             $csp = $response->headers()['Content-Security-Policy'];
@@ -265,6 +291,71 @@ final class AppTest extends TestCase
             $this->assertStringNotContains('object-src *', $csp, 'refused: ' . $hostile);
             $this->assertStringContains("script-src 'self' 'nonce-", $csp, 'and the directive is still intact');
         }
+    }
+
+    // ------------------------------------------------------- Firebase sign-in
+
+    public function testTheSignInPageGetsTheCompleteFirebaseListFromCode(): void
+    {
+        $this->configureFirebase();
+
+        $response = Response::html('x')->allowFirebaseAuth();
+        $this->send(new App($this->request()), $response);
+        $csp = $response->headers()['Content-Security-Policy'];
+
+        $this->assertSame(1, preg_match("/script-src 'self' 'nonce-[^']+' https:\\/\\/www\\.gstatic\\.com https:\\/\\/apis\\.google\\.com;/", $csp), $csp);
+        $this->assertStringContains(
+            "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com;",
+            $csp,
+        );
+        $this->assertStringContains("frame-src 'self' https://speedat-test-1234.firebaseapp.com https://accounts.google.com", $csp);
+    }
+
+    public function testEveryOtherResponseKeepsThePlainPolicy(): void
+    {
+        $this->configureFirebase();
+        Config::set('security.csp_script', 'https://extra.example');
+
+        $response = Response::html('x');
+        $this->send(new App($this->request()), $response);
+        $csp = $response->headers()['Content-Security-Policy'];
+
+        foreach (['gstatic', 'apis.google.com', 'firebaseapp', 'googleapis', 'accounts.google.com', 'extra.example'] as $host) {
+            $this->assertStringNotContains($host, $csp, 'an unmarked response trusts ' . $host);
+        }
+        $this->assertStringContains("connect-src 'self';", $csp);
+        $this->assertStringContains("frame-src 'self'", $csp);
+    }
+
+    public function testAMarkedResponseWithFirebaseUnconfiguredIsPlainToo(): void
+    {
+        // Three of four is not configured: the button does not render either.
+        $this->configureFirebase();
+        Config::set('auth.firebase_app_id', '');
+
+        $response = Response::html('x')->allowFirebaseAuth();
+        $this->send(new App($this->request()), $response);
+        $csp = $response->headers()['Content-Security-Policy'];
+
+        $this->assertStringNotContains('gstatic', $csp);
+        $this->assertStringContains("connect-src 'self';", $csp);
+        $this->assertSame(1, preg_match("/frame-src 'self'(;|$)/", $csp), $csp);
+    }
+
+    /**
+     * The setup guide is what the owner follows, and its old csp_script line
+     * was the bug. Whatever it now says about CSP, it must name the source the
+     * code emits and the old docs missed.
+     */
+    public function testTheSetupGuideNamesApisGoogleCom(): void
+    {
+        $doc = Paths::root() . '/docs/firebase-setup.md';
+
+        if (!is_file($doc)) {
+            $this->skip('docs/firebase-setup.md is not in this tree');
+        }
+
+        $this->assertStringContains('https://apis.google.com', (string) file_get_contents($doc));
     }
 
     // -------------------------------------------------------------- lazy things
@@ -306,6 +397,13 @@ final class AppTest extends TestCase
     }
 
     // ---------------------------------------------------------------- helpers
+
+    private function configureFirebase(): void
+    {
+        foreach (self::FIREBASE as $key => $value) {
+            Config::set($key, $value);
+        }
+    }
 
     /**
      * App::send() echoes the body, which under the test runner lands in the

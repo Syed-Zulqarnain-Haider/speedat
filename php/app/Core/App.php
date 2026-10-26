@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Speedat\Core;
 
+use Speedat\Domain\Auth\FirebaseBrowser;
+
 /**
  * The container, and the only shared object in the application. Everything a
  * handler needs hangs off it, built on first use:
@@ -123,6 +125,18 @@ final class App
     {
         $nonce = $this->nonce;
 
+        // THE SIGN-IN PAGE AND NOTHING ELSE gets the Firebase sources
+        // (2026-10-26). security.csp_* used to be appended to every response,
+        // so the public calculator trusted Google's script CDN because the
+        // admin's login needed it - and the docs' list for it was short of
+        // https://apis.google.com, which signInWithPopup loads, so the popup
+        // never finished. Now LoginController marks its responses, the
+        // sources come from code (FirebaseBrowser - complete, and only once
+        // all four auth.firebase_* values are set and the auth domain is a
+        // hostname), and csp_* are optional extras on that same response.
+        $widen    = $response->allowsFirebaseAuth();
+        $firebase = $widen ? FirebaseBrowser::cspSources() : [];
+
         $directives = [
             "default-src 'self'",
             "base-uri 'none'",
@@ -133,22 +147,19 @@ final class App
             "font-src 'self'",
             // Scripts must carry this request's nonce. An injected <script> has
             // no way to guess it, which is the whole point.
-            "script-src 'self' 'nonce-" . $nonce . "'" . self::extra('security.csp_script'),
+            "script-src 'self' 'nonce-" . $nonce . "'" . self::sources($widen, $firebase['script-src'] ?? [], 'security.csp_script'),
             // Styles are 'unsafe-inline' deliberately: the v3 design uses style
             // attributes, and a nonce on style-src would silently disable them
             // (a CSP nonce makes 'unsafe-inline' be ignored). Inline CSS is a
             // far smaller risk than inline script, and the script rule above is
             // the one that stops an injection running.
             "style-src 'self' 'unsafe-inline'",
-            "connect-src 'self'" . self::extra('security.csp_connect'),
-            // Who this page may frame. 'self' by default - the public site
+            "connect-src 'self'" . self::sources($widen, $firebase['connect-src'] ?? [], 'security.csp_connect'),
+            // Who this page may frame. 'self' everywhere - the public site
             // frames nothing. Google sign-in is the one exception: Firebase's
             // popup flow loads an iframe from the project's auth domain and
-            // accounts.google.com, so an admin who turns Google sign-in on adds
-            // those origins through security.csp_frame (docs/firebase-setup.md).
-            // Empty config leaves it at 'self', so nothing changes until it is
-            // deliberately widened - the same shape as csp_script/csp_connect.
-            "frame-src 'self'" . self::extra('security.csp_frame'),
+            // accounts.google.com, and the login page gets exactly those two.
+            "frame-src 'self'" . self::sources($widen, $firebase['frame-src'] ?? [], 'security.csp_frame'),
         ];
 
         if ($this->request->https) {
@@ -198,17 +209,41 @@ final class App
         }
     }
 
-    /** Extra sources a deployment needs (Firebase, for instance), from config. */
-    private static function extra(string $key): string
+    /**
+     * The sources a directive gains beyond 'self': none at all on an unmarked
+     * response; on the sign-in page, the Firebase ones plus the config extras,
+     * each once.
+     *
+     * @param list<string> $firebase
+     */
+    private static function sources(bool $widen, array $firebase, string $extraKey): string
+    {
+        if (!$widen) {
+            return '';
+        }
+
+        $all = array_values(array_unique(array_merge($firebase, self::extra($extraKey))));
+
+        return $all === [] ? '' : ' ' . implode(' ', $all);
+    }
+
+    /**
+     * Extra sources from config (security.csp_*), for something on the sign-in
+     * page the Firebase list does not cover. Optional: Google sign-in needs
+     * none of them since 2026-10-26.
+     *
+     * @return list<string>
+     */
+    private static function extra(string $key): array
     {
         $value = Str::squish(Config::str($key));
 
         // Only scheme-ish source expressions; never a quoted keyword smuggled
         // in from config, and never a semicolon that would start a directive.
         if ($value === '' || preg_match("#^[A-Za-z0-9:/\\.\\-\\*\\s]+$#", $value) !== 1) {
-            return '';
+            return [];
         }
 
-        return ' ' . $value;
+        return explode(' ', $value);
     }
 }

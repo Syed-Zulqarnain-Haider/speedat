@@ -34,7 +34,7 @@ return [
          */
         'key' => '',
 
-        /** Absolute, no trailing slash, e.g. https://speedat.com.pk */
+        /** Absolute, no trailing slash, e.g. https://speedat.co */
         'url' => '',
 
         /** 'production' | 'local'. Anything but 'production' relaxes error output. */
@@ -91,18 +91,44 @@ return [
         /**
          * The rest of the Firebase web app's config, as the Firebase console
          * prints it (Project settings -> Your apps -> Web app -> SDK setup and
-         * configuration). The "Sign in with Google" button needs all four.
+         * configuration). The "Continue with Google" button needs all four;
+         * with any one empty it is not drawn. auth_domain is a bare host name
+         * such as 'your-project-id.firebaseapp.com' - no https://, no slash.
          * None of these is a secret - Firebase ships them to every browser -
          * but they belong here, beside the project id, not in a template.
+         *
+         * With all four set, the LOGIN PAGE adds Google's script, API and
+         * popup origins to its own Content-Security-Policy. Nothing needs to
+         * be typed into security.csp_* for Firebase. Step-by-step set-up, in
+         * the safe order: docs/firebase-setup.md.
          */
         'firebase_api_key'     => '',
         'firebase_auth_domain' => '',
         'firebase_app_id'      => '',
 
+        /*
+         * The Firebase JS SDK version loaded from gstatic. Leave unset: it
+         * defaults to the tested 10.12.2. Must be three numbers if set.
+         *
+         * 'firebase_sdk_version' => '10.12.2',
+         */
+
+        /*
+         * One-time key for /admin/setup on a FRESH install whose admins table
+         * is empty: 24+ random characters, e.g.
+         *   php -r "echo bin2hex(random_bytes(24)), PHP_EOL;"
+         * Remove the line once the first owner exists.
+         *
+         * 'setup_token' => '',
+         */
+
         /**
-         * Allow a password + TOTP sign-in alongside Firebase. Intended as the
-         * way back in when Google is unreachable; leave it off unless the
-         * owner asks for it.
+         * Allow password sign-in (plus the six-digit code if that admin has
+         * two-factor on) alongside Google. Keep it TRUE until a Google sign-in
+         * has worked on this site; switch it off last. Setting it back to true
+         * is the break-glass when Google sign-in breaks
+         * (docs/security.md section 7.7). With it false and Firebase not
+         * configured, the login page has no way in at all.
          */
         'allow_password_login' => false,
 
@@ -212,9 +238,13 @@ return [
         'hsts' => false,
 
         /**
-         * Extra Content-Security-Policy sources, space separated, if a
-         * third-party script or API is ever added (Firebase's auth endpoints,
-         * for instance). Empty is the safe default.
+         * OPTIONAL extra Content-Security-Policy sources, space separated, for
+         * a third-party script or API added in future. NOT needed for Firebase:
+         * the login page adds Google's origins itself when all four
+         * auth.firebase_* values are set. Empty is the safe default. A
+         * 'Refused to load / connect / frame' line in the browser console on
+         * /admin/login means a Firebase value is wrong, not that these are
+         * empty (docs/firebase-setup.md section 4).
          */
         'csp_script'  => '',
         'csp_connect' => '',

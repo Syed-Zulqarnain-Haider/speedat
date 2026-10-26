@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Speedat\Tests\Http;
 
+use Speedat\Core\Clock;
 use Speedat\Core\Config;
 use Speedat\Core\Cookies;
 use Speedat\Core\Csrf;
@@ -11,6 +12,7 @@ use Speedat\Core\Db;
 use Speedat\Core\Paths;
 use Speedat\Core\Request;
 use Speedat\Core\Session;
+use Speedat\Domain\Auth\GoogleCertificates;
 use Speedat\Domain\Auth\SecretBox;
 use Speedat\Domain\Auth\Totp;
 use Speedat\Domain\SiteDoc\Live;
@@ -18,6 +20,7 @@ use Speedat\Domain\SiteDoc\PublishArgs;
 use Speedat\Domain\SiteDoc\Repo;
 use Speedat\Domain\SiteDoc\Seed;
 use Speedat\Http\Admin\Screen;
+use Speedat\Tests\Auth\Support\RsaKeyPair;
 
 /**
  * The ground every admin route test stands on: a migrated database with one
@@ -36,6 +39,20 @@ use Speedat\Http\Admin\Screen;
  * last because a login test that spends the limiter would otherwise fail the next
  * one. The live-document cache is pointed at a scratch directory, so busting it
  * never touches what a developer's browser is being served.
+ *
+ * AND IT OWNS THE SIGN-IN CONFIG (2026-10-26). The login tests used to inherit
+ * auth.allow_password_login and the auth.firebase_* values from whatever the
+ * developer's config/config.php said, so the same suite passed on one machine
+ * and failed on the next - and on a Google-only config every password test
+ * failed for a reason that had nothing to do with the code. setUp() now pins
+ * passwords ON and Firebase OFF, and tearDown() puts the host's values back.
+ *
+ * THE GOOGLE PATH RUNS FOR REAL, MINUS THE NETWORK. googleSignInReady() plants
+ * the certificate cache GoogleCertificates would have written after a fetch,
+ * holding the test run's own key pair, and googleToken() signs a token with
+ * the claims Firebase puts in one - so a POST to /admin/login/google goes
+ * through the real verifier, the real controller and the real admins table,
+ * and never touches Google.
  */
 abstract class AdminTestCase extends HttpTestCase
 {
@@ -45,7 +62,25 @@ abstract class AdminTestCase extends HttpTestCase
     /** Long enough for the policy, and nowhere near any real password. */
     protected const PASSWORD = 'correct-horse-battery-staple-9';
 
+    /** The Firebase project the Google tests sign tokens for. */
+    protected const FIREBASE_PROJECT = 'speedat-test-1234';
+
+    /** The kid the planted certificate cache serves the test key under. */
+    protected const FIREBASE_KID = 'test-key-1';
+
+    /** Sign-in config as the host had it, put back in tearDown(). */
+    private const PINNED = [
+        'auth.allow_password_login',
+        'auth.firebase_project_id',
+        'auth.firebase_api_key',
+        'auth.firebase_auth_domain',
+        'auth.firebase_app_id',
+    ];
+
     private string $cacheDir = '';
+
+    /** @var array<string,mixed> */
+    private array $savedAuth = [];
 
     /** The session cookie of whoever signIn() last signed in. */
     protected string $sid = '';
@@ -55,6 +90,16 @@ abstract class AdminTestCase extends HttpTestCase
         parent::setUp();
 
         $this->needDatabase();
+
+        foreach (self::PINNED as $key) {
+            $this->savedAuth[$key] = Config::get($key);
+        }
+
+        Config::set('auth.allow_password_login', true);
+
+        foreach (array_slice(self::PINNED, 1) as $key) {
+            Config::set($key, '');
+        }
 
         $this->cacheDir = Paths::tmp() . '/admin-http-' . bin2hex(random_bytes(4));
         Config::set('paths.cache', $this->cacheDir);
@@ -85,10 +130,17 @@ abstract class AdminTestCase extends HttpTestCase
             $this->empty();
         }
 
-        foreach (glob($this->cacheDir . '/site/*') ?: [] as $file) {
-            @unlink($file);
+        foreach ($this->savedAuth as $key => $value) {
+            Config::set($key, $value);
         }
-        @rmdir($this->cacheDir . '/site');
+        $this->savedAuth = [];
+
+        foreach (['/site', '/google-certs'] as $sub) {
+            foreach (glob($this->cacheDir . $sub . '/*') ?: [] as $file) {
+                @unlink($file);
+            }
+            @rmdir($this->cacheDir . $sub);
+        }
         @rmdir($this->cacheDir);
 
         $this->cacheDir = '';
@@ -210,6 +262,86 @@ abstract class AdminTestCase extends HttpTestCase
             Request::synthetic('GET', '/admin', [], [], [], $cookies),
             new Cookies(false),
         )))->token();
+    }
+
+    /* ---------------------------------------------------------------- Google */
+
+    /**
+     * Turn Google sign-in on, all four values, and plant the certificate cache
+     * the controller will read - the file GoogleCertificates writes after a
+     * successful fetch, fresh for an hour, holding this run's own key.
+     *
+     * Planting it is also what keeps a forged-token test off the network: with
+     * no cache, the verifier's first act was a live HTTPS call to Google.
+     */
+    protected function googleSignInReady(): void
+    {
+        if (!RsaKeyPair::isAvailable()) {
+            $this->skip('this PHP cannot generate an RSA key (no openssl.cnf found), so Google tokens cannot be signed here');
+        }
+
+        Config::set('auth.firebase_project_id', self::FIREBASE_PROJECT);
+        Config::set('auth.firebase_api_key', 'AIzaSy-test-not-a-real-key');
+        Config::set('auth.firebase_auth_domain', self::FIREBASE_PROJECT . '.firebaseapp.com');
+        Config::set('auth.firebase_app_id', '1:1234567890:web:abcdef123456');
+
+        $now = Clock::timestamp();
+
+        Paths::ensureWritable($this->certCacheDir());
+        file_put_contents($this->certCacheFile(), (string) json_encode([
+            'fetched_at' => $now,
+            'expires_at' => $now + 3600,
+            'keys'       => [self::FIREBASE_KID => RsaKeyPair::shared()->certificatePem],
+        ], JSON_UNESCAPED_SLASHES));
+    }
+
+    /** Where LoginController keeps Google's certificates under this test's cache. */
+    protected function certCacheDir(): string
+    {
+        return $this->cacheDir . '/google-certs';
+    }
+
+    /** The cache file for the real certificate URL - the name GoogleCertificates reads. */
+    protected function certCacheFile(): string
+    {
+        return $this->certCacheDir() . '/firebase-certs-' . substr(hash('sha256', GoogleCertificates::URL), 0, 16) . '.json';
+    }
+
+    /**
+     * A Firebase ID token for $email, signed by the planted key, with the
+     * claims Google puts in a fresh Google sign-in. A null override removes
+     * the claim.
+     *
+     * @param array<string,mixed> $overrides
+     */
+    protected function googleToken(string $email = self::OWNER, array $overrides = []): string
+    {
+        $now    = Clock::timestamp();
+        $claims = [
+            'iss'            => 'https://securetoken.google.com/' . self::FIREBASE_PROJECT,
+            'aud'            => self::FIREBASE_PROJECT,
+            'auth_time'      => $now - 5,
+            'user_id'        => 'uid-' . substr(hash('sha256', $email), 0, 20),
+            'sub'            => 'uid-' . substr(hash('sha256', $email), 0, 20),
+            'iat'            => $now - 5,
+            'exp'            => $now + 3595,
+            'email'          => $email,
+            'email_verified' => true,
+            'firebase'       => [
+                'identities'       => ['google.com' => ['1234567890'], 'email' => [$email]],
+                'sign_in_provider' => 'google.com',
+            ],
+        ];
+
+        foreach ($overrides as $claim => $value) {
+            if ($value === null) {
+                unset($claims[$claim]);
+            } else {
+                $claims[$claim] = $value;
+            }
+        }
+
+        return RsaKeyPair::shared()->sign(['alg' => 'RS256', 'kid' => self::FIREBASE_KID, 'typ' => 'JWT'], $claims);
     }
 
     /* -------------------------------------------------------------- requests */

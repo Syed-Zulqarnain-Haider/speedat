@@ -110,6 +110,14 @@ final class FirebaseToken
         $keys = $this->certificates->keys();
 
         if (!isset($keys[$kid])) {
+            // Maybe Google rotated after our copy was cached (2026-10-26):
+            // ask once more. The source, not this class, decides whether that
+            // is worth a request - see CertificateSource::refresh() - so a
+            // token with a made-up kid cannot be used to hammer Google.
+            $keys = $this->certificates->refresh();
+        }
+
+        if (!isset($keys[$kid])) {
             throw new FirebaseTokenError('Token was signed with an unknown key id');
         }
 
@@ -166,11 +174,19 @@ final class FirebaseToken
             throw new FirebaseTokenError('Token was issued in the future');
         }
 
-        // Firebase always sets auth_time; a token claiming the person
-        // authenticated later than now is not one Firebase minted.
+        // Firebase always sets auth_time, so a token without one is not one
+        // Firebase minted - and it is REQUIRED now (2026-10-26), because
+        // LoginController refuses a sign-in that happened more than five
+        // minutes ago, and a check on a claim that may be absent is a check
+        // an attacker opts out of by leaving it out. A token claiming the
+        // person authenticated later than now is refused for the same reason.
         $authTime = self::timestamp($payload['auth_time'] ?? null);
 
-        if ($authTime !== null && $authTime > $now + $this->leeway) {
+        if ($authTime === null) {
+            throw new FirebaseTokenError('Token has no usable auth_time claim');
+        }
+
+        if ($authTime > $now + $this->leeway) {
             throw new FirebaseTokenError('Token says authentication happened in the future');
         }
 
