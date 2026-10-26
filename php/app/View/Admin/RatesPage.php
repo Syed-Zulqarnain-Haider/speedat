@@ -6,6 +6,7 @@ namespace Speedat\View\Admin;
 
 use Speedat\Core\Money;
 use Speedat\Domain\Pricing\Format;
+use Speedat\Domain\SiteDoc\RebaseNote;
 
 /**
  * The rates editor, whole. Port of AdminEditor.tsx with the browser's job
@@ -85,6 +86,8 @@ final class RatesPage
         public readonly bool $draftMoved = false,
         /** "Roll back to version N?" - the question, when one has been asked. */
         public readonly ?RollbackAsk $rollback = null,
+        /** The draft was carried onto a newer live version (`Repo::catchUpDraft()`); null when it never had to be. */
+        public readonly ?RebaseNote $rebased = null,
     ) {
     }
 

@@ -114,7 +114,7 @@ abstract class AdminTestCase extends HttpTestCase
             Db::exec('DELETE FROM ' . $table);
         }
 
-        Db::exec('DELETE FROM app_settings WHERE k = ? OR k LIKE ?', ['hold', 'plogin:%']);
+        Db::exec('DELETE FROM app_settings WHERE k IN (?, ?) OR k LIKE ?', ['hold', 'draft_rebase', 'plogin:%']);
 
         Live::forget();
     }

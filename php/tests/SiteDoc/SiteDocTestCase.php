@@ -71,7 +71,7 @@ abstract class SiteDocTestCase extends TestCase
     {
         Db::exec('DELETE FROM draft');
         Db::exec('DELETE FROM versions');
-        Db::exec('DELETE FROM app_settings WHERE k = ?', ['hold']);
+        Db::exec('DELETE FROM app_settings WHERE k IN (?, ?)', ['hold', 'draft_rebase']);
     }
 
     /** The seed as a mutable array, so a test can bend one field and rebuild the document. @return array<string,mixed> */

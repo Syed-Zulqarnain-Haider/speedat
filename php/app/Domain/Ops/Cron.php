@@ -14,6 +14,8 @@ use Speedat\Domain\Notify\Notifier;
 use Speedat\Domain\Notify\OfficeMessages;
 use Speedat\Domain\Ops\Contract\HoldSource;
 use Speedat\Domain\Ops\Contract\Versions;
+use Speedat\Domain\SiteDoc\RebaseNote;
+use Speedat\Domain\SiteDoc\Repo;
 
 /**
  * The periodic job. The port of src/app/api/cron/check-sheets/route.ts, minus
@@ -121,6 +123,9 @@ final class Cron
 
         /** @var array<string,\Closure():array{string,array<string,mixed>}> $work */
         $work = [
+            // First, so the stale-rates check below reads a draft that is
+            // on the live version. Nothing to do on every ordinary run.
+            'draft'       => fn (): array => [self::draftSummary(Repo::catchUpDraft()), []],
             'rates'       => fn (): array => $this->staleRates(),
             'hold'        => fn (): array => $this->longHold(),
             'counts'      => fn (): array => $this->dailyNumbers(),
@@ -154,6 +159,14 @@ final class Cron
         Audit::log('cron', 'cron_run', ['jobs' => $jobs, 'ms' => $elapsedMs, 'failures' => $failures]);
 
         return new CronResult($checks, $jobs, $failures, $elapsedMs);
+    }
+
+    /** The cron log's line for the draft job. */
+    private static function draftSummary(?RebaseNote $note): string
+    {
+        return $note === null
+            ? 'on the live version'
+            : 'carried from version ' . $note->from . ' onto ' . $note->to . ' (' . count($note->conflicts) . ' clash(es))';
     }
 
     /**

@@ -145,6 +145,28 @@ $keys = [
   <p class="meta draft-who" data-draft-who>This draft was <?= e($page->draftEditedBy) ?>.</p>
   <?php } ?>
 
+  <?php /* THE DRAFT WAS CARRIED ONTO A NEWER VERSION (`Repo::catchUpDraft()`).
+           Stays until the next publish or discard, so the owner reads it
+           whenever they come back, not only on the request that did it. The
+           clashes are the part that needs a decision, so they are listed
+           value for value rather than counted. */ ?>
+  <?php if ($page->rebased !== null) { ?>
+  <div class="notice <?= $page->rebased->conflicts === [] ? 'ok' : 'warn' ?> rebase-box" data-rebase-box>
+    <p><?= e($page->rebased->sentence()) ?></p>
+    <?php if ($page->rebased->conflicts !== []) { ?>
+    <p><strong>Changed in both - check these before publishing:</strong></p>
+    <ul>
+      <?php foreach ($page->rebased->conflictLines() as $line) { ?>
+      <li><?= e($line) ?></li>
+      <?php } ?>
+      <?php if ($page->rebased->moreConflicts() > 0) { ?>
+      <li>...and <?= e($page->rebased->moreConflicts()) ?> more</li>
+      <?php } ?>
+    </ul>
+    <?php } ?>
+  </div>
+  <?php } ?>
+
   <?php /* THE DRAFT MOVED UNDER THIS PAGE. Filled by the server after a
            refused submit and by admin.js after a refused autosave - one box,
            so both paths say the same thing in the same place: who has it now,

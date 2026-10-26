@@ -7,6 +7,7 @@ namespace Speedat\Domain\SiteDoc;
 use Speedat\Core\Audit;
 use Speedat\Core\Clock;
 use Speedat\Core\Db;
+use Speedat\Core\Log;
 use Speedat\Core\Request;
 use Speedat\Core\Str;
 
@@ -41,6 +42,9 @@ use Speedat\Core\Str;
 final class Repo
 {
     private const DRAFT_ID = 1;
+
+    /** The app_settings row that remembers the last catch-up (`catchUpDraft()`). */
+    private const REBASE_NOTE = 'draft_rebase';
 
     /** The named lock every publisher queues on. */
     private const PUBLISH_LOCK = 'speedat.site.publish';
@@ -203,6 +207,113 @@ final class Repo
     public static function discardDraft(): void
     {
         Db::exec('DELETE FROM draft WHERE id = ?', [self::DRAFT_ID]);
+        Db::exec('DELETE FROM app_settings WHERE k = ?', [self::REBASE_NOTE]);
+    }
+
+    /**
+     * BRING A DRAFT THAT FELL BEHIND ONTO THE LIVE VERSION, keeping the
+     * owner's edits. Returns what it did, or null when there was nothing to do.
+     *
+     * A draft is behind when a version was published that it was not branched
+     * from. Every publish through `publishVersion()` re-bases the draft in the
+     * same transaction, so in normal use this never fires; it exists for the
+     * day a version arrives some other way. speedat.co had that day on
+     * 2026-10-11 (version 18 written straight into the table), and a behind
+     * draft then blocked every publish for two weeks and, published as it
+     * stood, would have undone 18. See `Rebase` for the merge rules.
+     *
+     * Called where the draft is looked at - the editor, on every render - and
+     * by the hourly cron, so a behind draft is caught even if nobody opens the
+     * admin. Under the publisher's lock and a row lock, so it cannot interleave
+     * with a publish or a save; the draft's fingerprint changes, so an editor
+     * open in another tab is told to reload rather than saving over it.
+     *
+     * When the version the draft came from is gone, nothing is merged: there is
+     * no way to tell whose change is whose, and the review card's "this draft
+     * was started from version N" warning is the honest fallback.
+     */
+    public static function catchUpDraft(): ?RebaseNote
+    {
+        $behind = Db::one('SELECT d.base_version AS base, (SELECT MAX(version) FROM versions) AS live FROM draft d WHERE d.id = ?', [self::DRAFT_ID]);
+        if ($behind === null || $behind['live'] === null || (int) $behind['base'] >= (int) $behind['live']) {
+            return null;
+        }
+
+        self::lock();
+
+        try {
+            $note = Db::transaction(static function (): ?RebaseNote {
+                $row = Db::one(
+                    'SELECT base_version, data, updated_at, updated_by FROM draft WHERE id = ? FOR UPDATE',
+                    [self::DRAFT_ID]
+                );
+                $live = self::getLatestVersion();
+
+                if ($row === null || $live === null || (int) $row['base_version'] >= $live->version) {
+                    return null;
+                }
+
+                $draft = self::toDraft($row);
+                $base  = self::getVersion($draft->baseVersion);
+
+                if ($base === null) {
+                    return null;
+                }
+
+                $result = Rebase::merge($base->data->toArray(), $live->data->toArray(), $draft->data->toArray());
+                $merged = SiteData::fromArray($result['merged']);
+                $issue  = Schema::firstIssue($merged->toArray());
+
+                if ($issue !== null) {
+                    // Never store a document the schema refuses. The draft
+                    // stays behind and the review card's warning stands.
+                    Log::warn('draft_rebase_refused', ['from' => $draft->baseVersion, 'to' => $live->version, 'issue' => $issue]);
+
+                    return null;
+                }
+
+                $at = Clock::sql();
+                Db::exec(
+                    'UPDATE draft SET data = ?, base_version = ?, updated_at = ? WHERE id = ?',
+                    [Db::json($merged->toArray()), $live->version, $at, self::DRAFT_ID]
+                );
+
+                $note = new RebaseNote(
+                    from: $draft->baseVersion,
+                    to: $live->version,
+                    carried: Diff::of($live->data, $merged)->count,
+                    conflicts: $result['conflicts'],
+                    at: self::iso($at),
+                );
+
+                Db::exec(
+                    'INSERT INTO app_settings (k, v, updated_at, updated_by) VALUES (:k, :v, :at, :by)'
+                    . ' ON DUPLICATE KEY UPDATE v = :v2, updated_at = :at2, updated_by = :by2',
+                    [
+                        ':k' => self::REBASE_NOTE, ':v' => Db::json($note->toArray()), ':at' => $at, ':by' => 'system',
+                        ':v2' => Db::json($note->toArray()), ':at2' => $at, ':by2' => 'system',
+                    ]
+                );
+
+                return $note;
+            });
+        } finally {
+            self::unlock();
+        }
+
+        if ($note !== null) {
+            Audit::log('system', 'draft_rebased', $note->toArray());
+        }
+
+        return $note;
+    }
+
+    /** What the last catch-up did, until the next publish or discard; null when there is nothing to say. */
+    public static function rebaseNote(): ?RebaseNote
+    {
+        $raw = Db::value('SELECT v FROM app_settings WHERE k = ?', [self::REBASE_NOTE]);
+
+        return $raw === null ? null : RebaseNote::fromArray(Db::unjson($raw));
     }
 
     /**
@@ -498,6 +609,10 @@ final class Repo
                         ':by2' => $by,
                     ]
                 );
+
+                // The draft now IS the published document, so a note about
+                // how it was once carried onto an older version is history.
+                Db::exec('DELETE FROM app_settings WHERE k = ?', [self::REBASE_NOTE]);
 
                 return new PublishedVersion(Migrate::migrate(json_decode($json, true) ?: []), $version, self::iso($at));
             });

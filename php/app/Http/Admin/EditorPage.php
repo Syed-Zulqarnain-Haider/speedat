@@ -63,6 +63,11 @@ final class EditorPage
      */
     public static function render(App $app, AdminUser $admin, bool $withReview = false, ?TestPricePanel $test = null): Response
     {
+        // Before the draft is read for the hidden fields, for the same reason
+        // `build()` does it first: every number on this page has to describe
+        // the draft as it will be published.
+        Repo::catchUpDraft();
+
         $draft = Repo::getDraft();
 
         return $app->page('admin/rates', [
@@ -111,12 +116,27 @@ final class EditorPage
         $draft ??= Repo::getDraft();
         $carried = Notice::number($app->request, 'base');
 
+        // A number carried from before the draft was caught up onto a newer
+        // version (`Repo::catchUpDraft()`) describes a draft that no longer
+        // exists: kept, it would make the review card warn that the draft is
+        // behind when it has just been brought level.
+        $note = Repo::rebaseNote();
+        if ($note !== null && $carried > 0 && $carried < $note->to) {
+            return $draft->baseVersion;
+        }
+
         return $carried > 0 && $carried <= $draft->baseVersion ? $carried : $draft->baseVersion;
     }
 
     /** The whole view model. */
     public static function build(App $app, AdminUser $admin, bool $withReview = false, ?TestPricePanel $test = null): RatesPage
     {
+        // Before anything reads the draft: one that fell behind the live
+        // version is carried onto it here, so the table, the change count and
+        // the review card all describe a draft that publishing cannot use to
+        // undo a newer version. Nothing to do costs one indexed read.
+        Repo::catchUpDraft();
+
         $draft = Repo::getDraft();
         $live  = Repo::getLatestVersion() ?? PublishedVersion::sample();
 
@@ -200,6 +220,7 @@ final class EditorPage
             draftEditedBy: $draft->editedBy(),
             draftMoved: $draftMoved,
             rollback: self::rollbackAsk($app, $hold->on, $live->version, $diff->count),
+            rebased: Repo::rebaseNote(),
         );
     }
 
