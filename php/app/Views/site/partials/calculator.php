@@ -20,7 +20,11 @@ declare(strict_types=1);
  * chosen, so no price, and the readout is the one line that says what to do
  * next. `data-state` and `data-n` are what calculator.css reserves the room
  * from - the block is 200px tall in every state - so the price lands in a slot
- * that already existed and the board under it never jumps.
+ * that already existed and the board under it never jumps. `data-sep` adds the
+ * closed "Pickup charge" drill-down's row to that room when the document has a
+ * "separate" charge (owner, 2026-10-26: rates show the courier rate only; the
+ * pickup charge is shown under the quote, never added) - calculator.js sets
+ * the same attribute, so the takeover does not change the block's height.
  *
  * NOTHING HERE IS A PRICE THE ENGINE DID NOT GIVE. Each tile's "from PKR ..."
  * is `Copy::fromPrice()`, which is `Engine::priceAll` for 1 kg plus the
@@ -102,7 +106,7 @@ $doc  = $view->doc;
       </div>
     </div>
 
-    <div class="result" data-state="country" data-n="<?= e($view->resultRows()) ?>">
+    <div class="result" data-state="country" data-n="<?= e($view->resultRows()) ?>"<?= $view->hasSeparateCharges() ? ' data-sep="1"' : '' ?>>
       <p class="wait" aria-live="polite">Tap a country</p>
       <noscript>
         <div class="pricebar" data-state="nojs">

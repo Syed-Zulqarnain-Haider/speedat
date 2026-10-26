@@ -221,9 +221,30 @@ final class QuoteText
     }
 
     /**
+     * What a separate charge is called to the customer: "Pickup" becomes
+     * "Pickup charge", while a label that already says what it is ("Pickup
+     * charge", "Customs charges", "Handling fee") is left alone rather than
+     * read as "Pickup charge charge". pricing.js `chargeName()` is the twin.
+     *
+     * Review, 2026-10-26: every whitespace run is one space before that, from
+     * the same LABEL_WS set labelKey() uses, so "Pickup  and packing" (two
+     * spaces, or a pasted no-break space) is not printed raw into the
+     * drill-down and the WhatsApp line. Collapsing first means the trim only
+     * ever meets plain spaces, so both engines strip exactly the same ends.
+     */
+    public static function chargeName(string $label): string
+    {
+        $l = preg_replace('/' . self::LABEL_WS . '+/u', ' ', $label) ?? $label;
+        $l = trim($l, ' ');
+
+        return preg_match('/(charges?|fees?)$/i', $l) === 1 ? $l : $l . ' charge';
+    }
+
+    /**
      * The WhatsApp message that books a shipment.
      *
-     * @param list<Addon> $addons the add-ons that were ticked
+     * @param list<Addon>          $addons   the add-ons that were ticked
+     * @param list<SeparateCharge> $separate Engine::separateCharges(): named after the price, never added to it
      */
     public static function quoteText(
         Quote $q,
@@ -231,6 +252,7 @@ final class QuoteText
         string $currency,
         array $addons,
         ?string $contents = null,
+        array $separate = [],
     ): string {
         $out = ['Hi ' . $companyName . ', I want to book a shipment.', 'Quote: ' . $q->id];
 
@@ -267,6 +289,21 @@ final class QuoteText
             $out[] = 'Total: ' . Money::fmtMoney(self::bookedTotal($q->total, $paid), $currency);
         } else {
             $out[] = 'Price: ' . Money::fmtMoney($q->total, $currency);
+        }
+
+        // Owner, 2026-10-26: rates show the courier rate only; the pickup
+        // charge is shown under the quote, never added. So "Price" (or
+        // "Total") above stays the rate the site showed, and each separate
+        // charge gets its own line after it, marked "(separate)" so nobody
+        // adds it in their head and then argues about the difference. Never
+        // part of bookedTotal(), never in the stored total.
+        // Kept only when it prints as more than 0 (review, 2026-10-26), the
+        // same test Engine::separateCharges() makes, for a caller that builds
+        // the list itself.
+        foreach ($separate as $charge) {
+            if (Money::jsRound($charge->amount) > 0) {
+                $out[] = self::chargeName($charge->label) . ' (separate): ' . Money::fmtMoney($charge->amount, $currency);
+            }
         }
 
         $c = trim((string) $contents);

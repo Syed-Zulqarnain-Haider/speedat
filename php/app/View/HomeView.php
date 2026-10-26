@@ -135,6 +135,20 @@ final class HomeView
         return min(count($this->doc->services()), 4);
     }
 
+    /**
+     * `data-sep` on the result block: the document has a "separate" charge
+     * (owner, 2026-10-26: rates show the courier rate only; the pickup charge
+     * is shown under the quote, never added), so calculator.js will put a
+     * closed drill-down under the price and calculator.css must reserve its
+     * row from the first paint. calculator.js sets the same attribute from
+     * the same lines (pricing.js separateCharges()), so the block does not
+     * change height when the script takes the mount over.
+     */
+    public function hasSeparateCharges(): bool
+    {
+        return Engine::separateCharges($this->doc->settings()) !== [];
+    }
+
     /** "Over 25 kg" - the cargo button's label, or "" when the document sets no limit. */
     public function overMaxLabel(): string
     {

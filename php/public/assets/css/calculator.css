@@ -46,6 +46,9 @@
   --i-book: var(--i-tap-giant); /* the green button from 1024 */
   /* How many rows the service rows take: two services stack under 360, share a row from 360 (see .result). */
   --i-rows: 2;
+  /* The closed "Pickup charge" drill-down under the quick price (owner, 2026-10-26): its 8px top margin and the
+     48px summary row. Reserved by .result[data-sep] in every state, so the price lands with nothing moving. */
+  --i-sep: calc(var(--i-tap) + 8px);
 }
 
 /* ---------- the instrument skin: overrides of the shared skins ---------- */
@@ -484,6 +487,12 @@
   align-items: stretch;
   min-height: calc(var(--i-rows) * var(--i-opt) + (var(--i-rows) - 1) * 8px + 8px + var(--i-lines) + 12px + var(--i-bar));
   margin: 12px 0 0;
+}
+/* A document with a "separate" charge (owner, 2026-10-26: rates show the courier rate only; the pickup charge is
+   shown under the quote, never added) gets one more closed disclosure row under the bar. The PHP first paint and
+   calculator.js both set data-sep, so the block is this tall from the first byte, in every state. */
+.result[data-sep] {
+  min-height: calc(var(--i-rows) * var(--i-opt) + (var(--i-rows) - 1) * 8px + 8px + var(--i-lines) + 12px + var(--i-bar) + var(--i-sep));
 }
 .result[data-n="1"] {
   --i-rows: 1;
@@ -1176,7 +1185,8 @@ details.how {
   border-top: 1px solid var(--line);
   padding-top: 6px;
 }
-details.how summary {
+details.how summary,
+details.charges summary {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1189,10 +1199,12 @@ details.how summary {
   line-height: 1.4;
   color: var(--ink);
 }
-details.how summary::-webkit-details-marker {
+details.how summary::-webkit-details-marker,
+details.charges summary::-webkit-details-marker {
   display: none;
 }
-details.how summary::after {
+details.how summary::after,
+details.charges summary::after {
   content: "";
   flex: none;
   width: 9px;
@@ -1202,13 +1214,16 @@ details.how summary::after {
   border-bottom: 2px solid currentColor;
   transform: translateY(-2px) rotate(45deg);
 }
-details.how[open] summary::after {
+details.how[open] summary::after,
+details.charges[open] summary::after {
   transform: translateY(2px) rotate(-135deg);
 }
-details.how summary:hover {
+details.how summary:hover,
+details.charges summary:hover {
   color: var(--orange-ink);
 }
-details.how ul {
+details.how ul,
+details.charges ul {
   margin: 4px 0 8px;
   padding-left: 18px;
   list-style: disc;
@@ -1217,12 +1232,31 @@ details.how ul {
   font-size: var(--i-small);
   line-height: 1.5;
 }
-details.how li {
+details.how li,
+details.charges li {
   margin: 2px 0;
 }
 .quote details.how {
   border-top: 0;
   padding-top: 0;
+}
+/* "Pickup charge" / "Other charges": the separate charges the price above does NOT include (owner, 2026-10-26).
+   The same disclosure row as "How this price is calculated" - one accordion skin in the calculator - with no
+   rule above it. In the quick view it is the result block's last child, under the bar, and its closed height
+   (8px + the 48px summary) is exactly --i-sep, which .result[data-sep] has already reserved; open, it grows the
+   block downward only, under the price. In the quote card it sits straight under the Price / Total. */
+details.charges {
+  margin: 8px 0 0;
+}
+.quote details.charges {
+  margin: 0 0 8px;
+}
+details.charges summary {
+  padding: 0;
+}
+details.charges ul {
+  margin: 0 0 8px;
+  padding-left: 18px;
 }
 .quote .field {
   margin: 4px 0 16px;

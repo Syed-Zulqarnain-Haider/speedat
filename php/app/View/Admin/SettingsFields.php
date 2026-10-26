@@ -126,7 +126,12 @@ final class SettingsFields
             ['type' => 'field', 'fields' => [
                 Field::area(
                     'settings[addons]',
-                    'Delivery charge and other add-ons, one per line: Label | Amount | on or off. A line set to on is added to every quote (this is the delivery charge, shown as a separate line); off lets the customer tick it.',
+                    // Three states since 2026-10-26 (owner: rates show the courier
+                    // rate only; the pickup charge is shown under the quote, never
+                    // added). Plain words, one per state, in the order the owner
+                    // is most likely to want them; "info" is accepted as well as
+                    // "separate" but only one word is taught.
+                    'Delivery charge and other add-ons, one per line: Label | Amount | on, off or separate. on = added to every price on the site (shown as its own line in the quote). off = the customer can tick it in the detailed quote. separate = never added to any price; shown under the quote in a small "Pickup charge" drop-down and in the WhatsApp message, for example: Pickup | 1000 | separate',
                     $st->addons,
                     'Delivery | 1000 | on',
                     '',

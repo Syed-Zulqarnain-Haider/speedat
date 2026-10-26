@@ -1,6 +1,6 @@
 {
- "note": "HAND-WRITTEN, unlike pricing.json. These are answers the TypeScript engine cannot give, because they pin decisions taken after it: slab steps counted from the first slab, JavaScript trim() in the settings parser, add-on labels matched by key, \"Courier\" and no zero add-on in the WhatsApp text, a mixed-piece weight sentence, and a one-tonne ceiling when there is no cargo threshold (2026-10-25). Every expected value was worked out by hand and is checked by BOTH engines; docs/engine-parity.md, \"Owner-decision vectors\", explains each group. Regenerating pricing.json does not touch this file.",
- "count": 34,
+ "note": "HAND-WRITTEN, unlike pricing.json. These are answers the TypeScript engine cannot give, because they pin decisions taken after it: slab steps counted from the first slab, JavaScript trim() in the settings parser, add-on labels matched by key, \"Courier\" and no zero add-on in the WhatsApp text, a mixed-piece weight sentence, and a one-tonne ceiling when there is no cargo threshold (2026-10-25); and add-on lines marked \"separate\" or \"info\", which are named under the quote and never added to a price (2026-10-26), with a warning for a misspelt third column, a separate charge that prints as 0 left out and whitespace runs in its name collapsed (review, 2026-10-26). Every expected value was worked out by hand and is checked by BOTH engines; docs/engine-parity.md, \"Owner-decision vectors\", explains each group. Regenerating pricing.json does not touch this file.",
+ "count": 51,
  "sites": {
   "ownerSlabFirst05Step1": {
    "company": {
@@ -332,6 +332,49 @@
        "first": 3000,
        "addl": 780,
        "days": "6–9"
+      }
+     }
+    }
+   ]
+  },
+  "ownerAddonFlags": {
+   "company": {
+    "name": "Speedat International Courier",
+    "whatsapp": "923157667076"
+   },
+   "settings": {
+    "pricingMode": "slab",
+    "currency": "PKR",
+    "volumetricDivisor": 5000,
+    "firstKg": 0.5,
+    "stepKg": 1,
+    "taxPct": 0,
+    "roundTo": 10,
+    "maxKg": 70,
+    "showEta": true,
+    "cutoffHour": 15,
+    "workingDays": "Mon, Tue, Wed, Thu, Fri, Sat",
+    "holidays": "",
+    "addons": "Pickup | 1000 | seperate\nPacking | 200 | Separately\nCustoms | 300 | separate charge\nInsurance | 250 | seprate \nDelivery | 1000 | on\nHandling | 100 | OFF\nLabel | 50 | no\nForms | 10 | Info\nCourier bag | 5\n | 500 | separate",
+    "disclaimer": "Prices are for the weight and size entered here and are confirmed when your shipment is weighed and measured at pickup. Delivery dates are estimates and exclude customs delays."
+   },
+   "services": [
+    {
+     "id": "express",
+     "name": "Express",
+     "note": "Priority air service, door to door"
+    }
+   ],
+   "destinations": [
+    {
+     "id": "gb",
+     "name": "United Kingdom",
+     "active": true,
+     "rates": {
+      "express": {
+       "first": 4000,
+       "addl": 1000,
+       "days": "3–5"
       }
      }
     }
@@ -1162,6 +1205,33 @@
        "on": false
       }
      ]
+    },
+    {
+     "name": "a separate line is not an add-on (2026-10-26)",
+     "input": {
+      "addons": "Delivery | 1000 | on\nPickup | 1000 | separate\nInsurance | 250 | off"
+     },
+     "expected": [
+      {
+       "id": "a0",
+       "label": "Delivery",
+       "amount": 1000,
+       "on": true
+      },
+      {
+       "id": "a2",
+       "label": "Insurance",
+       "amount": 250,
+       "on": false
+      }
+     ]
+    },
+    {
+     "name": "info and SEPARATE are separate too (2026-10-26)",
+     "input": {
+      "addons": "Pickup | 1000 | info\nHandling | 300 | SEPARATE"
+     },
+     "expected": []
     }
    ]
   },
@@ -1341,6 +1411,207 @@
       "contents": null
      },
      "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: Canada\nService: Express (4–6 working days)\nPackages: 1 × 5 kg\nCharged on: 5 kg\nPrice: PKR 17,550"
+    },
+    {
+     "name": "a separate charge is a line after the price, never added (2026-10-26)",
+     "input": {
+      "quote": {
+       "id": "SP-260922-TEST",
+       "from": "",
+       "dest": "Canada",
+       "destId": "ca",
+       "service": "Express",
+       "serviceId": "express",
+       "days": "4–6",
+       "eta": "",
+       "pickup": "",
+       "pieces": 1,
+       "piecesText": "1 × 5 kg",
+       "billableG": 5000,
+       "chargeG": 5000,
+       "total": 17550,
+       "version": 1
+      },
+      "companyName": "Speedat",
+      "currency": "PKR",
+      "addonSettings": "Pickup | 1000 | separate",
+      "addonLabels": [
+       "Pickup"
+      ],
+      "contents": "clothes"
+     },
+     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: Canada\nService: Express (4–6 working days)\nPackages: 1 × 5 kg\nCharged on: 5 kg\nPrice: PKR 17,550\nPickup charge (separate): PKR 1,000\nContents: clothes"
+    },
+    {
+     "name": "a separate charge after an on add-on's total (2026-10-26)",
+     "input": {
+      "quote": {
+       "id": "SP-260922-TEST",
+       "from": "",
+       "dest": "Canada",
+       "destId": "ca",
+       "service": "Express",
+       "serviceId": "express",
+       "days": "4–6",
+       "eta": "",
+       "pickup": "",
+       "pieces": 1,
+       "piecesText": "1 × 5 kg",
+       "billableG": 5000,
+       "chargeG": 5000,
+       "total": 17550,
+       "version": 1
+      },
+      "companyName": "Speedat",
+      "currency": "PKR",
+      "addonSettings": "Delivery | 1000 | on\nPickup | 1000 | separate",
+      "addonLabels": [
+       "Delivery"
+      ],
+      "contents": null
+     },
+     "expected": "Hi Speedat, I want to book a shipment.\nQuote: SP-260922-TEST\nTo: Canada\nService: Express (4–6 working days)\nPackages: 1 × 5 kg\nCharged on: 5 kg\nCourier: PKR 17,550\nDelivery: PKR 1,000\nTotal: PKR 18,550\nPickup charge (separate): PKR 1,000"
+    }
+   ]
+  },
+  {
+   "fn": "separateCharges",
+   "cases": [
+    {
+     "name": "the owner's pickup line",
+     "input": {
+      "addons": "Pickup | 1000 | separate"
+     },
+     "expected": [
+      {
+       "id": "a0",
+       "label": "Pickup",
+       "amount": 1000
+      }
+     ]
+    },
+    {
+     "name": "only separate and info lines, ids by line",
+     "input": {
+      "addons": "Delivery | 1000 | on\nPickup | Rs 1,000/- | separate \nInsurance | 250 | off\nCustoms fee | 500 | Info"
+     },
+     "expected": [
+      {
+       "id": "a1",
+       "label": "Pickup",
+       "amount": 1000
+      },
+      {
+       "id": "a3",
+       "label": "Customs fee",
+       "amount": 500
+      }
+     ]
+    },
+    {
+     "name": "a zero or broken separate line is nothing to tell",
+     "input": {
+      "addons": "Pickup | 0 | separate\n | 500 | separate\nPacking | n/a | separate"
+     },
+     "expected": []
+    },
+    {
+     "name": "a misspelt keyword stays an off add-on",
+     "input": {
+      "addons": "Pickup | 1000 | seperate"
+     },
+     "expected": []
+    },
+    {
+     "name": "an amount that prints as 0 is nothing to tell (review, 2026-10-26)",
+     "input": {
+      "addons": "Pickup | 0.4 | separate\nPacking | 0.5 | separate\nForms | 0.49 | info"
+     },
+     "expected": [
+      {
+       "id": "a1",
+       "label": "Packing",
+       "amount": 0.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "fn": "chargeName",
+   "cases": [
+    {
+     "name": "a bare label gets charge",
+     "input": {
+      "label": "Pickup"
+     },
+     "expected": "Pickup charge"
+    },
+    {
+     "name": "already a charge",
+     "input": {
+      "label": "Pickup charge"
+     },
+     "expected": "Pickup charge"
+    },
+    {
+     "name": "already charges",
+     "input": {
+      "label": "Customs charges"
+     },
+     "expected": "Customs charges"
+    },
+    {
+     "name": "a fee",
+     "input": {
+      "label": "Handling Fee"
+     },
+     "expected": "Handling Fee"
+    },
+    {
+     "name": "whitespace runs are one space (review, 2026-10-26)",
+     "input": {
+      "label": " Pickup  and \tpacking　"
+     },
+     "expected": "Pickup and packing charge"
+    },
+    {
+     "name": "a doubled space before fee (review, 2026-10-26)",
+     "input": {
+      "label": "Handling  fee"
+     },
+     "expected": "Handling fee"
+    }
+   ]
+  },
+  {
+   "fn": "validateSite",
+   "cases": [
+    {
+     "name": "a misspelt third column does not block; a broken line names all three states (review, 2026-10-26)",
+     "input": {
+      "site": "ownerAddonFlags"
+     },
+     "expected": [
+      "Optional charge “| 500 | separate” must be written as Label | Amount | on, off or separate with a positive amount."
+     ]
+    }
+   ]
+  },
+  {
+   "fn": "warnSite",
+   "cases": [
+    {
+     "name": "a third column that is not on, off or separate is warned about (review, 2026-10-26)",
+     "input": {
+      "site": "ownerAddonFlags"
+     },
+     "expected": [
+      "Charge “Pickup | 1000 | seperate”: the last part must be on, off or separate - as written it is shown as an optional tick box.",
+      "Charge “Packing | 200 | Separately”: the last part must be on, off or separate - as written it is shown as an optional tick box.",
+      "Charge “Customs | 300 | separate charge”: the last part must be on, off or separate - as written it is shown as an optional tick box.",
+      "Charge “Insurance | 250 | seprate”: the last part must be on, off or separate - as written it is shown as an optional tick box."
+     ]
     }
    ]
   }

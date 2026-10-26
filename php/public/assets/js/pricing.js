@@ -321,7 +321,38 @@
       var p = parts(ls[i], 3);
       var amt = toNumLoose(p[1]);
       if (!p[0] || !isNum(amt) || amt < 0) continue;
+      // "separate" / "info" is not an add-on (owner, 2026-10-26: rates show
+      // the courier rate only; the pickup charge is shown under the quote,
+      // never added). Left out here, so nothing that sums or offers add-ons
+      // can reach it. Engine::addonsList() skips the same lines.
+      if (isSeparate(p[2])) continue;
       out.push({ id: "a" + i, label: p[0], amount: amt, on: /^(on|yes|true|1|checked|default)$/i.test(p[2]) });
+    }
+    return out;
+  }
+
+  /** The third column says "never add me, just tell them". Engine::isSeparate(). */
+  function isSeparate(flag) {
+    return /^(separate|info)$/i.test(String(flag == null ? "" : flag));
+  }
+
+  /**
+   * The "Pickup | 1000 | separate" lines: shown in a drill-down under the
+   * quote and named in the WhatsApp message, NEVER added to a price (owner,
+   * 2026-10-26). Same lines, trim and ids as addonsList(); a zero amount is
+   * left out because the site never prints "PKR 0" - judged after fmtNum()'s
+   * Math.round (review, 2026-10-26), so a 0.4 that would print "PKR 0" goes
+   * too. Engine::separateCharges() is the twin and the owner-decision vectors
+   * hold both to one answer.
+   */
+  function separateCharges(settings) {
+    var out = [];
+    var ls = lines(settings.addons);
+    for (var i = 0; i < ls.length; i++) {
+      var p = parts(ls[i], 3);
+      var amt = toNumLoose(p[1]);
+      if (!p[0] || !isNum(amt) || !(Math.round(amt) > 0) || !isSeparate(p[2])) continue;
+      out.push({ id: "a" + i, label: p[0], amount: amt });
     }
     return out;
   }
@@ -719,6 +750,18 @@
     return out;
   }
 
+  /**
+   * "Pickup" -> "Pickup charge"; "Handling fee" stays. Every whitespace run is
+   * one space first (review, 2026-10-26: "Pickup  and packing" was printed
+   * with its double space), using labelKey()'s set. QuoteText::chargeName().
+   */
+  function chargeName(label) {
+    var l = String(label == null ? "" : label)
+      .replace(/[\s\u0085\u180E]+/g, " ")
+      .replace(/^ +| +$/g, "");
+    return /(charges?|fees?)$/i.test(l) ? l : l + " charge";
+  }
+
   function quoteText(q, ctx) {
     var out = ["Hi " + ctx.companyName + ", I want to book a shipment.", "Quote: " + q.id];
     if (q.from) out.push("From: " + q.from);
@@ -741,6 +784,14 @@
       out.push("Total: " + fmtMoney(bookedTotal(q.total, paid), ctx.currency));
     } else {
       out.push("Price: " + fmtMoney(q.total, ctx.currency));
+    }
+
+    // A separate charge is named after the price and never added to it
+    // (owner, 2026-10-26), and only when it prints as more than 0.
+    // QuoteText::quoteText() prints the same line.
+    var separate = ctx.separate || [];
+    for (var sc = 0; sc < separate.length; sc++) {
+      if (Math.round(separate[sc].amount) > 0) out.push(chargeName(separate[sc].label) + " (separate): " + fmtMoney(separate[sc].amount, ctx.currency));
     }
 
     var c = ctx.contents ? String(ctx.contents).trim() : "";
@@ -829,7 +880,7 @@
       var p = parts(addonLines[i], 3);
       var amt = toNumLoose(p[1]);
       if (!p[0] || !isNum(amt) || amt < 0)
-        errs.push("Optional charge “" + addonLines[i] + "” must be written as Label | Amount | on/off with a positive amount.");
+        errs.push("Optional charge “" + addonLines[i] + "” must be written as Label | Amount | on, off or separate with a positive amount.");
     }
 
     if (st.cutoffHour != null && !(st.cutoffHour >= 0 && st.cutoffHour <= 23)) errs.push("Cutoff hour must be between 0 and 23, or blank.");
@@ -1017,6 +1068,19 @@
 
     }
 
+    // A third column that is not on, off or separate is a tick box, which a
+    // misspelt "seperate" quietly turned the owner's never-added pickup
+    // charge into (review, 2026-10-26). Warned, not blocked; well-formed
+    // lines only. Validate::warnings() is the twin.
+    var addonLines = lines(s.settings.addons);
+    for (var al = 0; al < addonLines.length; al++) {
+      var ap = parts(addonLines[al], 3);
+      var aamt = toNumLoose(ap[1]);
+      if (!ap[0] || !isNum(aamt) || aamt < 0 || !ap[2]) continue;
+      if (/^(on|yes|true|1|checked|default|off|no|false|0)$/i.test(ap[2]) || isSeparate(ap[2])) continue;
+      w.push("Charge “" + addonLines[al] + "”: the last part must be on, off or separate - as written it is shown as an optional tick box.");
+    }
+
     return w;
   }
 
@@ -1046,6 +1110,8 @@
     parts: parts,
     toNumLoose: toNumLoose,
     addonsList: addonsList,
+    isSeparate: isSeparate,
+    separateCharges: separateCharges,
     // dates
     parseDaysRange: parseDaysRange,
     parseDays: parseDays,
@@ -1076,6 +1142,7 @@
     bookedTotal: bookedTotal,
     labelKey: labelKey,
     resolveAddons: resolveAddons,
+    chargeName: chargeName,
     quoteText: quoteText,
     leadSummary: leadSummary,
     waLink: waLink,

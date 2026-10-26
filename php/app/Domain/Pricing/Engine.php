@@ -442,6 +442,14 @@ final class Engine
      * line in the middle leaves a gap ("a0", "a2") - the ids are stable as long
      * as the text above them does not change.
      *
+     * A line marked "separate" (or "info") is NOT an add-on and is left out
+     * here, leaving the same kind of gap in the ids. Owner, 2026-10-26: rates
+     * show the courier rate only; the pickup charge is shown under the quote,
+     * never added. Everything that sums or offers add-ons reads this list, so
+     * leaving the line out is what keeps it out of every tile, board figure,
+     * caption, calculator total, WhatsApp total and stored quote total at
+     * once. separateCharges() is where those lines go instead.
+     *
      * @return list<Addon>
      */
     public static function addonsList(Settings $settings): array
@@ -456,6 +464,10 @@ final class Engine
                 continue;
             }
 
+            if (self::isSeparate($p[2])) {
+                continue;
+            }
+
             $out[] = new Addon(
                 id: 'a' . $i,
                 label: $p[0],
@@ -465,6 +477,60 @@ final class Engine
         }
 
         return $out;
+    }
+
+    /**
+     * The add-on lines marked "separate" or "info": charges the customer is
+     * told about under the quote and that are NEVER added to a price.
+     *
+     * OWNER DECISION, 2026-10-26 - owner: rates show the courier rate only;
+     * the pickup charge is shown under the quote, never added. "Pickup | 1000
+     * | separate" therefore leaves every figure on the site at the courier
+     * rate, and the calculator shows "Pickup charge: PKR 1,000 - paid
+     * separately" in a drill-down under the price; the WhatsApp message names
+     * it on its own line after the price.
+     *
+     * Same parsing as addonsList() - same lines, same trim, same ids - so a
+     * line is exactly one of: an add-on that is on, one that is off, a
+     * separate charge, or broken. A separate charge of 0 is left out: there is
+     * nothing to tell the customer, and the site never prints "PKR 0".
+     * Review, 2026-10-26: "nothing" is judged by what would be PRINTED, not
+     * by the raw amount - "Pickup | 0.4 | separate" passed `> 0` and showed
+     * "PKR 0", because Money::fmtMoney() rounds to whole units. So the test is
+     * the money formatter's own rounding (Money::jsRound, JavaScript's
+     * Math.round), and 0.5 and up is kept as the "1" it prints.
+     * pricing.js `separateCharges()` is the twin.
+     *
+     * @return list<SeparateCharge>
+     */
+    public static function separateCharges(Settings $settings): array
+    {
+        $out = [];
+
+        foreach (self::lines($settings->addons) as $i => $line) {
+            $p      = self::parts($line, 3);
+            $amount = self::toNumLoose($p[1]);
+
+            if ($p[0] === '' || !Num::isNum($amount) || !(Money::jsRound($amount) > 0) || !self::isSeparate($p[2])) {
+                continue;
+            }
+
+            $out[] = new SeparateCharge(id: 'a' . $i, label: $p[0], amount: $amount);
+        }
+
+        return $out;
+    }
+
+    /**
+     * The third column of an add-on line says "never add me, just tell them".
+     * "separate" is the word the admin hint teaches; "info" is accepted
+     * because it is what an owner reaches for when they mean "for information
+     * only". Anything else that is not "on" stays what it always was: off, a
+     * tick box. pricing.js `isSeparate()` is the same test.
+     */
+    public static function isSeparate(string $flag): bool
+    {
+        return preg_match('/^(separate|info)$/i', $flag) === 1;
     }
 
     /**

@@ -220,8 +220,28 @@ final class SiteFacts
         // matched on, which is the whole point of a local description. It is
         // true (the owner picks up across Lahore) and matches the visible
         // "Pickup across Lahore" section - the SEO layer's one rule.
-        return $lead . $from . ' by country and weight. Free pickup across Lahore '
+        //
+        // 2026-10-26 - owner: the pickup charge is shown under the quote, so
+        // the site must not also say pickup is free. This sentence is the
+        // meta, og and twitter description AND the JSON-LD description, so a
+        // "Free" here would be the search result promising what the quote
+        // then charges for. It reads the same LocalAreas::pickupCharged() the
+        // visible section and the terms page read, so all of them drop
+        // "Free" together. Not charged: today's exact sentence.
+        $pickup = $this->pickupCharged() ? 'Pickup across Lahore ' : 'Free pickup across Lahore ';
+
+        return $lead . $from . ' by country and weight. ' . $pickup
             . '- DHA, Bahria Town, Model Town and Johar Town. Book on WhatsApp.';
+    }
+
+    /**
+     * Does the published rate document charge for pickup? See
+     * LocalAreas::pickupCharged() - one answer for every sentence that would
+     * otherwise call pickup free.
+     */
+    public function pickupCharged(): bool
+    {
+        return LocalAreas::pickupCharged($this->site->card->settings);
     }
 
     /**

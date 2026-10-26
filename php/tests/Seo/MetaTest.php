@@ -82,7 +82,14 @@ final class MetaTest extends TestCase
         $this->assertSame(
             // Led by the pickup city and the Lahore neighbourhoods a local
             // search matches on (SiteFacts::siteDescription), not the country.
-            'Express and Normal courier prices from Lahore by country and weight. Free pickup across Lahore '
+            //
+            // No "Free" (2026-10-26 - owner: the pickup charge is shown under
+            // the quote, so the site must not also say pickup is free): this
+            // fixture's add-on is "Pickup and service charges | 500 | on",
+            // which the board adds to every price and names in its caption.
+            // The free wording, for a document that charges nothing for
+            // pickup, is pinned in tests/View/FreePickupClaimTest.php.
+            'Express and Normal courier prices from Lahore by country and weight. Pickup across Lahore '
             . '- DHA, Bahria Town, Model Town and Johar Town. Book on WhatsApp.',
             $expected
         );

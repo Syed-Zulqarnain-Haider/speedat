@@ -122,6 +122,15 @@ final class PricingVectorsTest extends TestCase
 
             return array_map(static fn ($a): array => $a->toArray(), Engine::addonsList($settings));
         });
+
+        // Owner, 2026-10-26: "separate" / "info" lines are told, never added.
+        $this->run('separateCharges', function (array $in): array {
+            $settings = new Settings(addons: (string) $in['addons']);
+
+            return array_map(static fn ($c): array => $c->toArray(), Engine::separateCharges($settings));
+        });
+
+        $this->run('chargeName', fn (array $in): string => QuoteText::chargeName((string) $in['label']));
     }
 
     public function testGridWeightsAndLookup(): void
@@ -383,6 +392,9 @@ final class PricingVectorsTest extends TestCase
                 (string) $in['currency'],
                 QuoteText::resolveAddons($settings, $labels),
                 $in['contents'] === null ? null : (string) $in['contents'],
+                // The same settings' separate charges, as the browser passes
+                // them; [] for every generated vector, which has none.
+                Engine::separateCharges($settings),
             );
         });
 

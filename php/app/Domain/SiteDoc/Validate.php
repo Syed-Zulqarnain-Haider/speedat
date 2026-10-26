@@ -68,7 +68,7 @@ final class Validate
             $amount = Engine::toNumLoose($p[1]);
 
             if ($p[0] === '' || !Num::isNum($amount) || $amount < 0) {
-                $errs[] = 'Optional charge ' . self::quoted($line) . ' must be written as Label | Amount | on/off with a positive amount.';
+                $errs[] = 'Optional charge ' . self::quoted($line) . ' must be written as Label | Amount | on, off or separate with a positive amount.';
             }
         }
 
@@ -291,6 +291,30 @@ final class Validate
                     $w[] = $dest->name . " \u{00b7} " . $service->name . ': no transit days, so no delivery date can be shown.';
                 }
             }
+        }
+
+        // Review, 2026-10-26: since "separate" became a third state, a
+        // misspelt one ("seperate", "Separately", "separate charge") is the
+        // easy mistake, and it used to pass in silence: anything that is not
+        // "on" is "off", so the owner's never-added pickup charge became a
+        // tick box the customer could add to the total. A warning, not an
+        // error - an unknown word has always meant "off" and documents
+        // published with one must stay publishable. Only well-formed lines:
+        // a broken one already has its own error above. Same parse as
+        // Engine::addonsList(). pricing.js `warnSite()` is the twin.
+        foreach (Engine::lines($card->settings->addons) as $line) {
+            $p      = Engine::parts($line, 3);
+            $amount = Engine::toNumLoose($p[1]);
+
+            if ($p[0] === '' || !Num::isNum($amount) || $amount < 0 || $p[2] === '') {
+                continue;
+            }
+
+            if (preg_match('/^(on|yes|true|1|checked|default|off|no|false|0)$/i', $p[2]) === 1 || Engine::isSeparate($p[2])) {
+                continue;
+            }
+
+            $w[] = 'Charge ' . self::quoted($line) . ': the last part must be on, off or separate - as written it is shown as an optional tick box.';
         }
 
         return $w;

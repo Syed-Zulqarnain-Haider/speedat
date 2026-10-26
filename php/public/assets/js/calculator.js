@@ -688,6 +688,14 @@
     var addonsOnTotal = addonDefs.reduce(function (t, a) {
       return t + (a.on ? a.amount : 0);
     }, 0);
+    // SEPARATE CHARGES (owner, 2026-10-26): owner: rates show the courier
+    // rate only; the pickup charge is shown under the quote, never added.
+    // "Pickup | 1000 | separate" is not in addonDefs (addonsList() leaves it
+    // out), so it can never reach addonsOnTotal, a tile, a row, the bar, the
+    // log or a tick box; it is only ever PRINTED, by chargesDrill() and as its
+    // own line in the WhatsApp text. Guarded so a stale cached pricing.js
+    // without it simply shows no drill-down rather than no calculator.
+    var separate = typeof P.separateCharges === "function" ? P.separateCharges(sets) : [];
     var cities = (blob.cities || []).slice();
     var act = site.destinations.filter(function (x) {
       return x.active;
@@ -887,6 +895,24 @@
       });
       sel.appendChild(pop);
       sel.appendChild(all);
+    }
+
+    /* ---- the separate charges drill-down (owner, 2026-10-26) --------
+     * "At the bottom just add a drill down and there show 1000 pickup
+     * charges". A native <details>, closed by default, so it is keyboard and
+     * screen-reader accessible for free and its closed height is one 48px
+     * summary row - which calculator.css reserves in the quick view's result
+     * block (.result[data-sep]), so it lands in room that was already there.
+     * The words say outright that the figure above does not include it. No
+     * dash: " - " (owner, 2026-10-11). Null when there is nothing to show. */
+    function chargesDrill() {
+      if (!separate.length) return null;
+      var ul = h("ul");
+      separate.forEach(function (c) {
+        ul.appendChild(h("li", { text: P.chargeName(c.label) + ": " + fmtMoney(c.amount, cur) + " - paid separately, not included in the price above." }));
+      });
+      var title = separate.length === 1 ? P.chargeName(separate[0].label) : "Other charges";
+      return h("details.charges", null, [h("summary", { text: title }), ul]);
     }
 
     /* ---- the add-on checkboxes (detailed view only) ---------------- */
@@ -1269,7 +1295,7 @@
             total: p.total,
             version: site.version,
           };
-          bookHref = waLink(site.company.whatsapp, quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents }));
+          bookHref = waLink(site.company.whatsapp, quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents, separate: separate }));
           bookLabel = "Book on WhatsApp";
         }
 
@@ -1315,6 +1341,10 @@
         clear(result);
         result.setAttribute("data-state", state);
         result.setAttribute("data-n", String(Math.min(site.services.length, 4)));
+        // Room for the closed drill-down, in EVERY state, exactly as the PHP
+        // first paint sets it (calculator.php), so the block keeps one height.
+        if (separate.length) result.setAttribute("data-sep", "1");
+        else result.removeAttribute("data-sep");
         result.classList.toggle("is-next", stage === "chosen");
 
         if (state === "live" && res && res.ok) {
@@ -1370,7 +1400,7 @@
           contentsInp.value = contents;
           contentsInp.addEventListener("input", function () {
             contents = contentsInp.value;
-            if (quote) book.setAttribute("href", waLink(site.company.whatsapp, quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents })));
+            if (quote) book.setAttribute("href", waLink(site.company.whatsapp, quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents, separate: separate })));
           });
           result.appendChild(
             add(h("label.field.contents"), [add(h("span"), ["What is inside your parcel? ", h("span.hint", { text: "(optional)" })]), contentsInp]),
@@ -1397,6 +1427,12 @@
             });
           }
           result.appendChild(h("div.pricebar", { "data-state": state }, [sumBox, book]));
+          // Under the price, never above it (rule 3): after the bar in the
+          // DOM, so from 1024 it sits below the figure in the room .result
+          // reserves for it, and below 1024 (where the bar is pinned to the
+          // screen) it follows the contents line. Live only: it explains a
+          // price, so it comes with one.
+          if (state === "live") add(result, chargesDrill());
         } else {
           // The line that waits, at the TOP of the slot until there is a bar
           // (the CSS pins it there; the bar, when it comes, lands at the end).
@@ -1928,7 +1964,7 @@
           total: price.total,
           version: site.version,
         };
-        var text = quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents });
+        var text = quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents, separate: separate });
 
         /* how the price was reached, line by line */
         var how = [];
@@ -2014,6 +2050,10 @@
         dl.appendChild(h("dt", { text: "Quote" }));
         dl.appendChild(add(h("dd"), [h("span.qid", { text: quote.id }), " ", h("span.hint", { text: "valid today" })]));
         card.appendChild(dl);
+        // The separate charges, directly under the Price / Total they are NOT
+        // part of (owner, 2026-10-26). The card is new on every render, so a
+        // drill-down here cannot move anything that was already on screen.
+        add(card, chargesDrill());
 
         var howUl = h("ul");
         how.forEach(function (x) {
@@ -2027,7 +2067,7 @@
           contents = contentsInp.value;
           // Only the WhatsApp text and the log change, so nothing is
           // re-rendered under the caret: patch the link in place.
-          var href = waLink(site.company.whatsapp, quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents }));
+          var href = waLink(site.company.whatsapp, quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents, separate: separate }));
           bookLink.setAttribute("href", href);
         });
         card.appendChild(
@@ -2046,7 +2086,7 @@
         if (typeof navigator.share === "function") {
           var shareBtn = h("button.btn.outline", { type: "button", text: "Share" });
           shareBtn.addEventListener("click", function () {
-            var payload = { title: site.company.name + " quote " + quote.id, text: quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents }) };
+            var payload = { title: site.company.name + " quote " + quote.id, text: quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents, separate: separate }) };
             var pr = navigator.share(payload);
             if (pr && pr.catch) pr.catch(function () {});
           });
@@ -2054,7 +2094,7 @@
         }
         var copyBtn = h("button.btn.outline", { type: "button", text: "Copy" });
         copyBtn.addEventListener("click", function () {
-          var body = quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents });
+          var body = quoteText(quote, { companyName: site.company.name, currency: cur, addons: picked, contents: contents, separate: separate });
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(body).then(
               function () {

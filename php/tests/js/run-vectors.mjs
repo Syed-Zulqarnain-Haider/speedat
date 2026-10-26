@@ -197,6 +197,9 @@ const handlers = {
 
   parts: (i) => P.parts(i.line, i.n),
   addonsList: (i) => P.addonsList({ addons: i.addons }),
+  // Owner, 2026-10-26: "separate" / "info" lines, told and never added.
+  separateCharges: (i) => P.separateCharges({ addons: i.addons }),
+  chargeName: (i) => P.chargeName(i.label),
 
   gridWeights: (i) => P.gridWeights({ maxKg: i.maxKg }),
   gridPrice: (i) => P.gridPrice(i.grid === null ? undefined : i.grid, i.kg, i.maxKg) ?? null,
@@ -267,7 +270,10 @@ const handlers = {
       companyName: i.companyName,
       currency: i.currency,
       addons: P.resolveAddons({ addons: i.addonSettings }, i.addonLabels),
-      contents: i.contents ?? undefined
+      contents: i.contents ?? undefined,
+      // Read from the same settings, as calculator.js does: a generated
+      // vector has no separate line, so this is [] and its text is unchanged.
+      separate: P.separateCharges({ addons: i.addonSettings })
     }),
 
   leadSummary: (i) =>

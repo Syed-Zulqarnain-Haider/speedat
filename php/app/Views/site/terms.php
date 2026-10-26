@@ -18,6 +18,8 @@ declare(strict_types=1);
  * @var \Speedat\View\PageView $page
  */
 
+use Speedat\Domain\Seo\LocalAreas;
+
 $this->layout('site/layout', ['page' => $page]);
 
 $doc     = $page->doc;
@@ -27,6 +29,14 @@ $phone   = $doc->company()->phone;
 $tel     = $doc->telHref();
 $waHref  = $doc->waHref();
 $waHas   = $doc->company()->whatsapp !== '';
+
+// 2026-10-26 - owner: the pickup charge is shown under the quote, so the site
+// must not also say pickup is free. The terms are the one page a customer may
+// hold us to, so section 3 reads the same LocalAreas::pickupCharged() the home
+// page and the meta description read: "free" only while no pickup line is
+// charged, and otherwise a sentence that points at the quote, where the
+// amount is printed - the terms never name a number that could go stale.
+$pickupCharged = LocalAreas::pickupCharged($doc->settings());
 ?>
 <section class="page terms">
 <?= $this->partial('site/partials/page-head', ['title' => 'Terms and Conditions']) ?>
@@ -63,7 +73,12 @@ $waHas   = $doc->company()->whatsapp !== '';
 
     <h2>3. Pickup</h2>
     <p>
+<?php if ($pickupCharged) { ?>
+      Pickup within Lahore is available; any pickup charge is shown with your
+      quote. Please have the shipment ready and
+<?php } else { ?>
       We offer free pickup within Lahore. Please have the shipment ready and
+<?php } ?>
       properly packed, and have the receiver's full name, complete address and
       phone number to hand. If a pickup cannot go ahead because the shipment is
       not ready, is not packed, or the details are missing, we may need to

@@ -21,7 +21,7 @@ PHP suite and the node runner each put every vector through their own engine.
 > vector.** The TypeScript is the specification until it is deleted — except
 > where this file records a deliberate divergence, and there are now nine.
 
-Beside it sits `php/tests/vectors/owner-decisions.json`: **34 hand-written
+Beside it sits `php/tests/vectors/owner-decisions.json`: **51 hand-written
 answers** for decisions taken after the TypeScript, which it therefore cannot
 generate. Both runners read it with the same handlers; "Owner-decision vectors"
 below says what is in it and why it is a separate file.
@@ -53,9 +53,9 @@ node tests/js/run-vectors.mjs    # the browser half on its own
 a missing node is reported as a FAILURE, not a pass. `--skip-js` accepts an
 unchecked browser engine and says so in the summary line.
 
-Expected today: `17 passed, 0 failed, 923 assertions` for
-`PricingVectorsTest`, and `pricing.js: 895 of 895 vectors passed` (861
-generated + 34 owner-decision).
+Expected today: `17 passed, 0 failed, 940 assertions` for
+`PricingVectorsTest`, and `pricing.js: 912 of 912 vectors passed` (861
+generated + 51 owner-decision).
 
 ---
 
@@ -415,7 +415,7 @@ All nine are documented here because "the PHP matches the TypeScript exactly" is
 otherwise a claim with an asterisk. Apart from the first, the sixth and the
 last three, every one is a case no generated vector covers, and **none of them
 moves a price the owner typed**: `--filter=PricingVectors` passes and the
-browser half `895 of 895 vectors passed`.
+browser half `907 of 907 vectors passed`.
 
 1. **The document rate, removed from the product** (owner, 2026-09-27) — the
    whole section above. It is the one divergence that vectors *did* cover,
@@ -520,7 +520,7 @@ browser half `895 of 895 vectors passed`.
 `tests/PricingVectorsTest.php` and `tests/js/run-vectors.mjs`, so each case
 is held to both engines. It exists because divergences 7-9 cannot come from
 the generator, and a hand-edit to `pricing.json` would be lost on the next
-regeneration. Every expected value in it was worked out by hand. 23 of the
+regeneration. Every expected value in it was worked out by hand. 23 of the original
 34 fail against `pricing.js` as it was before 2026-10-25, and the six trim
 cases failed only the old PHP; the rest pin the edges so a fix cannot
 overreach - exactly a tonne still priced, an all-volumetric shipment keeping
@@ -533,7 +533,29 @@ its old sentence, a label posted whole still matching.
 | `weightSentence` | 5 | "minimum" on 0.5 / 1 and 1.5 / 1; mixed and all-volumetric pieces |
 | `parts`, `addonsList`, `toNumLoose` | 6 | no-break spaces, ideographic and em spaces, a BOM |
 | `resolveAddons` | 5 | double space, tab, labels over 80 characters, a cut that lands on a space |
-| `quoteText` | 2 | a zero add-on beside a paid one; a zero add-on alone |
+| `addonsList` (2026-10-26) | 2 | a `separate` / `info` / `SEPARATE` line is not an add-on; the other ids keep their gaps |
+| `separateCharges` | 5 | the owner's `Pickup \| 1000 \| separate`; `info`; ids by line; zero, unlabelled and `n/a` lines dropped; a misspelt `seperate` stays an off add-on; 0.4 and 0.49, which print "PKR 0", dropped and 0.5 kept (review, 2026-10-26) |
+| `chargeName` | 6 | "Pickup" -> "Pickup charge"; a label already ending in charge(s) or fee is left alone; whitespace runs (double space, tab, no-break and ideographic spaces) are one space, the `labelKey()` set (review, 2026-10-26) |
+| `quoteText` | 4 | a zero add-on beside a paid one; a zero add-on alone; a separate charge after `Price`, never added; a separate charge after an on add-on's `Total` |
+| `validateSite`, `warnSite` (2026-10-26) | 2 | site `ownerAddonFlags`: a misspelt third column (`seperate`, `Separately`, `separate charge`, `seprate`) is a WARNING, not an error, while on/off/no/OFF/Info and an empty column are silent; a broken line's error names "on, off or separate" |
+
+**Separate charges (owner, 2026-10-26).** "The rates shown everywhere should
+only show the actual rate, not the pickup charges included. At the bottom just
+add a drill down and there show 1000 pickup charges." An add-on line whose
+third column is `separate` (or `info`) is left out of `addonsList()` in both
+engines - so no tile, board cell, caption, calculator total, WhatsApp total,
+stored total or JSON-LD offer can add it - and returned instead by
+`separateCharges()` (`Engine::separateCharges()` / `SeparateCharge`), whose
+only readers print it: the calculator's drill-down and one
+`"<name> (separate): PKR 1,000"` line in `quoteText()` after the price. Both
+runners pass the same settings' separate charges into every `quoteText` case,
+which is `[]` for every generated vector, so none of them moved.
+
+Review, 2026-10-26: a misspelt keyword is warned about (it has always meant
+"off", so it is an optional tick box the customer can add, which is the
+opposite of a separate charge), a separate charge is dropped when it would
+PRINT as 0 (`Math.round` / `Money::jsRound`, the money formatter's rounding),
+and `chargeName()` collapses whitespace runs before naming the charge.
 
 Site names must not repeat one in `pricing.json`; both runners refuse a clash.
 
