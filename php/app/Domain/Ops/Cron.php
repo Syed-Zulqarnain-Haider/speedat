@@ -16,6 +16,7 @@ use Speedat\Domain\Ops\Contract\HoldSource;
 use Speedat\Domain\Ops\Contract\Versions;
 use Speedat\Domain\SiteDoc\RebaseNote;
 use Speedat\Domain\SiteDoc\Repo;
+use Speedat\Domain\Tracking\Refresh;
 
 /**
  * The periodic job. The port of src/app/api/cron/check-sheets/route.ts, minus
@@ -84,6 +85,9 @@ final class Cron
         private readonly HoldSource $hold,
         private readonly Housekeeping $housekeeping,
         private readonly \DateTimeImmutable $now,
+        // Optional so every existing construction (the tests build this by
+        // hand) keeps working; without one the job reports itself off.
+        private readonly ?Refresh $tracking = null,
     ) {
     }
 
@@ -98,6 +102,7 @@ final class Cron
             new HoldSetting(),
             Housekeeping::fromConfig($at),
             $at,
+            Refresh::fromConfig(),
         );
     }
 
@@ -130,6 +135,10 @@ final class Cron
             'rates'       => fn (): array => $this->staleRates(),
             'hold'        => fn (): array => $this->longHold(),
             'counts'      => fn (): array => $this->dailyNumbers(),
+            // Parcel tracking (Domain\Tracking\Refresh): asks the carrier about
+            // open shipments, at most once an hour each, and keeps the scans
+            // /track shows. Off until config.php has a tracking key.
+            'tracking'    => fn (): array => [$this->tracking?->run($this->now) ?? 'off', []],
             'sessions'    => fn (): array => [$this->housekeeping->expiredSessions() . ' expired session(s) removed', []],
             'rate_limits' => fn (): array => [$this->housekeeping->rateLimitWindows() . ' old window(s) removed', []],
             'cache'       => fn (): array => [$this->housekeeping->cacheFiles() . ' cache file(s) removed', []],

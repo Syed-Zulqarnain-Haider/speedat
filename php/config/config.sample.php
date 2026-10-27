@@ -229,6 +229,23 @@ return [
         'track_per_hour'      => 120,
     ],
 
+    /**
+     * Parcel tracking (/track and the hourly cron job). Leave api_key empty
+     * and nothing is sent anywhere: /track still shows the statuses the office
+     * sets by hand.
+     *
+     * To switch it on: sign up at https://api.17track.net, open Settings ->
+     * Security -> Access key, and paste the key between the quotes below. The
+     * key is a password - it lives in this file on the server and nowhere
+     * else, never in the repository or a zip.
+     */
+    'tracking' => [
+        'provider' => '17track',
+        'api_key'  => '',
+        // How many shipments one cron run looks at (one 17TRACK call holds 40).
+        'per_run'  => 40,
+    ],
+
     'security' => [
         /**
          * HSTS. Leave OFF until the PHP site IS the live https site: a browser

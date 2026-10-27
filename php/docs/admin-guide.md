@@ -352,6 +352,30 @@ so last week's "handed to the airline" can never go out under this week's status
 The list has tabs for open shipments and for the ones needing attention, and the
 heading tells you how many need attention.
 
+### Customer tracking (speedat.co/track)
+
+The customer types their shipment number (SH-…) at **speedat.co/track**
+and sees the status, the destination country, the carrier's name and a
+timeline of dates, cities and statuses. They never see a name, a phone
+number, an address, your notes or the carrier's tracking number. The WhatsApp
+update now ends with the tracking link, so customers usually just tap it.
+
+**Automatic updates.** Write the carrier's name in the *Carrier* box (DHL,
+FedEx, UPS, DPD, Aramex, SkyNet, TCS, Leopards, M&P or Trax) and paste its
+tracking number. Once an hour the site asks 17TRACK where the parcel is, adds
+the new scans to the customer's timeline, and moves the status forward for you
+(each move shows "tracking" as who made it). It never moves a shipment
+backwards and never clears **Needs attention**: that stays your decision. It
+sends nothing to the customer; WhatsApp updates are still your button.
+
+**By hand.** TeamGlobal, and any carrier not in the list above, is not
+tracked automatically. Update those as before. The *Customer tracking* box on
+each shipment says which kind it is, when it was last checked, and if 17TRACK
+could not follow the number (usually a typo in the number or the carrier).
+
+Automatic tracking is off until the 17TRACK key is in `config.php`
+(`tracking.api_key`). Without it, /track still works from the updates you add.
+
 ---
 
 ## 8. Settings and the words on the website

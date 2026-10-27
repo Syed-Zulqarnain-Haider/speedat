@@ -205,6 +205,20 @@ final class Caps
         'shipments.status'         => 24,
         'shipments.created_by'     => 190,
 
+        // db/migrations/0004. Every value is machine-made (Tracking\*): a key
+        // this code builds, a provider's reason cut with fit(), a sanitised
+        // city, an ISO code, a stage word and a hash.
+        'shipment_tracking.shipment_id' => 32,
+        'shipment_tracking.track_key'   => 120,
+        'shipment_tracking.state'       => 16,
+        'shipment_tracking.error'       => 190,
+
+        'tracking_checkpoints.shipment_id' => 32,
+        'tracking_checkpoints.city'        => 80,
+        'tracking_checkpoints.country'     => 2,
+        'tracking_checkpoints.stage'       => 24,
+        'tracking_checkpoints.fingerprint' => 40,
+
         'versions.published_by'    => 190,
         'versions.source'          => 255,
     ];

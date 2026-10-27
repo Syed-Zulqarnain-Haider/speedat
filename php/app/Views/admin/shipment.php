@@ -150,6 +150,16 @@ $timeline = $page->timeline();
         </ul>
         <?php } ?>
       </div>
+
+      <div class="panel">
+        <h2 class="step">Customer tracking</h2>
+        <?php /* What the customer sees at /track: status, dates and places,
+                 never a name, phone, address or the notes above. */ ?>
+        <?php if ($page->trackUrl !== '') { ?>
+        <p><a href="<?= e($page->trackUrl) ?>" target="_blank" rel="noopener noreferrer"><?= e($page->trackUrl) ?></a></p>
+        <?php } ?>
+        <p class="hint"><?= e($page->trackingLine) ?></p>
+      </div>
     </div>
   </div>
 </section>

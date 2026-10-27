@@ -1,0 +1,69 @@
+{
+  "code": 0,
+  "data": {
+    "accepted": [
+      {
+        "number": "1234567890",
+        "carrier": 100001,
+        "param": null,
+        "tag": null,
+        "track_info": {
+          "shipping_info": {
+            "shipper_address": {"country": "PK", "city": "LAHORE", "street": "12 Mall Road"},
+            "recipient_address": {"country": "AE", "city": "DUBAI", "street": "Villa 9, Jumeirah"}
+          },
+          "latest_status": {"status": "InTransit", "sub_status": "InTransit_Other"},
+          "tracking": {
+            "providers": [
+              {
+                "provider": {"key": 100001, "name": "DHL"},
+                "events": [
+                  {
+                    "time_iso": "2026-10-26T09:10:00+04:00",
+                    "time_utc": "2026-10-26T05:10:00Z",
+                    "description": "Customs clearance status updated. Contact AHMED KHAN on +971 50 123 4567",
+                    "location": "DUBAI - UNITED ARAB EMIRATES",
+                    "stage": "Arrival",
+                    "sub_status": "InTransit_Other",
+                    "address": {"country": "AE", "state": "DU", "city": "DUBAI", "street": "Airport Free Zone 4", "postal_code": "00000"}
+                  },
+                  {
+                    "time_iso": "2026-10-25T22:00:00+05:00",
+                    "time_utc": "2026-10-25T17:00:00Z",
+                    "description": "Shipment has departed from a DHL facility",
+                    "location": "LAHORE - PAKISTAN",
+                    "stage": "Departure",
+                    "sub_status": "InTransit_Other",
+                    "address": {"country": "PK", "state": null, "city": null, "street": null, "postal_code": null}
+                  },
+                  {
+                    "time_iso": "2026-10-25T15:00:00+05:00",
+                    "time_utc": "2026-10-25T10:00:00Z",
+                    "description": "Shipment picked up from SARA ALI",
+                    "location": "",
+                    "stage": "PickedUp",
+                    "sub_status": "InTransit_PickedUp",
+                    "address": {"country": "PK", "city": "Lahore 54000"}
+                  },
+                  {
+                    "time_iso": "",
+                    "time_utc": "",
+                    "description": "Undated event",
+                    "location": "",
+                    "stage": "",
+                    "sub_status": "InTransit_Other",
+                    "address": {}
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "rejected": [
+      {"number": "FORGOTTEN1", "error": {"code": -18019902, "message": "The tracking number is not registered"}},
+      {"number": "BAD1", "error": {"code": -18019903, "message": "Invalid carrier"}}
+    ]
+  }
+}

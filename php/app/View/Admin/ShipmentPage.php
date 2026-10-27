@@ -6,6 +6,7 @@ namespace Speedat\View\Admin;
 
 use Speedat\Domain\Pricing\Format;
 use Speedat\Domain\Shipments\ShipmentStatus as Transitions;
+use Speedat\Domain\Tracking\Carriers;
 
 /**
  * One shipment's desk: the details that save when you leave them, the status
@@ -36,6 +37,10 @@ final class ShipmentPage
         public readonly string $noticeKind = 'ok',
         /** The update note as typed, put back after a refused update. */
         public readonly string $note = '',
+        /** The customer's /track link, or '' when config.php has no app.url. */
+        public readonly string $trackUrl = '',
+        /** One plain sentence on automatic tracking, for the office. */
+        public readonly string $trackingLine = '',
     ) {
     }
 
@@ -118,7 +123,9 @@ final class ShipmentPage
             Field::text('customerName', 'Customer name', $this->shipment['customerName'], '', '', 120),
             Field::tel('customerPhone', 'Customer phone / WhatsApp', $this->shipment['customerPhone']),
             Field::text('receiverName', 'Receiver name', $this->shipment['receiverName'], '', '', 120),
-            Field::text('carrier', 'Carrier / airline', $this->shipment['carrier'], '', '', 80),
+            // Tracked automatically when it names one of Tracking\Carriers;
+            // the hint lists them so "DHL" is typed, not "courier".
+            Field::text('carrier', 'Carrier / airline', $this->shipment['carrier'], 'e.g. DHL', 'Tracked automatically: ' . implode(', ', Carriers::trackedNames()) . '.', 80),
             // `.track` is admin.css's monospace, tabular box. A tracking number
             // is read back a digit at a time off a phone screen; proportional
             // digits are how a 1 gets typed where a 7 was meant.
@@ -145,7 +152,7 @@ final class ShipmentPage
             'status'       => $this->shipment['status'],
             'trackingNo'   => $this->shipment['trackingNo'],
             'carrier'      => $this->shipment['carrier'],
-        ], $events);
+        ], $events, $this->trackUrl);
     }
 
     /** The wa.me link with the update already in it, or "" without a usable number. */

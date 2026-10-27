@@ -40,5 +40,5 @@ $label = $dark ? 'Light mode' : 'Dark mode';
     ?></span>
 <?php } ?>
   </p>
-  <p class="foot-legal">By booking you agree to our <a href="<?= e($this->url('/terms')) ?>">Terms and Conditions</a>.</p>
+  <p class="foot-legal"><a href="<?= e($this->url('/track')) ?>">Track your shipment</a> &middot; By booking you agree to our <a href="<?= e($this->url('/terms')) ?>">Terms and Conditions</a>.</p>
 </footer>

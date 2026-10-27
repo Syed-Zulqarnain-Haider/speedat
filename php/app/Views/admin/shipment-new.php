@@ -88,7 +88,7 @@ $this->layout('admin/layouts/shell', ['title' => 'New shipment', 'shell' => $she
     <div class="row">
       <label class="field">
         <span>Carrier / airline</span>
-        <input type="text" name="carrier" value="<?= e($page->value('carrier')) ?>" maxlength="80" placeholder="e.g. DHL, Emirates SkyCargo">
+        <input type="text" name="carrier" value="<?= e($page->value('carrier')) ?>" maxlength="80" placeholder="e.g. DHL, FedEx, TCS">
       </label>
       <label class="field">
         <span>Tracking number (if known)</span>

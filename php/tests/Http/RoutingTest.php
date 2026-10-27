@@ -60,7 +60,7 @@ final class RoutingTest extends HttpTestCase
             '/index.html'          => '/',
             '/services.html'       => '/services',
             '/about.html'          => '/about',
-            '/tracking.html'       => '/contact',
+            '/tracking.html'       => '/track',
             '/privacy-policy.html' => '/terms',
         ];
 

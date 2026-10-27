@@ -235,6 +235,7 @@ final class BuildReleaseTest extends TestCase
                 self::APP . 'db/migrations/0001_init.sql',
                 self::APP . 'db/migrations/0002_session_csrf_secret.sql',
                 self::APP . 'db/migrations/0003_page_views.sql',
+                self::APP . 'db/migrations/0004_tracking.sql',
                 self::APP . 'db/migrations/0099_a_real_one.sql',
             ],
             $migrations,

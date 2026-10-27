@@ -58,7 +58,7 @@ final class ShipmentStatus
     /**
      * The customer's update: greeting, the sentence for the current status,
      * the note the admin wrote with that status change, then the tracking
-     * line.
+     * line, then the /track link when there is one.
      *
      * The note is read from the LAST timeline entry and only when that entry
      * is the current status, so a note written for an earlier status never
@@ -67,7 +67,7 @@ final class ShipmentStatus
      * @param array{id:string,customerName:string,destination:string,status:string,trackingNo:string,carrier:string} $shipment
      * @param list<array{status:string,note:string}>                                                                 $events oldest first
      */
-    public static function customerMessage(string $companyName, array $shipment, array $events): string
+    public static function customerMessage(string $companyName, array $shipment, array $events, string $trackUrl = ''): string
     {
         $status = self::current($shipment['status']);
         $latest = $events === [] ? null : $events[count($events) - 1];
@@ -82,6 +82,7 @@ final class ShipmentStatus
             $shipment['trackingNo'] !== ''
                 ? 'Tracking number: ' . $shipment['trackingNo'] . ($shipment['carrier'] !== '' ? ' (' . $shipment['carrier'] . ')' : '')
                 : '',
+            $trackUrl !== '' ? 'Track it here: ' . $trackUrl : '',
         ];
 
         return implode("\n", array_values(array_filter($parts, static fn (string $p): bool => $p !== '')));

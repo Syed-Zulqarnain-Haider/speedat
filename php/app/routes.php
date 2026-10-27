@@ -76,6 +76,7 @@ use Speedat\Http\ContactController;
 use Speedat\Http\QuoteApiController;
 use Speedat\Http\SeoController;
 use Speedat\Http\SiteController;
+use Speedat\Http\TrackController;
 use Speedat\View\Admin\Routes as Admin;
 
 return static function (Router $router): void {
@@ -83,6 +84,7 @@ return static function (Router $router): void {
     $contact = new ContactController($site);
     $quotes  = new QuoteApiController();
     $seo     = new SeoController();
+    $track   = new TrackController();
 
     $login     = new LoginController();
     $setup     = new SetupController();
@@ -106,6 +108,11 @@ return static function (Router $router): void {
     // not one of the five `Domain\Seo\Routes` pages, so it carries the layout's
     // fallback head and stays out of the sitemap while it is still a draft.
     $router->get('/terms', static fn (App $app): Response => $site->terms($app));
+
+    // Parcel tracking. A GET form keyed on the shipment number; it reads the
+    // database only and never calls a carrier (Http\TrackController says why).
+    // Rate-limited per address when a number is looked up.
+    $router->get(TrackController::PATH, static fn (App $app): Response => $track->show($app));
 
     /* ------------------------------------------------------------- the form */
 
@@ -369,8 +376,7 @@ return static function (Router $router): void {
     // for them: the October logs show /tracking.html, /services.html,
     // /index.html and the rest answering 404 every day. A permanent redirect to
     // the page that replaced each one keeps the visitor and hands the old
-    // page's ranking to the new one. There is no public tracking page, so
-    // tracking goes to Contact, where the office can be asked.
+    // page's ranking to the new one. The old tracking page goes to /track.
     $legacy = [
         '/index.html'                => '/',
         '/calculator.html'           => '/',
@@ -378,7 +384,7 @@ return static function (Router $router): void {
         '/coverage.html'             => '/services',
         '/about.html'                => '/about',
         '/contact.html'              => '/contact',
-        '/tracking.html'             => '/contact',
+        '/tracking.html'             => '/track',
         '/faq.html'                  => '/faq',
         '/privacy-policy.html'       => '/terms',
         '/terms.html'                => '/terms',

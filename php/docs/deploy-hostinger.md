@@ -178,12 +178,14 @@ exists, so:
    either way the *import* happens in phpMyAdmin, not File Manager).
 2. Format **SQL**, character set **utf8mb4**. Go.
 3. Expect *"Import has been successfully finished, 12 queries executed."*
-4. **Then import every later migration, in filename order.** Today that is one
-   more file: `db/migrations/0002_session_csrf_secret.sql`. It is not optional —
+4. **Then import every later migration, in filename order.** Today that is
+   three more files: `0002_session_csrf_secret.sql`, `0003_page_views.sql` and
+   `0004_tracking.sql`. `0002` is not optional —
    without it the CSRF secret falls back to one derived from the session row and
    **every admin is signed out again by their own second factor**. The file
    carries the same warning at the top and is written to be safe to import
-   twice.
+   twice. `0004` adds the two parcel-tracking tables behind /track; without it
+   /track and the shipment desk answer with an error.
 
 Every statement in `0001` is `CREATE TABLE IF NOT EXISTS` and `0002` adds its
 column only when it is missing, so importing either twice is harmless. That is
@@ -193,12 +195,14 @@ go-live where you can just do it again.
 **Check:** the *Structure* tab should list
 
 ```
-admins  app_settings  audit_log  draft  leads  quotes  rate_limits
-schema_migrations  sessions  shipment_events  shipments  versions
+admins  app_settings  audit_log  draft  leads  page_views  quotes
+rate_limits  schema_migrations  sessions  shipment_events  shipment_tracking
+shipments  tracking_checkpoints  versions
 ```
 
-**Twelve tables.** Fewer means the import stopped early — read the error, do not
-carry on. (This said *thirteen* and listed an `imports` table until 2026-09-27;
+**Fifteen tables** once `0003` and `0004` are in (twelve from `0001`, then
+`page_views`, `shipment_tracking` and `tracking_checkpoints`). Fewer means the
+import stopped early — read the error, do not carry on. (This said *thirteen* and listed an `imports` table until 2026-09-27;
 that table went with the Excel rate-sheet feature the owner removed from the
 product, and the rehearsal counted twelve on a correct import. A document that
 says thirteen makes you abandon a good install.)

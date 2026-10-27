@@ -133,6 +133,28 @@ final class CustomerMessageTest extends TestCase
     /* ------------------------------------------------------------ helpers */
 
     /** @param list<array{status: string, note: string}> $events */
+    public function testTheTrackingLinkIsTheLastLineWhenThereIsOne(): void
+    {
+        $msg = CustomerMessage::build(
+            self::COMPANY,
+            self::ID,
+            self::NAME,
+            self::DEST,
+            ShipmentStatus::IN_TRANSIT,
+            '1234567890',
+            'DHL',
+            [],
+            'https://speedat.co/track?id=' . self::ID,
+        );
+
+        $this->assertLines([
+            'Hi Ayesha Khan, an update from Speedat International Courier on your shipment SH-GJAVFXDR to Canada:',
+            ShipmentStatus::CUSTOMER_TEXT[ShipmentStatus::IN_TRANSIT],
+            'Tracking number: 1234567890 (DHL)',
+            'Track it here: https://speedat.co/track?id=SH-GJAVFXDR',
+        ], $msg);
+    }
+
     private function build(string $status, array $events, string $destination = self::DEST): string
     {
         return CustomerMessage::build(
