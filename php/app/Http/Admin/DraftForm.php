@@ -806,7 +806,9 @@ final class DraftForm
             return 5;
         }
 
-        return max(1, min(5, (int) round($number)));
+        // Clamped before the cast, not after: on PHP 8.5 (int) of a float past
+        // PHP_INT_MAX ("1e300" typed in the box) is a warning, i.e. a 500.
+        return (int) round(max(1.0, min(5.0, $number)));
     }
 
     /**

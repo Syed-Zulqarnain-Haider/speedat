@@ -112,7 +112,7 @@ ok('php.ini', php_ini_loaded_file() !== false ? (string) php_ini_loaded_file() :
 
 if (PHP_VERSION_ID < 80200) {
     bad('minimum version', 'need PHP 8.2+, found ' . PHP_VERSION);
-} elseif (PHP_VERSION_ID >= 80500) {
+} elseif (PHP_VERSION_ID >= 80600) {
     warn('version drift', PHP_VERSION . ' is newer than any Hostinger PHP selector option');
 }
 

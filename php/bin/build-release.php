@@ -1237,9 +1237,9 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
 
     WHAT THE HOST MUST PROVIDE
     --------------------------
-    PHP         8.2 or 8.3. Set it in hPanel -> Advanced -> PHP Configuration.
-                Not 8.4 or 8.5: the code parses clean on them but nothing has
-                been run on them, and go-live is not the moment to find out.
+    PHP         8.5 (the full test suite runs on 8.5.12 since 2026-10-27).
+                8.2 and 8.3 still work. Set it in hPanel -> Advanced -> PHP
+                Configuration.
     Required    pdo_mysql, mbstring, json, openssl
                 Without pdo_mysql nothing reaches the database at all.
     Wanted      gd, fileinfo    (image handling and upload type checks)

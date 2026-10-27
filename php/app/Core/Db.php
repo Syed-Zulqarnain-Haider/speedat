@@ -116,13 +116,23 @@ final class Db
         $init = "SET SESSION time_zone = '+00:00', "
             . "sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'";
 
+        // PHP 8.4 moved the MySQL attributes onto Pdo\Mysql and 8.5 deprecates
+        // the old PDO::MYSQL_ATTR_* names - and the error handler turns that
+        // deprecation into an exception, so on 8.5 the old name alone stopped
+        // every connection (found 2026-10-27 moving to 8.5.12). Same value
+        // either way; only the branch that runs is ever resolved, so 8.2 and
+        // 8.3 never see the new name and 8.5 never sees the old one.
+        $initCommand = defined('Pdo\Mysql::ATTR_INIT_COMMAND')
+            ? \Pdo\Mysql::ATTR_INIT_COMMAND
+            : \PDO::MYSQL_ATTR_INIT_COMMAND;
+
         try {
             self::$pdo = new \PDO($dsn, $user, $pass, [
                 \PDO::ATTR_ERRMODE                  => \PDO::ERRMODE_EXCEPTION,
                 \PDO::ATTR_DEFAULT_FETCH_MODE       => \PDO::FETCH_ASSOC,
                 \PDO::ATTR_EMULATE_PREPARES         => false,
                 \PDO::ATTR_STRINGIFY_FETCHES        => false,
-                \PDO::MYSQL_ATTR_INIT_COMMAND       => $init,
+                $initCommand                        => $init,
                 // Shared hosting drops idle connections; a short timeout turns a
                 // dead host into a fast error instead of a hung page.
                 \PDO::ATTR_TIMEOUT                  => 5,

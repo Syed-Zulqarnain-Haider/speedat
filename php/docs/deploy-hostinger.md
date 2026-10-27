@@ -443,8 +443,12 @@ one that owns the files. Go up one step at a time; do not jump to 777.
 
 **hPanel → Websites → your site → Advanced → PHP Configuration**
 
-1. **PHP version**: **8.2** or **8.3**. Not 8.4/8.5 — nothing is known to break,
-   but nothing has been run on them either, and go-live is not the moment.
+1. **PHP version**: **8.5**. Since 2026-10-27 the local Docker setup is PHP
+   8.5.12 and the whole suite runs green on it; 8.2 and 8.3 still pass too.
+   Moving to 8.5 needed one real fix first - `Core\Db` used the old
+   `PDO::MYSQL_ATTR_INIT_COMMAND` name, which 8.5 deprecates, and the error
+   handler turned that into a failed connection on every page. A release
+   older than that fix must not be run on 8.5.
 2. **PHP options**: confirm `opcache` on; `zip`, `fileinfo`, `gd` on. `intl` and
    `sodium` may be off; the application guards those and falls back. Note which.
 

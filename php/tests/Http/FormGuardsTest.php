@@ -71,20 +71,22 @@ final class FormGuardsTest extends TestCase
     {
         $now = Clock::millis();
 
+        // Pairs, not a map: a null array key is deprecated on PHP 8.5 (and was
+        // only ever the empty string anyway, so "missing" was never tested).
         foreach (
             [
-                null                                            => 'missing',
-                ''                                              => 'empty',
-                'nonsense'                                      => 'not a token',
-                '1790000000000'                                 => 'no signature',
-                '1790000000000.'                                => 'an empty signature',
-                '1790000000000.' . str_repeat('0', 32)           => 'a wrong signature',
-                '1790000000000.' . str_repeat('z', 32)           => 'a signature that is not hex',
-                '12345.' . str_repeat('0', 32)                   => 'a timestamp that is too short',
-                'abc.' . str_repeat('0', 32)                     => 'a timestamp that is not a number',
-            ] as $token => $why
+                [null, 'missing'],
+                ['', 'empty'],
+                ['nonsense', 'not a token'],
+                ['1790000000000', 'no signature'],
+                ['1790000000000.', 'an empty signature'],
+                ['1790000000000.' . str_repeat('0', 32), 'a wrong signature'],
+                ['1790000000000.' . str_repeat('z', 32), 'a signature that is not hex'],
+                ['12345.' . str_repeat('0', 32), 'a timestamp that is too short'],
+                ['abc.' . str_repeat('0', 32), 'a timestamp that is not a number'],
+            ] as [$token, $why]
         ) {
-            $this->assertSame(FormToken::INVALID, FormToken::check($token === null ? null : (string) $token, $now), $why);
+            $this->assertSame(FormToken::INVALID, FormToken::check($token, $now), $why);
         }
     }
 

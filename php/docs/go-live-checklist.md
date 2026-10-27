@@ -39,8 +39,8 @@ the day it all happened.
 
 - [ ] **4. hPanel settings confirmed.**
       Plan name **and purchase date** (Hostinger versions its limits by purchase
-      date, so this decides which ceilings apply); PHP version **8.2 or 8.3**,
-      not 8.4/8.5; extensions: `opcache`, `zip`, `fileinfo`, `gd` **on**, and note
+      date, so this decides which ceilings apply); PHP version **8.5**
+      (8.2 and 8.3 also pass); extensions: `opcache`, `zip`, `fileinfo`, `gd` **on**, and note
       whether `intl` and `sodium` are on or off.
       *Evidence:* the plan name and date, and a screenshot of the PHP
       Configuration page showing the version and the extension toggles.

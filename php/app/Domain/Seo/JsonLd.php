@@ -393,7 +393,7 @@ final class JsonLd
      */
     private static function amount(float $value): string
     {
-        if (fmod($value, 1.0) === 0.0) {
+        if (fmod($value, 1.0) === 0.0 && abs($value) < (float) PHP_INT_MAX) {
             return (string) (int) round($value);
         }
 

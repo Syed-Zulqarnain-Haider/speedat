@@ -245,7 +245,7 @@ then silently blocked. Booking and alert mail must go through **SMTP**
 
 ## 11. Build checklist (binding for this port)
 
-- [ ] PHP 8.2 syntax, 8.3-clean.
+- [ ] PHP 8.2 syntax, clean on 8.5 (the tested target since 2026-10-27).
 - [ ] Only the conservative extension set; `extension_loaded()` guards with
       fallbacks for `zip`, `intl`, `sodium`; never ImageMagick.
 - [ ] No process spawning, no symlinks, anywhere.

@@ -1,5 +1,5 @@
 # The Mac/Linux twin of the Windows toolchain in ../README-local.md:
-# MariaDB 11.4 (what Hostinger runs) and PHP 8.2 serving php/public.
+# MariaDB 11.4 (what Hostinger runs) and PHP 8.5.12 serving php/public.
 #
 #   docker compose -f php/bin/local/docker/compose.yml up -d --build
 #   docker compose -f php/bin/local/docker/compose.yml exec php php bin/test.php

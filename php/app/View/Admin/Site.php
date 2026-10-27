@@ -213,9 +213,9 @@ final class Site
             return 5;
         }
 
-        $stars = (int) round((float) $v);
-
-        return max(1, min(5, $stars));
+        // Clamped before the cast: PHP 8.5 warns on (int) of a float that does
+        // not fit, and "1e300" is numeric.
+        return (int) round(max(1.0, min(5.0, (float) $v)));
     }
 
     /**

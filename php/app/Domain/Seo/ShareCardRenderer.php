@@ -348,7 +348,8 @@ final class ShareCardRenderer
         }
 
         imagecopyresampled($canvas, $tile, $x, $y, 0, 0, $size, $size, $big, $big);
-        imagedestroy($tile);
+        // No imagedestroy(): a GdImage is freed when it goes out of scope, and
+        // PHP 8.5 deprecates the call.
     }
 
     /** Point-in-rounded-square, optionally shrunk by $inset on every side. */
@@ -395,7 +396,7 @@ final class ShareCardRenderer
         ob_start();
         imagepng($canvas, null, 9);
         $bytes = ob_get_clean();
-        imagedestroy($canvas);
+        unset($canvas);
 
         if ($bytes === false || $bytes === '') {
             throw new SeoError('GD produced no PNG data.');

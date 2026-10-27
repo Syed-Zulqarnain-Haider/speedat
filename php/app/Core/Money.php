@@ -51,7 +51,12 @@ final class Money
     /** Port of engine.ts kgToG(). Weights are integer grams everywhere inside the engine. */
     public static function kgToG(float $kg): int
     {
-        return (int) self::jsRound($kg * 1000);
+        $g = self::jsRound($kg * 1000);
+
+        // PHP 8.5 warns when a float that is not a whole int (INF, NAN, or past
+        // PHP_INT_MAX) is cast, and the error handler makes the warning an
+        // exception. The old cast quietly gave 0 for exactly these; keep that.
+        return is_finite($g) && abs($g) < (float) PHP_INT_MAX ? (int) $g : 0;
     }
 
     /** Port of engine.ts gToKg(): grams to a short kilogram string ("2.5", "12"). */

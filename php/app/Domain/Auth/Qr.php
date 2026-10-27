@@ -262,7 +262,9 @@ final class Qr
             imagepng($image, null, 9);
             $png = (string) ob_get_clean();
         } finally {
-            imagedestroy($image);
+            // Not imagedestroy(): it has done nothing since PHP 8.0 and 8.5
+            // deprecates it. Dropping the reference frees the image.
+            unset($image);
         }
 
         return $png === '' ? null : 'data:image/png;base64,' . base64_encode($png);

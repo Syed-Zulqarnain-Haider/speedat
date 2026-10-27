@@ -88,8 +88,8 @@ final class Review
             $n = (float) self::RATING_MAX;
         }
 
-        $stars = (int) round($n);
-
-        return max(self::RATING_MIN, min(self::RATING_MAX, $stars));
+        // Clamped before the cast: PHP 8.5 warns on (int) of a float that does
+        // not fit in an int.
+        return (int) round(max((float) self::RATING_MIN, min((float) self::RATING_MAX, $n)));
     }
 }
