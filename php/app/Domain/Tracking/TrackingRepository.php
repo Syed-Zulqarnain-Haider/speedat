@@ -155,9 +155,63 @@ final class TrackingRepository
         return $added;
     }
 
+    /**
+     * Forget everything tracked for a shipment: its row and every scan.
+     *
+     * Called when the office changes the carrier or the tracking number. The
+     * old number may have been a typo that belongs to somebody else's parcel,
+     * and its scans - cities, a "Delivered" - must not stay on this customer's
+     * timeline. With no row left, the next hourly run registers the new number
+     * from scratch, even if the old one had finished ("done").
+     */
+    public function forget(string $shipmentId): void
+    {
+        if (!self::installed()) {
+            return;
+        }
+
+        Db::exec('DELETE FROM tracking_checkpoints WHERE shipment_id = ?', [$shipmentId]);
+        Db::exec('DELETE FROM shipment_tracking WHERE shipment_id = ?', [$shipmentId]);
+    }
+
+    /** The newest scan's time (UTC), or null when there is none. */
+    public function newestCheckpointAt(string $shipmentId): ?\DateTimeImmutable
+    {
+        $at = Db::value('SELECT MAX(at) FROM tracking_checkpoints WHERE shipment_id = ?', [$shipmentId]);
+
+        return is_string($at) ? Clock::fromSql($at)?->setTimezone(new \DateTimeZone('UTC')) : null;
+    }
+
+    /**
+     * Whether migration 0004 has been imported.
+     *
+     * On Hostinger the code is extracted before the SQL is imported in
+     * phpMyAdmin, so for a few minutes - or for good, if the import is
+     * forgotten - the tables are missing. /track and the admin desk read
+     * through this and show the office's own updates instead of a 500.
+     * Asked once per request.
+     */
+    public static function installed(): bool
+    {
+        static $known = null;
+
+        if ($known === null) {
+            $known = Db::value(
+                "SELECT COUNT(*) FROM information_schema.tables
+                  WHERE table_schema = DATABASE() AND table_name IN ('shipment_tracking', 'tracking_checkpoints')",
+            ) == 2;
+        }
+
+        return $known;
+    }
+
     /** @return list<Checkpoint> oldest first */
     public function checkpoints(string $shipmentId, int $limit = 100): array
     {
+        if (!self::installed()) {
+            return [];
+        }
+
         $rows = Db::all(
             'SELECT at, city, country, stage, fingerprint FROM tracking_checkpoints
               WHERE shipment_id = ? ORDER BY at DESC, id DESC LIMIT ' . max(1, min(500, $limit)),
@@ -185,6 +239,10 @@ final class TrackingRepository
     /** @return array{state:string,error:string,checked_at:?\DateTimeImmutable}|null */
     public function state(string $shipmentId): ?array
     {
+        if (!self::installed()) {
+            return null;
+        }
+
         $row = Db::one('SELECT state, error, checked_at FROM shipment_tracking WHERE shipment_id = ?', [$shipmentId]);
 
         if ($row === null) {

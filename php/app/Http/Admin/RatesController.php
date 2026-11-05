@@ -615,10 +615,12 @@ final class RatesController
             'H'       => $app->request->post('H', '', 24),
         ];
 
-        $pieces = (int) (self::number($input['pieces']) ?? 1);
+        // Clamped as a float before the cast: "1e300" fits the 12-character
+        // box, and PHP 8.5 refuses (int) of a float that does not fit.
+        $pieces = (int) max(1.0, min((float) self::TEST_MAX_PIECES, self::number($input['pieces']) ?? 1.0));
         $piece  = new Piece(
             kg: self::number($input['kg']) ?? NAN,
-            qty: (float) max(1, min(self::TEST_MAX_PIECES, $pieces)),
+            qty: (float) $pieces,
             L: self::number($input['L']) ?? NAN,
             W: self::number($input['W']) ?? NAN,
             H: self::number($input['H']) ?? NAN,

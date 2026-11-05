@@ -301,14 +301,16 @@ final class GoogleCertificates implements CertificateSource
 
             if (!is_string($raw)) {
                 $message = curl_error($handle);
-                curl_close($handle);
+                // No curl_close(): a no-op since PHP 8.0, deprecated on 8.5
+                // (and an exception under this app's error handler).
+                unset($handle);
 
                 throw new CertificatesUnavailable('Could not reach Google to fetch certificates: ' . $message);
             }
 
             $status     = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
             $headerSize = (int) curl_getinfo($handle, CURLINFO_HEADER_SIZE);
-            curl_close($handle);
+            unset($handle);
 
             if ($status !== 200) {
                 throw new CertificatesUnavailable('Google returned HTTP ' . $status . ' for the certificate list');

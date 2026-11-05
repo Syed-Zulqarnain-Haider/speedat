@@ -108,7 +108,8 @@ final class Refresh
                 break;
             }
             $row['code'] = $code;
-            $row['key']  = $provider->name() . ':' . $code . ':' . $row['tracking_no'];
+            $row['no']   = self::number($row['tracking_no']);
+            $row['key']  = $provider->name() . ':' . $code . ':' . $row['no'];
             $tracked[]   = $row;
         }
 
@@ -124,18 +125,41 @@ final class Refresh
 
         $registerFailed = [];
         foreach (array_chunk($toRegister, $provider->batchSize()) as $chunk) {
-            $answers = $provider->register(array_map(
-                static fn (array $r): TrackRequest => new TrackRequest($r['tracking_no'], $r['code']),
-                $chunk,
-            ));
+            try {
+                $answers = $provider->register(array_map(
+                    static fn (array $r): TrackRequest => new TrackRequest($r['no'], $r['code']),
+                    $chunk,
+                ));
+            } catch (\Throwable $e) {
+                // The contract says register() never throws; if one does, it
+                // is one bad hour for this batch, not the end of the run.
+                Log::exception('tracking_register_failed', $e);
+                $answers = [];
+            }
             foreach ($chunk as $r) {
-                $error = $answers[$r['tracking_no']] ?? 'no answer from the tracking service';
-                if ($error === '') {
-                    $this->tracking->save($r['id'], $r['key'], $r['code'], TrackingRepository::STATE_REGISTERED, '', true, $now);
-                } else {
-                    $this->tracking->save($r['id'], $r['key'], $r['code'], TrackingRepository::STATE_ERROR, $error, false, $now);
-                    $registerFailed[$r['id']] = true;
+                $error = $answers[$r['no']] ?? TrackingProvider::TEMPORARY . 'no answer from the tracking service';
+                try {
+                    if ($error === '') {
+                        $this->tracking->save($r['id'], $r['key'], $r['code'], TrackingRepository::STATE_REGISTERED, '', true, $now);
+                        continue;
+                    }
+                    // A request that failed as a whole is tried again next
+                    // hour (state "registered", not yet registered_at); a
+                    // number the provider refused waits six hours as "error".
+                    $temporary = str_starts_with($error, TrackingProvider::TEMPORARY);
+                    $this->tracking->save(
+                        $r['id'],
+                        $temporary ? $r['track_key'] : $r['key'],
+                        $r['code'],
+                        $temporary ? TrackingRepository::STATE_REGISTERED : TrackingRepository::STATE_ERROR,
+                        $error,
+                        false,
+                        $now,
+                    );
+                } catch (\Throwable $e) {
+                    Log::exception('tracking_save_failed', $e, ['shipment' => $r['id']]);
                 }
+                $registerFailed[$r['id']] = true;
             }
         }
 
@@ -147,13 +171,18 @@ final class Refresh
         $failures = count($registerFailed);
 
         foreach (array_chunk($toFetch, $provider->batchSize()) as $chunk) {
-            $reports = $provider->fetch(array_map(
-                static fn (array $r): TrackRequest => new TrackRequest($r['tracking_no'], $r['code']),
-                $chunk,
-            ));
+            try {
+                $reports = $provider->fetch(array_map(
+                    static fn (array $r): TrackRequest => new TrackRequest($r['no'], $r['code']),
+                    $chunk,
+                ));
+            } catch (\Throwable $e) {
+                Log::exception('tracking_fetch_failed', $e);
+                $reports = [];
+            }
 
             foreach ($chunk as $r) {
-                $report = $reports[$r['tracking_no']] ?? TrackReport::failed('no answer from the tracking service');
+                $report = $reports[$r['no']] ?? TrackReport::failed(TrackingProvider::TEMPORARY . 'no answer from the tracking service');
 
                 try {
                     [$added, $steps] = $this->apply($r, $report, $now);
@@ -174,6 +203,15 @@ final class Refresh
     }
 
     /**
+     * A tracking number as the provider is sent it and answers it: the office
+     * types "1234 5678 90" or "jd014600..." as often as not.
+     */
+    public static function number(string $typed): string
+    {
+        return strtoupper((string) preg_replace('/\s+/', '', $typed));
+    }
+
+    /**
      * Where the automatic moves go from `from` to reach `to`: the statuses to
      * write in order, or [] when the move should not be made.
      *
@@ -183,7 +221,10 @@ final class Refresh
     {
         $from = ShipmentStatus::orBooked($from);
 
-        if ($from === $to || $from === ShipmentStatus::EXCEPTION) {
+        // Never out of "needs attention" (the office decides when it is
+        // solved) and never anything after "delivered": a parcel the office
+        // marked delivered is not re-flagged by a late or stale carrier feed.
+        if ($from === $to || $from === ShipmentStatus::EXCEPTION || $from === ShipmentStatus::DELIVERED) {
             return [];
         }
 
@@ -227,25 +268,43 @@ final class Refresh
     /**
      * Write one answer.
      *
-     * @param array{id:string,key:string,code:int,status:string} $r
+     * @param array{id:string,key:string,no:string,code:int,status:string,state:string} $r
      * @return array{0:int,1:int} [new scans, status steps]
      */
     private function apply(array $r, TrackReport $report, \DateTimeImmutable $now): array
     {
         if ($report->error !== '') {
-            $forgotten = $report->error === SeventeenTrack::ERROR_NOT_REGISTERED;
+            if ($report->error === SeventeenTrack::ERROR_NOT_REGISTERED) {
+                // 17TRACK forgets a number 30 days after its last scan. One
+                // that has been quiet that long has nothing more to say, and
+                // registering it again every hour would spend a unit of quota
+                // each time for nothing: tracking is finished.
+                $newest = $this->tracking->newestCheckpointAt($r['id']);
+                if ($newest !== null && $newest < $now->modify('-25 days')) {
+                    $this->tracking->save($r['id'], $r['key'], $r['code'], TrackingRepository::STATE_DONE, '', null, $now);
+
+                    return [0, 0];
+                }
+
+                // Otherwise register it again next hour (registered_at cleared).
+                $this->tracking->save($r['id'], $r['key'], $r['code'], TrackingRepository::STATE_REGISTERED, $report->error, false, $now);
+
+                return [0, 0];
+            }
+
+            // A whole-request failure is a bad hour, not a bad number: keep the
+            // state it had, so it is due again next hour. A failure for this
+            // number alone waits six hours as "error".
+            $temporary = str_starts_with($report->error, TrackingProvider::TEMPORARY);
             $this->tracking->save(
                 $r['id'],
                 $r['key'],
                 $r['code'],
-                // A forgotten number is not a bad number: left in "registered"
-                // (with registered_at cleared) it is due again next hour, not
-                // held back the six hours a refused number waits.
-                $forgotten ? TrackingRepository::STATE_REGISTERED : TrackingRepository::STATE_ERROR,
+                $temporary && $r['state'] !== '' && $r['state'] !== TrackingRepository::STATE_ERROR
+                    ? $r['state']
+                    : ($temporary ? TrackingRepository::STATE_REGISTERED : TrackingRepository::STATE_ERROR),
                 $report->error,
-                // The provider has forgotten the number: register it again
-                // next time. Any other failure is a bad hour, not a bad number.
-                $forgotten ? false : null,
+                null,
                 $now,
             );
 
@@ -256,8 +315,17 @@ final class Refresh
             // The row lock is the same one ShipmentRepository::addEvent takes,
             // so an admin pressing a status button at this moment waits for
             // this rather than racing it.
-            $current = Db::value('SELECT status FROM shipments WHERE id = ? FOR UPDATE', [$r['id']]);
-            if (!is_string($current)) {
+            $row = Db::one('SELECT status, carrier, tracking_no FROM shipments WHERE id = ? FOR UPDATE', [$r['id']]);
+            if ($row === null) {
+                return [0, 0];
+            }
+            $current = (string) $row['status'];
+
+            // The office corrected the carrier or number while this answer was
+            // on its way: it is about the old number. Drop it; the next run
+            // tracks the new one (the desk's save has already reset the row).
+            if (self::number((string) ($row['tracking_no'] ?? '')) !== $r['no']
+                || Carriers::trackCode((string) $row['carrier']) !== $r['code']) {
                 return [0, 0];
             }
 
@@ -265,6 +333,16 @@ final class Refresh
 
             $steps = 0;
             $to    = $report->latest !== null ? Stage::toStatus($report->latest) : null;
+
+            // "Needs attention" is raised only on NEWS: a run that brought new
+            // scans, or the first answer for the number. Otherwise an office that has dealt with a carrier
+            // exception and moved the parcel on would see it flagged again
+            // every hour for as long as the carrier's summary still says so.
+            // The first answer for a number counts as news.
+            if ($to === ShipmentStatus::EXCEPTION && $added === 0 && $r['state'] === TrackingRepository::STATE_ACTIVE) {
+                $to = null;
+            }
+
             if ($to !== null) {
                 foreach (self::path($current, $to) as $status) {
                     try {

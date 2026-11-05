@@ -275,9 +275,16 @@ final class ShipmentsController
         ];
 
         try {
-            $this->shipments->update($shipment->id, $patch, $admin->email);
+            $updated = $this->shipments->update($shipment->id, $patch, $admin->email);
         } catch (ValueTooLong) {
             return $this->toDesk($app, $shipment->id, ['err' => 'toolong']);
+        }
+
+        // A corrected carrier or number starts tracking over: the old number's
+        // scans may be a stranger's parcel and must leave this timeline.
+        if ($updated !== null
+            && ($updated->carrier !== $shipment->carrier || ($updated->trackingNo ?? '') !== ($shipment->trackingNo ?? ''))) {
+            (new TrackingRepository())->forget($shipment->id);
         }
 
         Audit::log($admin->email, 'shipment_updated', [

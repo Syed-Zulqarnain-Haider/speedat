@@ -36,7 +36,10 @@ final class ImportProfile
         $map = [];
         if (isset($a['map']) && is_array($a['map'])) {
             foreach ($a['map'] as $key => $column) {
-                $map[(string) $key] = (int) Num::jsNumber($column);
+                // A damaged document can hold anything here; NAN or a float past
+                // PHP_INT_MAX is refused by (int) on PHP 8.5, so it reads as 0.
+                $n = Num::jsNumber($column);
+                $map[(string) $key] = is_finite($n) && abs($n) < (float) PHP_INT_MAX ? (int) $n : 0;
             }
         }
 

@@ -63,7 +63,7 @@
     ],
     "rejected": [
       {"number": "FORGOTTEN1", "error": {"code": -18019902, "message": "The tracking number is not registered"}},
-      {"number": "BAD1", "error": {"code": -18019903, "message": "Invalid carrier"}}
+      {"number": "BAD1", "carrier": "100001", "error": {"code": -18019910, "message": "Carrier Code 100001 is incorrect."}}
     ]
   }
 }

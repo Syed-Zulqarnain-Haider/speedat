@@ -18,6 +18,7 @@ use Speedat\Domain\Tracking\Checkpoint;
 use Speedat\Domain\Tracking\Refresh;
 use Speedat\Domain\Tracking\SeventeenTrack;
 use Speedat\Domain\Tracking\Stage;
+use Speedat\Domain\Tracking\TrackingProvider;
 use Speedat\Domain\Tracking\TrackingRepository;
 use Speedat\Domain\Tracking\TrackReport;
 use Speedat\Tests\Ops\Support\FakeHold;
@@ -403,6 +404,92 @@ final class RefreshTest extends TestCase
         $this->assertSame(TrackingRepository::STATE_ACTIVE, $this->row($id)['state'], 'a return is not the end of tracking');
     }
 
+    public function testAStaleExceptionIsNotRaisedAgainOnceTheOfficeHasClearedIt(): void
+    {
+        $number = $this->number();
+        $id     = $this->shipment(trackingNo: $number);
+        $this->shipments->addEvent($id, ShipmentStatus::IN_TRANSIT, '', self::ADMIN);
+
+        $provider = (new FakeProvider())->answer($number, new TrackReport(Stage::RETURNING, []));
+        $this->refresh($provider)->run(self::now());
+        $this->assertSame(ShipmentStatus::EXCEPTION, $this->status($id));
+
+        // The office sorts it out and moves it on; the carrier's summary has
+        // not changed and brings no new scan.
+        $this->shipments->addEvent($id, ShipmentStatus::IN_TRANSIT, 'sorted with DHL', self::ADMIN);
+        $this->refresh($provider)->run(self::now()->modify('+2 hours'));
+
+        $this->assertSame(ShipmentStatus::IN_TRANSIT, $this->status($id), 'not flagged again every hour');
+    }
+
+    public function testACorrectedNumberForgetsTheOldParcelEvenAfterItFinished(): void
+    {
+        $wrong  = $this->number();
+        $id     = $this->shipment(trackingNo: $wrong);
+        $tracking = new TrackingRepository();
+
+        $this->refresh((new FakeProvider())->answer($wrong, new TrackReport(Stage::DELIVERED, [
+            new Checkpoint(self::now()->modify('-1 day'), 'Toronto', 'CA', Stage::DELIVERED, sha1('stranger' . $wrong)),
+        ])))->run(self::now());
+        $this->assertSame(TrackingRepository::STATE_DONE, $this->row($id)['state']);
+
+        // The office fixes the typo; the desk's save calls forget().
+        $right = $this->number();
+        Db::exec('UPDATE shipments SET tracking_no = ? WHERE id = ?', [$right, $id]);
+        $tracking->forget($id);
+        $this->assertSame([], $tracking->checkpoints($id), "the stranger's scans are gone");
+
+        $provider = (new FakeProvider())->answer($right, new TrackReport(Stage::IN_TRANSIT, []));
+        $this->refresh($provider)->run(self::now()->modify('+5 minutes'));
+        $this->assertSame(['register:' . $right . ':100001', 'fetch:' . $right . ':100001'], $provider->calls(), 'tracked again from scratch');
+    }
+
+    public function testAnAnswerForANumberChangedMidRunIsDropped(): void
+    {
+        $number = $this->number();
+        $id     = $this->shipment(trackingNo: $number);
+
+        $provider = new FakeProvider();
+        $provider->answer($number, new TrackReport(Stage::OUT_FOR_DELIVERY, [
+            new Checkpoint(self::now()->modify('-1 hour'), 'Dubai', 'AE', Stage::OUT_FOR_DELIVERY, sha1('mid' . $number)),
+        ]));
+        // The office edits the number after the run picked the row but before
+        // its answer is written: simulate by changing it now and asking the
+        // job about the old number directly.
+        $this->refresh(new FakeProvider())->run(self::now());
+        Db::exec('UPDATE shipments SET tracking_no = ? WHERE id = ?', [$number . 'X', $id]);
+        Db::exec("UPDATE shipment_tracking SET checked_at = NULL, track_key = ? WHERE shipment_id = ?", ['fake:100001:' . $number, $id]);
+
+        $this->refresh($provider)->run(self::now()->modify('+2 hours'));
+
+        $this->assertSame([], (new TrackingRepository())->checkpoints($id), 'no scans from the old number');
+        $this->assertSame(ShipmentStatus::BOOKED, $this->status($id));
+    }
+
+    public function testATrackingNumberIsSentWithoutSpacesAndInCapitals(): void
+    {
+        $id       = $this->shipment(trackingNo: 'ab 12 34');
+        $provider = new FakeProvider();
+
+        $this->refresh($provider)->run(self::now());
+
+        $this->assertSame(['register:AB1234:100001', 'fetch:AB1234:100001'], $provider->calls());
+        $this->assertSame(TrackingRepository::STATE_ACTIVE, $this->row($id)['state']);
+    }
+
+    public function testADeliveredShipmentIsNeverFlaggedByAStaleFeed(): void
+    {
+        $number = $this->number();
+        $id     = $this->shipment(trackingNo: $number);
+        foreach ([ShipmentStatus::IN_TRANSIT, ShipmentStatus::OUT_FOR_DELIVERY, ShipmentStatus::DELIVERED] as $s) {
+            $this->shipments->addEvent($id, $s, '', self::ADMIN);
+        }
+
+        $this->refresh((new FakeProvider())->answer($number, new TrackReport(Stage::EXCEPTION, [])))->run(self::now());
+
+        $this->assertSame(ShipmentStatus::DELIVERED, $this->status($id));
+    }
+
     public function testAStageThatMovesNothingMovesNothing(): void
     {
         $number = $this->number();
@@ -462,8 +549,8 @@ final class RefreshTest extends TestCase
 
         $line = $this->refresh($provider)->run(self::now());
 
-        $this->assertSame(TrackingRepository::STATE_ERROR, $this->row($id)['state']);
-        $this->assertSame('no answer from the tracking service', $this->row($id)['error']);
+        $this->assertSame(TrackingRepository::STATE_REGISTERED, $this->row($id)['state'], 'a missing answer is a bad hour: due again next hour, not in six');
+        $this->assertSame(TrackingProvider::TEMPORARY . 'no answer from the tracking service', $this->row($id)['error']);
         $this->assertStringContains('1 not answered', $line);
     }
 
@@ -511,7 +598,7 @@ final class RefreshTest extends TestCase
             ['in_transit', 'in_transit', []],
             // Into "needs attention" from anywhere the table allows; never out.
             ['booked', 'exception', ['exception']],
-            ['delivered', 'exception', ['exception']],
+            ['delivered', 'exception', []],
             ['exception', 'delivered', []],
             ['exception', 'in_transit', []],
             ['exception', 'exception', []],

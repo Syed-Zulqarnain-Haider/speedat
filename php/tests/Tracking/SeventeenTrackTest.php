@@ -107,7 +107,8 @@ final class SeventeenTrackTest extends TestCase
         $this->assertSame('UTC', $first->at->getTimezone()->getName());
 
         $this->assertSame(Stage::IN_TRANSIT, $second->stage);
-        $this->assertSame('Lahore', $second->city, 'with no address city, the location before the dash');
+        $this->assertSame('', $second->city, 'no address city: the free-text location is never used');
+        $this->assertSame('PK', $second->country);
 
         $this->assertSame(Stage::CUSTOMS, $third->stage, 'a scan whose text says customs reads as customs');
         $this->assertSame('Dubai', $third->city);
@@ -130,7 +131,7 @@ final class SeventeenTrackTest extends TestCase
         ]);
 
         $this->assertSame(SeventeenTrack::ERROR_NOT_REGISTERED, $reports['FORGOTTEN1']->error);
-        $this->assertSame('Invalid carrier', $reports['BAD1']->error);
+        $this->assertSame('Carrier Code 100001 is incorrect.', $reports['BAD1']->error);
     }
 
     public function testTheSameScanReportedTwiceHasTheSameFingerprint(): void
@@ -161,6 +162,10 @@ final class SeventeenTrackTest extends TestCase
             ['Delivered_Other', '', '', Stage::DELIVERED],
             ['Exception_Returning', '', '', Stage::RETURNING],
             ['Exception_Other', '', '', Stage::EXCEPTION],
+            ['Exception_Security', '', '', Stage::CUSTOMS],
+            ['DeliveryFailure_Security', '', '', Stage::CUSTOMS],
+            ['InTransit_Departure', '', '', Stage::IN_TRANSIT],
+            ['NotFound_InvalidCode', '', '', null],
             ['', 'Departure', '', Stage::IN_TRANSIT],
             ['', 'Returned', '', Stage::RETURNING],
             ['NotFound_Other', '', '', null],
@@ -185,6 +190,41 @@ final class SeventeenTrackTest extends TestCase
 
         $this->assertSame(40, $api->batchSize());
         $this->assertCount(40, $this->calls[0]['payload']);
+    }
+
+    public function testARequestLevelErrorWithCodeZeroIsStillAnError(): void
+    {
+        // The v2.4 doc's own example of a rejected request.
+        $api = $this->api(200, '{"code":0,"data":{"errors":[{"code":-18010013,"message":"Submitted data is invalid."}]}}');
+
+        $this->assertStringContains('Submitted data is invalid', $api->register([new TrackRequest('A1', 0)])['A1']);
+        $this->assertStringContains('-18010013', $api->fetch([new TrackRequest('A1', 0)])['A1']->error);
+    }
+
+    public function testANumberAnsweredForSeveralCarriersKeepsTheOneAskedFor(): void
+    {
+        $item = static fn (int $carrier, int $events): array => [
+            'number'     => 'MULTI',
+            'carrier'    => $carrier,
+            'track_info' => [
+                'latest_status' => ['status' => 'InTransit', 'sub_status' => 'InTransit_Other'],
+                'tracking'      => ['providers' => [['events' => array_map(
+                    static fn (int $i): array => ['time_utc' => '2026-10-2' . $i . 'T10:00:00Z', 'description' => 'scan ' . $i, 'location' => 'X', 'sub_status' => 'InTransit_Other', 'address' => []],
+                    range(1, $events),
+                )]]],
+            ],
+        ];
+        $body = (string) json_encode(['code' => 0, 'data' => [
+            'accepted' => [$item(100007, 1), $item(100010, 3)],
+            'rejected' => [['number' => 'MULTI', 'carrier' => '100071', 'error' => ['code' => -18019909, 'message' => 'No tracking information at this time.']]],
+        ]]);
+
+        $detected = $this->api(200, $body)->fetch([new TrackRequest('MULTI', 0)])['MULTI'];
+        $this->assertSame(100010, $detected->carrierCode, 'asked without a carrier: the answer with the most scans');
+        $this->assertSame('', $detected->error, 'a rejection for a third carrier does not undo an answer');
+
+        $asked = $this->api(200, $body)->fetch([new TrackRequest('MULTI', 100007)])['MULTI'];
+        $this->assertSame(100007, $asked->carrierCode, 'asked for a carrier: that carrier\'s answer');
     }
 
     /* ------------------------------------------------------------- helpers */

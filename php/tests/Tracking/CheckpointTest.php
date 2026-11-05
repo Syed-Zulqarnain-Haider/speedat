@@ -22,7 +22,11 @@ final class CheckpointTest extends TestCase
             'Hub 4, Main Blvd'              => 'Hub',
             'Karachi +92 300 1234567'       => 'Karachi',
             'NEW YORK, NY 10001'            => 'New York, Ny',
-            "Sharjah\u{2014}call me"        => 'Sharjah Call Me',
+            "Sharjah\u{2014}call me"        => '',
+            'Signed for by AHMED KHAN'      => '',
+            'Mall Road Gulberg Lahore'      => '',
+            'Received by Mr Ali'            => '',
+            'Ras Al Khaimah'                => 'Ras Al Khaimah',
             'São Paulo'                     => 'São Paulo',
             '  ,  '                         => '',
             '12 Mall Road'                  => '',
@@ -37,7 +41,8 @@ final class CheckpointTest extends TestCase
 
     public function testAPlaceIsNeverLongerThanSixtyCharacters(): void
     {
-        $this->assertSame(60, mb_strlen(Checkpoint::place(str_repeat('Abcdefghij ', 20))));
+        $this->assertSame(60, mb_strlen(Checkpoint::place(str_repeat('Abcdefghij', 8))));
+        $this->assertSame('', Checkpoint::place('One Two Three Four Five'), 'five words is a sentence, not a town');
     }
 
     public function testCountryIsTwoLettersOrNothing(): void

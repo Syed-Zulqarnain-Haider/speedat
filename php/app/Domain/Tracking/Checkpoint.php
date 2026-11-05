@@ -14,6 +14,16 @@ final class Checkpoint
     /** The longest city kept. tracking_checkpoints.city is 80; a city is never near it. */
     private const MAX_CITY = 60;
 
+    /** More words than this is a sentence, not a town. */
+    private const MAX_WORDS = 4;
+
+    /** Words only an address or a person would use. Any of them drops the value. */
+    private const NOT_A_TOWN = [
+        'by', 'signed', 'sign', 'received', 'receiver', 'consignee', 'attn', 'mr', 'mrs', 'ms', 'miss',
+        'road', 'rd', 'street', 'st', 'avenue', 'ave', 'lane', 'ln', 'block', 'house', 'flat', 'floor',
+        'sector', 'phase', 'plot', 'near', 'opp', 'call', 'phone', 'tel', 'contact',
+    ];
+
     public function __construct(
         /** UTC. */
         public readonly \DateTimeImmutable $at,
@@ -35,7 +45,9 @@ final class Checkpoint
      * a phone number. So: anything with an @ in it goes, anything after a
      * digit is dropped (postcodes, house
      * numbers, phones all start with one), only letters, spaces and . , ' - ( )
-     * are kept, the result is title-cased, and it is cut to sixty characters.
+     * are kept; more than four words, or any word only an address or a
+     * person would use ("by", "road", "street", "mr" ...), drops the whole
+     * value; the rest is title-cased and cut to sixty characters.
      * An empty answer is a normal answer: the timeline then shows the country.
      */
     public static function place(string $raw): string
@@ -46,6 +58,11 @@ final class Checkpoint
         $raw = trim((string) preg_replace('/\s+/u', ' ', $raw), " \t\n\r\0\x0B,.-");
 
         if ($raw === '') {
+            return '';
+        }
+
+        $words = preg_split("/[\\s.,'()\\-]+/u", mb_strtolower($raw, 'UTF-8'), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if (count($words) > self::MAX_WORDS || array_intersect($words, self::NOT_A_TOWN) !== []) {
             return '';
         }
 

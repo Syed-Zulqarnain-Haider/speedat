@@ -53,9 +53,11 @@ final class Money
     {
         $g = self::jsRound($kg * 1000);
 
-        // PHP 8.5 warns when a float that is not a whole int (INF, NAN, or past
-        // PHP_INT_MAX) is cast, and the error handler makes the warning an
-        // exception. The old cast quietly gave 0 for exactly these; keep that.
+        // PHP 8.5 warns when a float that does not fit an int (INF, NAN, or
+        // past PHP_INT_MAX) is cast, and the error handler makes the warning an
+        // exception. Those now read as 0 grams - the old cast gave 0 for INF
+        // and NAN and a wrapped-around number for the rest, which no weight
+        // that reaches here can be.
         return is_finite($g) && abs($g) < (float) PHP_INT_MAX ? (int) $g : 0;
     }
 

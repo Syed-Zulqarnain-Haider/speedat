@@ -77,7 +77,10 @@ final class Engine
     public static function gridWeights(Settings $settings): array
     {
         $top = $settings->maxKg > 0
-            ? min((int) floor($settings->maxKg), self::MAX_TOP_KG)
+            // Clamped as a float BEFORE the cast: "1e300" in the cargo box is a
+            // finite number, and PHP 8.5 refuses (int) of a float that does
+            // not fit - a 500 on every rates screen.
+            ? (int) floor(min($settings->maxKg, (float) self::MAX_TOP_KG))
             : self::DEFAULT_TOP_KG;
 
         $top = max($top, 1);

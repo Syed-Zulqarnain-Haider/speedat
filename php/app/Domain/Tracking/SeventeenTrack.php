@@ -82,6 +82,7 @@ final class SeventeenTrack implements TrackingProvider
 
         [$data, $error] = $this->call('register', $requests);
         if ($error !== '') {
+            $error = self::TEMPORARY . $error;
             return array_map(static fn (): string => $error, $out);
         }
 
@@ -111,22 +112,36 @@ final class SeventeenTrack implements TrackingProvider
         $out = [];
         if ($error !== '') {
             foreach ($requests as $r) {
-                $out[$r->number] = TrackReport::failed($error);
+                $out[$r->number] = TrackReport::failed(self::TEMPORARY . $error);
             }
 
             return $out;
         }
 
+        $asked = [];
+        foreach ($requests as $r) {
+            $asked[$r->number] = $r->carrierCode;
+        }
+
         foreach (self::items($data['accepted'] ?? null) as $item) {
             $number = self::str($item['number'] ?? null);
-            if ($number !== '') {
-                $out[$number] = self::report($item);
+            if ($number === '') {
+                continue;
+            }
+            $report = self::report($item);
+            // Asked without a carrier (DPD), a number that matches several
+            // carriers comes back once per carrier. Keep the answer for the
+            // carrier we asked for, else the one with the most scans.
+            $kept = $out[$number] ?? null;
+            if ($kept === null || self::better($report, $kept, $asked[$number] ?? 0)) {
+                $out[$number] = $report;
             }
         }
 
         foreach (self::items($data['rejected'] ?? null) as $item) {
             $number = self::str($item['number'] ?? null);
-            if ($number === '') {
+            if ($number === '' || isset($out[$number])) {
+                // One carrier answered: a rejection for another does not undo it.
                 continue;
             }
             [$code, $message] = self::rejection($item);
@@ -154,6 +169,11 @@ final class SeventeenTrack implements TrackingProvider
             'InTransit_CustomsProcessing'           => Stage::CUSTOMS,
             'InTransit_CustomsRequiringInformation' => Stage::CUSTOMS,
             'InTransit_CustomsReleased'             => Stage::IN_TRANSIT,
+            // "Security, customs clearance, or fee issues" in the v2.4 doc:
+            // for a parcel abroad that is a customs hold, and the customer
+            // reads "At customs" rather than "Held up".
+            'Exception_Security'                    => Stage::CUSTOMS,
+            'DeliveryFailure_Security'              => Stage::CUSTOMS,
             'Exception_Returning'                   => Stage::RETURNING,
             'Exception_Returned'                    => Stage::RETURNING,
             // The stage vocabulary.
@@ -236,16 +256,35 @@ final class SeventeenTrack implements TrackingProvider
             return [[], '17TRACK sent an answer that is not JSON'];
         }
 
+        // A whole-request failure arrives as data.errors - and, per the v2.4
+        // doc's own example, WITH "code": 0 - so the errors list is read
+        // whatever the code says, and a non-zero code is the fallback.
+        $errors = $json['data']['errors'] ?? null;
+        if (is_array($errors) && $errors !== []) {
+            $first = is_array($errors[0] ?? null) ? $errors[0] : [];
+            $message = self::str($first['message'] ?? null);
+
+            return [[], '17TRACK error ' . self::str($first['code'] ?? null) . ($message !== '' ? ': ' . $message : '')];
+        }
+
         $code = $json['code'] ?? null;
         if ($code !== 0 && $code !== '0') {
-            $message = self::str($json['data']['errors'][0]['message'] ?? null);
-
-            return [[], '17TRACK error ' . self::str($code) . ($message !== '' ? ': ' . $message : '')];
+            return [[], '17TRACK error ' . self::str($code)];
         }
 
         $data = $json['data'] ?? [];
 
         return [is_array($data) ? $data : [], ''];
+    }
+
+    /** Whether $candidate should replace $kept as the answer for one number. */
+    private static function better(TrackReport $candidate, TrackReport $kept, int $askedCode): bool
+    {
+        if ($askedCode > 0 && ($candidate->carrierCode === $askedCode) !== ($kept->carrierCode === $askedCode)) {
+            return $candidate->carrierCode === $askedCode;
+        }
+
+        return count($candidate->checkpoints) > count($kept->checkpoints);
     }
 
     /** @param array<array-key,mixed> $item */
@@ -280,9 +319,12 @@ final class SeventeenTrack implements TrackingProvider
             $latestStage = Stage::CUSTOMS;
         }
 
-        $carrier = $item['carrier'] ?? 0;
+        // Kept within INT UNSIGNED: an out-of-range code from the provider must
+        // not fail the row write (strict mode) every hour.
+        $carrier = (int) self::str($item['carrier'] ?? 0);
+        $carrier = $carrier > 0 && $carrier <= 4294967295 ? $carrier : 0;
 
-        return new TrackReport($latestStage, $checkpoints, '', is_int($carrier) ? $carrier : (int) self::str($carrier));
+        return new TrackReport($latestStage, $checkpoints, '', $carrier);
     }
 
     /** @param array<array-key,mixed> $event */
@@ -309,12 +351,12 @@ final class SeventeenTrack implements TrackingProvider
         }
         $at = $at->setTimezone(new \DateTimeZone('UTC'));
 
+        // address.city only. The free-text `location` is NOT a fallback: it
+        // has been seen carrying "Signed for by AHMED KHAN" and street names,
+        // which no filter can tell from a town. No city means the timeline
+        // shows the country alone, which is the honest answer.
         $address = is_array($event['address'] ?? null) ? $event['address'] : [];
         $city    = Checkpoint::place(self::str($address['city'] ?? null));
-        if ($city === '') {
-            // Older carriers fill only `location`, often "CITY - COUNTRY".
-            $city = Checkpoint::place((string) strtok(self::str($event['location'] ?? null), ',-/|'));
-        }
 
         $fingerprint = sha1($at->format('c') . '|' . $text . '|' . self::str($event['location'] ?? null));
 

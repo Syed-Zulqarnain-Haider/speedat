@@ -143,7 +143,11 @@ final class Http
         $result = curl_exec($handle);
         $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
         $error  = curl_error($handle);
-        curl_close($handle);
+        // No curl_close(): it has done nothing since PHP 8.0, and on 8.5 it is
+        // deprecated - which the error handler turns into an exception, so
+        // every outbound call failed (found 2026-10-27 in an end-to-end run).
+        // The handle is freed when it goes out of scope.
+        unset($handle);
 
         if (!is_string($result)) {
             Log::warn('http_failed', ['url' => self::redactUrl($url), 'error' => $error]);

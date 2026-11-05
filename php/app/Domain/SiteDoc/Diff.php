@@ -408,7 +408,12 @@ final class Diff
         // Math.round, not PHP's round(): they disagree on exact halves below
         // zero, and a -12.5% move would print as -13% on one side and -12% on
         // the other.
-        return (int) Money::jsRound((($v2 - $v1) / $v1) * 100);
+        $pct = Money::jsRound((($v2 - $v1) / $v1) * 100);
+
+        // A typed 1e300 is a finite price; its percentage is not an int. Held
+        // inside a trillion per cent before the cast, which PHP 8.5 would
+        // otherwise refuse (a 500 on the editor and the review screen).
+        return is_finite($pct) ? (int) max(-1.0e12, min(1.0e12, $pct)) : null;
     }
 
     private static function flag(?int $pct): ?string

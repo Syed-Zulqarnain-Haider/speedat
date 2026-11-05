@@ -15,6 +15,14 @@ namespace Speedat\Domain\Tracking;
  */
 interface TrackingProvider
 {
+    /**
+     * How a reason starts when the whole request failed (network, busy,
+     * refused key, bad answer) rather than this one number. The cron tries
+     * those again next hour; a number the provider itself rejected waits
+     * six hours, because it usually only comes good when the office fixes it.
+     */
+    public const TEMPORARY = 'temporary: ';
+
     /** A short stable name, part of the key a registration is stored under. */
     public function name(): string;
 
