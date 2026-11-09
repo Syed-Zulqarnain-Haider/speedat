@@ -12,8 +12,7 @@ namespace Speedat\Domain\Shipments;
  *   1. the greeting, naming the company, the shipment and the DESTINATION;
  *   2. the canned sentence for the current status;
  *   3. the note the admin wrote with that status change;
- *   4. the tracking number, with the carrier in brackets when there is one;
- *   5. the /track link for the shipment, when the caller has one.
+ *   4. the tracking number, with the carrier in brackets when there is one.
  *
  * Two rules that look like details and are not:
  *
@@ -47,7 +46,6 @@ final class CustomerMessage
         string $trackingNo,
         string $carrier,
         array $events,
-        string $trackUrl = '',
     ): string {
         $status = ShipmentStatus::orBooked($status);
 
@@ -61,7 +59,6 @@ final class CustomerMessage
             $trackingNo !== ''
                 ? 'Tracking number: ' . $trackingNo . ($carrier !== '' ? ' (' . $carrier . ')' : '')
                 : '',
-            $trackUrl !== '' ? 'Track it here: ' . $trackUrl : '',
         ];
 
         // filter(Boolean) in the TypeScript: an absent note or tracking number
@@ -75,7 +72,6 @@ final class CustomerMessage
         Shipment $shipment,
         string $destinationName,
         ShipmentHistory $history,
-        string $trackUrl = '',
     ): string {
         return self::build(
             $companyName,
@@ -86,7 +82,6 @@ final class CustomerMessage
             $shipment->trackingNo ?? '',
             $shipment->carrier,
             $history->events,
-            $trackUrl,
         );
     }
 

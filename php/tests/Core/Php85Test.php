@@ -15,7 +15,7 @@ use Speedat\Tests\TestCase;
  * PHP 8.5 regressions. The error handler turns every deprecation and warning
  * into an exception, so on 8.5 a retired function or an unrepresentable cast
  * is a 500, not a log line. Found 2026-10-27 moving the site to 8.5.12:
- * curl_close() broke every outbound request (17TRACK, Google sign-in) and a
+ * curl_close() broke every outbound request (Google sign-in) and a
  * typed "1e300" broke the rates screens. The suite never made a real HTTP
  * call, so it took an end-to-end run to see the first one.
  */

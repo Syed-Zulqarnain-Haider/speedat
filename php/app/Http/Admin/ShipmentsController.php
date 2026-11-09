@@ -6,7 +6,6 @@ namespace Speedat\Http\Admin;
 
 use Speedat\Core\App;
 use Speedat\Core\Audit;
-use Speedat\Core\Config;
 use Speedat\Core\HttpError;
 use Speedat\Core\Log;
 use Speedat\Core\Response;
@@ -20,9 +19,6 @@ use Speedat\Domain\Shipments\ShipmentId;
 use Speedat\Domain\Shipments\ShipmentRepository;
 use Speedat\Domain\Shipments\ShipmentStatus;
 use Speedat\Domain\SiteDoc\Live;
-use Speedat\Domain\Tracking\Carriers;
-use Speedat\Domain\Tracking\PublicTimeline;
-use Speedat\Domain\Tracking\TrackingRepository;
 use Speedat\View\Admin\NewShipmentPage;
 use Speedat\View\Admin\Routes;
 use Speedat\View\Admin\ShipmentPage;
@@ -249,8 +245,6 @@ final class ShipmentsController
             notice: $notice,
             noticeKind: $noticeKind,
             note: $note,
-            trackUrl: PublicTimeline::link($shipment->id),
-            trackingLine: $this->trackingLine($shipment),
         );
 
         return $app->page('admin/shipment', [
@@ -275,16 +269,9 @@ final class ShipmentsController
         ];
 
         try {
-            $updated = $this->shipments->update($shipment->id, $patch, $admin->email);
+            $this->shipments->update($shipment->id, $patch, $admin->email);
         } catch (ValueTooLong) {
             return $this->toDesk($app, $shipment->id, ['err' => 'toolong']);
-        }
-
-        // A corrected carrier or number starts tracking over: the old number's
-        // scans may be a stranger's parcel and must leave this timeline.
-        if ($updated !== null
-            && ($updated->carrier !== $shipment->carrier || ($updated->trackingNo ?? '') !== ($shipment->trackingNo ?? ''))) {
-            (new TrackingRepository())->forget($shipment->id);
         }
 
         Audit::log($admin->email, 'shipment_updated', [
@@ -385,40 +372,6 @@ final class ShipmentsController
     }
 
     /** The shipment, or a 404 - for a missing one AND for an id that cannot exist. */
-    /**
-     * One sentence for the desk on whether this parcel is tracked
-     * automatically, and if not, what the office should do about it.
-     */
-    private function trackingLine(Shipment $shipment): string
-    {
-        $number = $shipment->trackingNo ?? '';
-
-        if ($shipment->carrier === '' || $number === '') {
-            return 'Add the carrier and its tracking number above and this parcel is checked automatically every hour.';
-        }
-        if (Carriers::trackCode($shipment->carrier) === null) {
-            return 'Tracked by hand: "' . $shipment->carrier . '" is not covered by automatic tracking. Update the status as news comes in.';
-        }
-        if (Config::str('tracking.api_key') === '') {
-            return 'Automatic tracking is off until the 17TRACK key is added to config.php.';
-        }
-
-        $state = (new TrackingRepository())->state($shipment->id);
-        if ($state === null || $state['state'] === TrackingRepository::STATE_MANUAL) {
-            return 'Waiting for the next hourly check.';
-        }
-
-        $when = $state['checked_at'] !== null ? $state['checked_at']->format('j M, H:i') : '';
-
-        return match ($state['state']) {
-            TrackingRepository::STATE_ERROR => 'The tracking service could not follow this number'
-                . ($state['error'] !== '' ? ' (' . $state['error'] . ')' : '')
-                . '. Check the carrier and tracking number. It is tried again every few hours.',
-            TrackingRepository::STATE_DONE  => 'Delivered according to the carrier. Automatic tracking has finished.',
-            default                         => 'Tracked automatically every hour' . ($when !== '' ? '. Last checked ' . $when : '') . '.',
-        };
-    }
-
     private function findOr404(string $raw): Shipment
     {
         $id = ShipmentId::normalise($raw);
