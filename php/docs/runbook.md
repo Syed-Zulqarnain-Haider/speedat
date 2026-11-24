@@ -117,6 +117,9 @@ statement is `IF NOT EXISTS`, so importing twice is safe. There is no shell, so
 Two restores, independent. **Code first; data only if you must** — a newer schema
 usually tolerates older data, older code against newer data does not.
 
+**First**, if the previous zip has no `0004_marketer_role.sql`: `DELETE FROM admins
+WHERE role = 'marketer';` - older releases treat a marketer as an editor.
+
 **Code** (about three minutes): upload the previous release zip to
 `domains/<domain>/`, extract **here** overwriting, delete the zip, redo the
 permissions, reset OPcache (§9), smoke test. The previous zip must be one that

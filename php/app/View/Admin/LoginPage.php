@@ -40,6 +40,8 @@ final class LoginPage
          * caller that predates the flag keeps the page it had.
          */
         public readonly bool $passwordsEnabled = true,
+        /** The sign-in page this account belongs at, after a wrong-door refusal; "" otherwise. */
+        public readonly string $otherDoor = '',
     ) {
     }
 

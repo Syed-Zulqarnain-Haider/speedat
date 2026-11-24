@@ -413,6 +413,27 @@ return static function (Router $router): void {
         AdminUser::MARKETERS,
     ));
 
+    // The editor asks for this just before it publishes: is the session still
+    // there, and what is its form token now. See public/assets/js/marketing.js.
+    $router->get(Admin::MARKETING_SESSION, Guard::page(
+        static fn (App $app, AdminUser $admin): Response => Response::json(['token' => $app->csrf()->token()])->noStore(),
+        AdminUser::MARKETERS,
+    ));
+
+    // A refusal is drawn at the address that was posted to, and a reload or a
+    // bookmark asks for that address with a GET. Each goes to its screen.
+    foreach ([
+        Admin::LOGIN_PASSWORD         => Admin::LOGIN,
+        Admin::LOGIN_GOOGLE           => Admin::LOGIN,
+        Admin::LOGIN_CODE             => Admin::LOGIN,
+        Admin::PAGES_PUBLISH          => Admin::PAGES,
+        Admin::MARKETING_LOGIN_GOOGLE => Admin::MARKETING_LOGIN,
+        Admin::MARKETING_LOGIN_CODE   => Admin::MARKETING_LOGIN,
+        Admin::MARKETING_PUBLISH      => Admin::MARKETING,
+    ] as $posted => $screen) {
+        $router->get($posted, static fn (App $app): Response => Response::redirect($app->request->basePath . $screen, 302)->noStore());
+    }
+
     /* ------------------------------------------------------ operational */
 
     // `Authorization: Bearer <token>`, compared with hash_equals; an unset

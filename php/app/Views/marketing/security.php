@@ -23,7 +23,7 @@ $this->layout('marketing/layouts/shell', ['title' => 'My account', 'theme' => $t
   </div>
 </div>
 <?php if ($page->toast !== '') { ?>
-<div class="notice ok" role="status"><?= e($page->toast) ?></div>
+<div class="notice ok" role="status" tabindex="-1" autofocus><?= e($page->toast) ?></div>
 <?php } ?>
 <div class="mk-narrow">
 <?= $this->partial('admin/partials/totp', [

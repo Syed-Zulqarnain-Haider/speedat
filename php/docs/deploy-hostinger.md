@@ -665,6 +665,11 @@ Decide this before you need it. It is two restores and they are independent.
 - a database dump taken **immediately before** the import,
 - the SHA-256 the builder printed.
 
+**Before anything else:** if the previous zip has no
+`speedat_main/php/db/migrations/0004_marketer_role.sql`, remove every marketer
+(`DELETE FROM admins WHERE role = 'marketer';` in phpMyAdmin). Older releases
+treat a marketer as an editor, who can see prices and the inbox.
+
 **To roll back the code:**
 
 1. File Manager → `domains/<your-domain>/`, upload the previous release zip.

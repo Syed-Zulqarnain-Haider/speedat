@@ -63,6 +63,10 @@ $this->layout('marketing/layouts/plain', ['title' => 'Marketing sign in', 'theme
     <div class="notice err" role="alert" id="login-error"><?= e($page->error) ?></div>
     <?php } ?>
 
+    <?php if ($page->otherDoor !== '') { ?>
+    <p><a class="btn outline big" href="<?= e($this->url($page->otherDoor)) ?>">Go to your sign-in page</a></p>
+    <?php } ?>
+
     <p class="mk-login-back"><a href="<?= e($this->url(Routes::SITE)) ?>">Back to the website</a></p>
   </div>
 </main>

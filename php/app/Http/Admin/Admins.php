@@ -101,13 +101,13 @@ final class Admins
     /**
      * Everybody who can sign in, as the Security page lists them.
      *
-     * @return list<array{email:string,role:string,totp:bool,addedAt:string}>
+     * @return list<array{email:string,name:string,role:string,totp:bool,addedAt:string}>
      */
     public static function all(): array
     {
         try {
             $rows = Db::all(
-                'SELECT email, role, totp_enabled, created_at FROM admins ORDER BY created_at ASC, email ASC LIMIT ?',
+                'SELECT email, name, role, totp_enabled, created_at FROM admins ORDER BY created_at ASC, email ASC LIMIT ?',
                 [self::LIST_LIMIT],
             );
         } catch (\Throwable $e) {
@@ -120,6 +120,7 @@ final class Admins
         foreach ($rows as $row) {
             $out[] = [
                 'email'   => (string) ($row['email'] ?? ''),
+                'name'    => (string) ($row['name'] ?? ''),
                 'role'    => AdminUser::role($row['role'] ?? null),
                 'totp'    => (int) ($row['totp_enabled'] ?? 0) === 1,
                 'addedAt' => Iso::of($row['created_at'] ?? null),

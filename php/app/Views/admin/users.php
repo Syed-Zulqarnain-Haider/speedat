@@ -46,7 +46,8 @@ $this->layout('admin/layouts/shell', ['title' => 'Logins', 'shell' => $shell, 't
         </label>
         <button class="btn primary" type="submit" data-once data-busy-text="Adding&#8230;">Add marketer</button>
       </div>
-      <p class="hint">Type it exactly as Google shows it, dots included. They sign in at <strong><?= e($this->url(Routes::MARKETING_LOGIN)) ?></strong> with Continue with Google; there is no password to send.</p>
+      <p class="hint">Type it exactly as Google shows it, dots included. There is no password to send.</p>
+      <p>Send them this sign-in link: <a class="mono" href="<?= e($page->signInUrl) ?>"><?= e($page->signInUrl) ?></a></p>
     </form>
   </div>
 
@@ -55,6 +56,7 @@ $this->layout('admin/layouts/shell', ['title' => 'Logins', 'shell' => $shell, 't
     <ul class="hist admins">
       <?php foreach ($page->rows() as $user) { ?>
       <li>
+        <?php if ($user['name'] !== '') { ?><strong><?= e($user['name']) ?></strong><?php } ?>
         <span class="mono admin-email"><?= e($user['email']) ?></span>
         <span class="tag role"><?= e($user['label']) ?></span>
         <span class="meta">2FA <?= $user['totp'] ? 'on' : 'off' ?></span>
@@ -69,6 +71,6 @@ $this->layout('admin/layouts/shell', ['title' => 'Logins', 'shell' => $shell, 't
       </li>
       <?php } ?>
     </ul>
-    <p class="hint panel-note">Removing a marketer signs them out straight away. Admins are added and removed in the database on purpose, not here.</p>
+    <p class="hint panel-note">Removing a marketer signs them out straight away. If one loses their phone, remove them and add them again. Admins and editors are added and removed in the database on purpose, not here.</p>
   </div>
 </section>

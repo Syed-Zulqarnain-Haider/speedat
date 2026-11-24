@@ -134,19 +134,39 @@ final class Repo
     {
         return array_map(self::toMeta(...), Db::all(
             'SELECT version, published_at, published_by, source, summary, change_count'
-            . ' FROM versions WHERE source LIKE ? ORDER BY version DESC LIMIT ?',
-            [PublishArgs::PAGES . '%', max(1, min($limit, 100))]
+            . ' FROM versions WHERE source = ? ORDER BY version DESC LIMIT ?',
+            [PublishArgs::PAGES, max(1, min($limit, 100))]
         ));
     }
 
-    /** How many website-text publishes would be undone by going back to this version. */
-    public static function pagesSince(int $version): int
+    /**
+     * Do two documents differ in nothing but website text? Compared as stored,
+     * and strictly: a phone number that only lost its leading zero is not text.
+     */
+    public static function sameButWords(SiteData $a, SiteData $b): bool
     {
-        return (int) Db::value(
-            'SELECT COUNT(*) FROM versions WHERE version > ? AND source LIKE ?',
-            [$version, PublishArgs::PAGES . '%'],
-            0
-        );
+        return Db::json($a->withContent($b->content)->toArray()) === Db::json($b->toArray());
+    }
+
+    /**
+     * What rolling back to a version would do, for the question asked first.
+     *
+     * @return array{words:int,wordsOnly:bool,rates:int} fields of text that would change, whether that
+     *                                                   is all, and how many rates publishes would be undone
+     */
+    public static function rollbackEffect(PublishedVersion $old, PublishedVersion $live): array
+    {
+        $document = self::rebuild($old->data, $live->data);
+
+        return [
+            'words'     => Diff::of($live->data, $live->data->withContent($document->content))->count,
+            'wordsOnly' => self::sameButWords($live->data, $document),
+            'rates'     => (int) Db::value(
+                'SELECT COUNT(*) FROM versions WHERE version > ? AND source NOT LIKE ?',
+                [$old->version, PublishArgs::PAGES . '%'],
+                0
+            ),
+        ];
     }
 
     /* ----------------------------------------------------------- draft */
@@ -639,8 +659,7 @@ final class Repo
         // differs, the prices keep their own date and the draft - the owner's
         // unpublished prices - is left where it is, exactly as it was when the
         // words went live.
-        $wordsOnly = $live !== null
-            && $live->data->withContent($document->content)->toArray() == $document->toArray();
+        $wordsOnly = $live !== null && self::sameButWords($live->data, $document);
 
         $published = self::publishVersion(new PublishArgs(
             data: $document,

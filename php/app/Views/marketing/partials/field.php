@@ -9,6 +9,7 @@ declare(strict_types=1);
  * @var \Speedat\View\Admin\Field $field
  * @var string                    $role  title|desc for the search preview, "" otherwise
  * @var int                       $best  the length a search engine shows, 0 for none
+ * @var bool                      $source these words are the description while its box is blank
  */
 
 use Speedat\View\Admin\Field;
@@ -21,7 +22,8 @@ $id   = 'f-' . preg_replace('/[^A-Za-z0-9]/', '', $field->name);
 $hint = $field->hint !== '' ? $id . '-hint' : '';
 $max  = $field->maxLength > 0 ? ' maxlength="' . e($field->maxLength) . '"' : '';
 $aria = $hint !== '' ? ' aria-describedby="' . e($hint) . '"' : '';
-$data = $role !== '' ? ' data-serp-field="' . e($role) . '" data-best="' . e($best) . '"' : '';
+$data = !empty($source) ? ' data-serp-source' : '';
+$data .= $role !== '' ? ' data-serp-field="' . e($role) . '" data-best="' . e($best) . '"' : '';
 ?>
 <div class="mk-field">
   <label for="<?= e($id) ?>"><?= e($label) ?></label>

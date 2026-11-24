@@ -133,7 +133,7 @@ final class ErrorPage
                 : ErrorView::failed(
                     $page,
                     $error !== null && $status >= 400 && $status < 500 ? $message : ErrorView::ERROR_LINE,
-                    self::backTo($app),
+                    self::backTo($app, $error),
                 );
 
             return $app->page('site/error', ['view' => $view], $status);
@@ -152,9 +152,15 @@ final class ErrorPage
     }
 
     /** The front page of the back-office area this path is in, "" on a customer page. Normalised as wantsJson() reads `/api`. */
-    private static function backTo(App $app): string
+    private static function backTo(App $app, ?HttpError $error): string
     {
         $path = Url::normalise($app->request->path);
+
+        // A refusal that knows whose it is goes to THEIR front page.
+        $home = $error?->detail['home'] ?? null;
+        if (in_array($home, [AdminRoutes::RATES, AdminRoutes::MARKETING], true)) {
+            return $home;
+        }
 
         foreach ([AdminRoutes::RATES, AdminRoutes::MARKETING] as $area) {
             if ($path === $area || str_starts_with($path, $area . '/')) {

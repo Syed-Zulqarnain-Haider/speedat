@@ -14,6 +14,7 @@ use Speedat\Domain\SiteDoc\PublishConflict;
 use Speedat\Domain\SiteDoc\PublishedVersion;
 use Speedat\Domain\SiteDoc\Repo;
 use Speedat\Domain\SiteDoc\Validate;
+use Speedat\View\Admin\ContentFields;
 
 /**
  * Publish website text: the one implementation, behind the marketers' editor
@@ -40,11 +41,38 @@ final class PagesPublisher
         return Repo::getLatestVersion() ?? PublishedVersion::sample();
     }
 
-    public static function publish(App $app, AdminUser $admin): PagesResult
+    /**
+     * @param PublishedVersion|null $live what to build on; the tests hand in an old one
+     */
+    public static function publish(App $app, AdminUser $admin, ?PublishedVersion $live = null): PagesResult
     {
         RateLimit::enforceKey('pages_publish', $admin->email, self::PUBLISH_LIMIT, 3600);
 
-        $live = self::live();
+        // A publish that lost a race is built again on what won, once: the same
+        // form against the new live text. A second press of the same button
+        // finds its own words already there, and that is a success.
+        try {
+            return self::attempt($app, $admin, $live ?? self::live());
+        } catch (PublishConflict $e) {
+            Log::warn('pages_publish_conflict', ['live' => $e->live]);
+        }
+
+        $now = self::live();
+
+        try {
+            $result = self::attempt($app, $admin, $now);
+
+            return $result->refused === '' && $result->version === 0
+                ? new PagesResult($now, $result->form, $now->version)
+                : $result;
+        } catch (PublishConflict) {
+            return new PagesResult($now, PagesForm::of($now, $app->request), refused: Notice::text('pagesraced'), status: 409);
+        }
+    }
+
+    /** @throws PublishConflict when somebody published after $live was read */
+    private static function attempt(App $app, AdminUser $admin, PublishedVersion $live): PagesResult
+    {
         $form = PagesForm::of($live, $app->request);
 
         if ($live->version < 1 || $form->base === null) {
@@ -72,7 +100,7 @@ final class PagesPublisher
                 data: $document,
                 by: $admin->email,
                 source: PublishArgs::PAGES,
-                summary: 'Website text: ' . Diff::summarise($diff),
+                summary: 'Website text: ' . self::named($form->changed),
                 changeCount: $diff->count,
                 // The version this document was built from has to still be the
                 // live one, or the prices in it may already be old.
@@ -80,9 +108,7 @@ final class PagesPublisher
                 keepDraft: true,
             ));
         } catch (PublishConflict $e) {
-            Log::warn('pages_publish_conflict', ['live' => $e->live, 'built' => $live->version]);
-
-            return new PagesResult(self::live(), $form, refused: Notice::text('pagesraced'), status: 409);
+            throw $e;
         } catch (\InvalidArgumentException | \RuntimeException $e) {
             Log::exception('pages_publish_failed', $e, ['version' => $live->version + 1]);
 
@@ -97,5 +123,23 @@ final class PagesPublisher
         ], $app->request);
 
         return new PagesResult($published, $form, $published->version);
+    }
+
+    /**
+     * The changed fields by the names on their boxes, for the history: "Headline,
+     * FAQ: Google title and 2 more". The owner undoes a change by this line.
+     *
+     * @param list<string> $names
+     */
+    private static function named(array $names): string
+    {
+        $fields = ContentFields::pageFields();
+        $labels = array_map(
+            static fn (string $n): string => trim((string) preg_replace('/\s*\([^)]*\)|, one per line:?.*$/', '', $fields[$n]->label ?? $n)),
+            $names,
+        );
+        $more = count($labels) - 3;
+
+        return implode(', ', array_slice($labels, 0, 3)) . ($more > 0 ? ' and ' . $more . ' more' : '');
     }
 }

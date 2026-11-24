@@ -162,6 +162,19 @@ final class Session
         $this->cookies->set(self::COOKIE, $next, $remaining);
     }
 
+    /**
+     * End this person's every OTHER session. For when how they sign in changes:
+     * whoever else is holding one got it the old way.
+     */
+    public function endOthers(): void
+    {
+        $row = $this->current();
+
+        if ($row !== null) {
+            Db::exec('DELETE FROM sessions WHERE email = ? AND id <> ?', [(string) ($row['email'] ?? ''), (string) ($row['id'] ?? '')]);
+        }
+    }
+
     /** Sign out: the row goes, so the token is dead everywhere, not just in this browser. */
     public function destroy(): void
     {

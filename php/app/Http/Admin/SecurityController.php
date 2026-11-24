@@ -7,10 +7,13 @@ namespace Speedat\Http\Admin;
 use Speedat\Core\App;
 use Speedat\Core\Audit;
 use Speedat\Core\Config;
+use Speedat\Core\Db;
 use Speedat\Core\Log;
+use Speedat\Core\RateLimit;
 use Speedat\Core\Response;
 use Speedat\Core\Str;
 use Speedat\Domain\Auth\AuthError;
+use Speedat\Domain\Auth\FirebaseBrowser;
 use Speedat\Domain\Auth\Password;
 use Speedat\Domain\Notify\Notifier;
 use Speedat\View\Admin\Door;
@@ -44,6 +47,8 @@ use Speedat\View\Admin\SecurityPage;
  */
 final class SecurityController
 {
+    private const CODE_ATTEMPTS = 6;
+
     /** How much of the audit trail the page shows. The React page showed forty. */
     private const ACTIVITY = 40;
 
@@ -85,8 +90,9 @@ final class SecurityController
             checks: $admin->isMarketer() ? [] : $this->checks($app, $admin),
             activity: $admin->isMarketer() ? [] : $this->activity(),
             enrolment: $enrolment,
-            error: Notice::error($app),
-            toast: Notice::toast($app),
+            error: $admin->isMarketer() ? Notice::error($app, ['code', 'nocode', 'totp_on', 'totp_off', 'noenrol']) : Notice::error($app),
+            toast: $admin->isMarketer() ? Notice::toast($app, ['totpon', 'totpoff']) : Notice::toast($app),
+            googleOnly: $admin->isMarketer(),
         );
 
         if ($admin->isMarketer()) {
@@ -144,6 +150,7 @@ final class SecurityController
         // switched 2FA on cannot also be used to sign in with.
         Admins::enableTotp($admin->email, $step);
         $app->session()->rotate();
+        $app->session()->endOthers();
 
         Audit::log($admin->email, 'totp_enabled', [], $app->request);
 
@@ -163,6 +170,10 @@ final class SecurityController
             return $this->back($app, $admin, ['err' => 'totp_off']);
         }
 
+        // The sign-in's own limit on guesses, here too: a session somebody else
+        // is holding must not be able to try a million codes at this form.
+        RateLimit::enforceKey('totp_disable', $admin->email, self::CODE_ATTEMPTS, 900);
+
         if (!Admins::verifyCode($row, $app->request->post('code', '', 12))) {
             Audit::log($admin->email, 'totp_disable_refused', [], $app->request);
 
@@ -171,6 +182,7 @@ final class SecurityController
 
         Admins::disableTotp($admin->email);
         $app->session()->rotate();
+        $app->session()->endOthers();
 
         Audit::log($admin->email, 'totp_disabled', [], $app->request);
 
@@ -193,7 +205,7 @@ final class SecurityController
      */
     private function checks(App $app, AdminUser $admin): array
     {
-        $google    = Str::squish(Config::str('auth.firebase_project_id')) !== '';
+        $google    = FirebaseBrowser::config() !== null;
         $passwords = Config::bool('auth.allow_password_login', false);
         // The notifier itself rather than $app->mail(): Core\Mail answers the
         // same configured(), but only the notifier can say WHY it is false -
@@ -205,7 +217,7 @@ final class SecurityController
         $admins    = Admins::count();
 
         return [
-            ...self::signInChecks($google, $passwords),
+            ...self::signInChecks($google, $passwords, Str::squish(Config::str('auth.firebase_project_id')) !== ''),
             [
                 'label' => 'Two-factor on your account',
                 'ok'    => $admin->totpEnabled,
@@ -229,7 +241,7 @@ final class SecurityController
                 'note'  => $metrics ? 'set' : 'not set - /api/metrics and the health detail are locked',
             ],
             [
-                'label' => 'Admins listed',
+                'label' => 'Logins listed',
                 'ok'    => $admins > 0,
                 'note'  => $admins === 1 ? '1 account can sign in' : $admins . ' accounts can sign in',
             ],
@@ -249,7 +261,7 @@ final class SecurityController
      *
      * @return list<array{label:string,ok:bool,note:string}>
      */
-    public static function signInChecks(bool $google, bool $passwords): array
+    public static function signInChecks(bool $google, bool $passwords, bool $started = false): array
     {
         if ($passwords) {
             $passwordNote = 'on, hashed with ' . Password::algorithm();
@@ -263,7 +275,7 @@ final class SecurityController
             [
                 'label' => 'Admin sign-in (Google)',
                 'ok'    => $google,
-                'note'  => $google ? 'configured' : ($passwords ? 'no Firebase project set - password sign-in only' : 'no Firebase project set'),
+                'note'  => $google ? 'configured' : ($started ? 'incomplete - check all four auth.firebase_* values in config.php' : ($passwords ? 'no Firebase project set - password sign-in only' : 'no Firebase project set')),
             ],
             [
                 'label' => 'Password sign-in',
@@ -296,13 +308,33 @@ final class SecurityController
 
             $out[] = [
                 'at'     => Iso::of($row['at'] ?? null),
-                'action' => (string) ($row['action'] ?? ''),
+                'action' => self::what($row),
                 'actor'  => (string) ($row['actor'] ?? ''),
                 'ip'     => $hash === '' ? '' : substr($hash, 0, 6),
             ];
         }
 
         return $out;
+    }
+
+    /**
+     * The action, with whose login it was about: "marketer_added sara@gmail.com".
+     *
+     * @param array<string,mixed> $row
+     */
+    private static function what(array $row): string
+    {
+        $action = (string) ($row['action'] ?? '');
+
+        if ($action !== 'marketer_added' && $action !== 'marketer_removed') {
+            return $action;
+        }
+
+        $detail = $row['detail'] ?? [];
+        $detail = is_array($detail) ? $detail : Db::unjson($detail);
+        $email  = is_string($detail['email'] ?? null) ? $detail['email'] : '';
+
+        return trim($action . ' ' . $email);
     }
 
     /** @param array<string,int|string|bool> $codes */

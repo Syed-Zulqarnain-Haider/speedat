@@ -785,6 +785,9 @@ final class RatesController
             return $this->toEditor($app, ['err' => 'publish'], '', null, 'reviewbox');
         }
 
+        $before    = $expectedLive > 0 ? Repo::getVersion($expectedLive) : Repo::getVersion($published->version - 1);
+        $wordsOnly = $before !== null && Repo::sameButWords($before->data, $published->data);
+
         // `Repo::rollbackTo()` writes the audit line itself - who put the old
         // prices back, when, and whether prices were still held - so there is
         // deliberately none here. Two lines for one action is how a diary stops
@@ -792,7 +795,10 @@ final class RatesController
         // As the publish path: the sentence that says the website changed is
         // printed in `#reviewbox` at the foot of the editor, so the redirect
         // has to name it or the loudest act in the product reports silently.
-        return $this->toEditor($app, ['rolledback' => $published->version], '', null, 'reviewbox');
+        return $this->toEditor($app, [
+            'rolledback' => $published->version,
+            'wordsback'  => $wordsOnly,
+        ], '', null, 'reviewbox');
     }
 
     /**
@@ -843,11 +849,22 @@ final class RatesController
         // often. The catch-up normally ran when the card was drawn; this is for
         // the publish that landed since. The one exception is a catch-up that
         // was tried and refused, which the card has already explained.
-        if ($draft->baseVersion < $live->version && Repo::catchUpDraft() !== null) {
-            return $this->toReview($app, ['conflict' => $live->version]);
-        }
-        if ($draft->baseVersion < $live->version && Repo::rebaseRefused() === null) {
-            return $this->toReview($app, ['conflict' => $live->version]);
+        if ($draft->baseVersion < $live->version) {
+            try {
+                $caught  = Repo::catchUpDraft();
+                $refused = $caught === null ? Repo::rebaseRefused() : null;
+            } catch (\Throwable $e) {
+                Log::exception('draft_catchup_failed', $e);
+
+                return $this->toEditor($app, ['err' => 'publish']);
+            }
+
+            if ($caught !== null) {
+                return $this->toReview($app, ['caughtup' => $live->version]);
+            }
+            if ($refused === null) {
+                return $this->toReview($app, ['conflict' => $live->version]);
+            }
         }
 
         $goLive = $app->request->postBool('goLive');
@@ -876,7 +893,10 @@ final class RatesController
             $published = Repo::publishVersion(new PublishArgs(
                 data: $document,
                 by: $admin->email,
-                source: 'admin',
+                // Only words changed: the prices keep the date they went live.
+                source: $live->version > 0 && !$lift && Repo::sameButWords($live->data, $document)
+                    ? PublishArgs::PAGES . ':admin'
+                    : 'admin',
                 summary: $live->version > 0 ? Diff::summarise($diff) : 'First publish',
                 changeCount: $diff->count,
                 expectedBase: $expected >= 0 ? $expected : null,

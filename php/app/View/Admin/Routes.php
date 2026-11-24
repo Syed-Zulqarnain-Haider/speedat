@@ -83,6 +83,7 @@ final class Routes
     /** The marketers' own area: see View\Admin\Door. Nothing of theirs is under /admin. */
     public const MARKETING              = '/marketing';
     public const MARKETING_PUBLISH      = '/marketing/publish';
+    public const MARKETING_SESSION      = '/marketing/session';
     public const MARKETING_LOGIN        = '/marketing/login';
     public const MARKETING_LOGIN_GOOGLE = '/marketing/login/google';
     public const MARKETING_LOGIN_CODE   = '/marketing/login/code';

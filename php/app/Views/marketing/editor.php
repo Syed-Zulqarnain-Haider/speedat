@@ -18,7 +18,7 @@ use Speedat\View\Admin\Routes;
 use Speedat\View\Marketing\Tabs;
 
 $this->layout('marketing/layouts/shell', [
-    'title'   => Tabs::label($page->tab) . ' page',
+    'title'   => ($page->error !== '' ? 'Not published - ' : ($page->notice !== '' ? 'Published - ' : '')) . Tabs::label($page->tab) . ($page->hasSearchResult() ? ' page' : ''),
     'theme'   => $theme,
     'current' => 'editor',
     'admin'   => $admin,
@@ -43,16 +43,19 @@ $path = Tabs::path($page->tab);
 </nav>
 
 <?php if ($page->error !== '') { ?>
-<div class="notice err" role="alert" tabindex="-1" autofocus><?= e($page->error) ?> Nothing was published.</div>
+<div class="notice err" role="alert" tabindex="-1" autofocus><?= e($page->error) ?> Nothing was published. <a href="<?= e($this->url(Routes::MARKETING)) ?>?page=<?= e($page->tab) ?>" target="_blank" rel="noopener">Open the latest version</a></div>
 <?php } elseif ($page->notice !== '') { ?>
-<div class="notice ok" role="status"><?= e($page->notice) ?></div>
+<div class="notice ok" role="status" tabindex="-1" autofocus><?= e($page->notice) ?></div>
 <?php } ?>
 <?php if (!$page->ready()) { ?>
 <div class="notice warn">The website has nothing published yet. Ask an admin to publish it first.</div>
 <?php } ?>
 
-<form class="mk-form" id="marketing-form" method="post" action="<?= e($this->url(Routes::MARKETING_PUBLISH)) ?>" aria-label="<?= e(Tabs::label($page->tab)) ?> page">
+<form class="mk-form" id="marketing-form" method="post" action="<?= e($this->url(Routes::MARKETING_PUBLISH)) ?>" aria-label="<?= e(Tabs::label($page->tab)) ?>" data-session="<?= e($this->url(Routes::MARKETING_SESSION)) ?>">
   <?= $csrf->field() ?>
+  <?php /* Enter in a one-line box presses a form's first submit button. This
+           is it, and it is disabled: publishing is a press on Publish. */ ?>
+  <button type="submit" disabled hidden></button>
   <input type="hidden" name="base" value="<?= e($page->base) ?>">
   <input type="hidden" name="page" value="<?= e($page->tab) ?>">
 
@@ -77,13 +80,13 @@ $path = Tabs::path($page->tab);
   <fieldset class="mk-card">
     <legend>On the page</legend>
     <?php foreach ($page->words() as $field) { ?>
-    <?= $this->partial('marketing/partials/field', ['field' => $field, 'role' => '', 'best' => 0]) ?>
+    <?= $this->partial('marketing/partials/field', ['field' => $field, 'role' => '', 'best' => 0, 'source' => $field->name === 'content[' . Tabs::source($page->tab) . ']']) ?>
     <?php } ?>
   </fieldset>
 
   <div class="mk-bar">
     <p class="mk-state" data-state aria-live="polite">Prices and contact details are not changed from here.</p>
-    <button class="btn primary big" type="submit" data-publish<?= $page->ready() ? '' : ' disabled' ?>>Publish this page</button>
+    <button class="btn primary big" type="submit" data-publish<?= $page->ready() ? '' : ' disabled' ?>>Publish <?= $page->hasSearchResult() ? 'this page' : 'contact line' ?></button>
   </div>
 </form>
 
@@ -95,6 +98,6 @@ $path = Tabs::path($page->tab);
     <li><span><?= e($row['what']) ?> by <?= e($row['who']) ?></span> <time><?= e($row['when']) ?></time></li>
     <?php } ?>
   </ul>
-  <p class="hint">Made a mistake? Change it back and publish again, or ask an admin to undo it.</p>
+  <p class="hint">Made a mistake? Change it back and publish again, or ask an admin.</p>
 </section>
 <?php } ?>

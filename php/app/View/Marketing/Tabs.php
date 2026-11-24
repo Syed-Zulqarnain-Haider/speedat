@@ -46,7 +46,7 @@ final class Tabs
             'fields' => ['faqH1', 'faqLede', 'faq'],
         ],
         'shared' => [
-            'label' => 'All pages', 'path' => '', 'title' => '', 'desc' => '',
+            'label' => 'Contact line', 'path' => '', 'title' => '', 'desc' => '',
             'fields' => ['ctaTitle', 'ctaSub'],
         ],
     ];
@@ -79,6 +79,12 @@ final class Tabs
         $key = self::key($key);
 
         return self::ALL[$key]['path'] === '' ? '' : $key;
+    }
+
+    /** The words a search engine is given while the description box is blank (`Seo\Meta`), or "". */
+    public static function source(string $key): string
+    {
+        return ['home' => 'heroSub', 'services' => 'servicesLede', 'about' => 'story', 'contact' => 'contactLede', 'faq' => 'faqLede'][self::key($key)] ?? '';
     }
 
     /** @return list<string> every field name on a tab */

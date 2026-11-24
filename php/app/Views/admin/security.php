@@ -62,7 +62,7 @@ $activity  = $page->activityRows();
       ]) ?>
 
       <div class="panel">
-        <h2 class="step">Admins</h2>
+        <h2 class="step">Who can sign in</h2>
         <?php if ($admins === []) { ?>
         <p class="hint">Nobody is listed. Nobody can sign in.</p>
         <?php } else { ?>

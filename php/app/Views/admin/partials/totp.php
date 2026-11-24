@@ -24,7 +24,7 @@ $enrolment = $page->enrolling() ? $page->enrolment : null;
     <span class="meta"><?= e($page->totpSentence()) ?></span>
   </p>
   <?php if ($page->error !== '') { ?>
-  <div class="notice err" role="alert"><?= e($page->error) ?></div>
+  <div class="notice err" role="alert" id="totp-error"><?= e($page->error) ?></div>
   <?php } ?>
 
   <?php if (!$page->totpEnabled && $enrolment === null) { ?>
@@ -56,7 +56,7 @@ $enrolment = $page->enrolling() ? $page->enrolment : null;
       <label class="field code-field">
         <span>6-digit code</span>
         <input type="text" class="code" name="code" inputmode="numeric" autocomplete="one-time-code"
-               maxlength="7" pattern="[0-9 ]{6,7}" required autofocus>
+               maxlength="7" pattern="[0-9 ]{6,7}"<?= $page->error !== '' ? ' aria-invalid="true" aria-describedby="totp-error"' : '' ?> required autofocus>
       </label>
       <button class="btn primary" type="submit">Turn on</button>
       <?php /* Cancel is a link, not a button: it changes nothing except
@@ -74,7 +74,7 @@ $enrolment = $page->enrolling() ? $page->enrolment : null;
       <label class="field code-field">
         <span>Current code to turn off</span>
         <input type="text" class="code" name="code" inputmode="numeric" autocomplete="one-time-code"
-               maxlength="7" pattern="[0-9 ]{6,7}" required>
+               maxlength="7" pattern="[0-9 ]{6,7}"<?= $page->error !== '' ? ' aria-invalid="true" aria-describedby="totp-error"' : '' ?> required>
       </label>
       <button class="btn danger outline" type="submit" data-confirm="Confirm turn off">Turn off two-factor</button>
     </div>

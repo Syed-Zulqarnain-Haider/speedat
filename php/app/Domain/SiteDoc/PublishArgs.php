@@ -20,7 +20,7 @@ final class PublishArgs
         /** Who published; stored in the history. */
         public readonly string $by,
         /** "admin" | "import:<file>" | "email:<from>" | "restore:<n>" | "seed" |
-         *  "pages" and "pages:restore:<n>" (words only; see PAGES). */
+         *  "pages", "pages:admin" and "pages:restore:<n>" (words only; see PAGES). */
         public readonly string $source,
         public readonly string $summary,
         public readonly int $changeCount = 0,

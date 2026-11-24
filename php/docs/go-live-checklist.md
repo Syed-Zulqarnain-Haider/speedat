@@ -49,22 +49,15 @@ the day it all happened.
       `db/migrations/0001_init.sql` and every later `00NN_*.sql`.
       *Evidence:* the **prefixed** database and user names (`u123456789_speedat`),
       the MariaDB version phpMyAdmin shows top-right, and this, which must list
-      all **twelve** tables:
+      all **thirteen** tables:
       ```sql
       SELECT table_name, table_rows FROM information_schema.tables
        WHERE table_schema = DATABASE() ORDER BY table_name;
       ```
       ```
-      admins  app_settings  audit_log  draft  leads  quotes  rate_limits
-      schema_migrations  sessions  shipment_events  shipments  versions
+      admins  app_settings  audit_log  draft  leads  page_views  quotes
+      rate_limits  schema_migrations  sessions  shipment_events  shipments  versions
       ```
-      **Twelve, not thirteen.** This line said thirteen and counted an
-      `imports` table until 2026-09-27. That table left with the Excel
-      rate-sheet feature the owner removed from the product; there is no import
-      of any kind in the site now, and the only import on this page is
-      phpMyAdmin's own, of the schema. A checklist that says thirteen makes you
-      abandon a correct install. `deploy-hostinger.md` has carried the right
-      count since that day — this is the copy that did not.
 - [ ] **6. Files uploaded and the layout right.**
       Extract the zip at `domains/<domain>/` — **not** inside `public_html`.
       *Evidence:* File Manager shows `public_html/ speedat_main/ INSTALL.txt`

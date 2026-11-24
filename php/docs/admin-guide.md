@@ -445,7 +445,7 @@ console for each person: the *Logins* list is what lets them in.
 
 **Their area is separate.** Marketers work at `/marketing`, one website page at a
 time, with a preview of how it looks in Google. Nothing under `/admin` opens for
-them, and the admin sign-in sends them to theirs.
+them, and the admin sign-in tells them to use theirs.
 
 **Removing one** signs them out straight away.
 

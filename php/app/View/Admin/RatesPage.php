@@ -92,6 +92,8 @@ final class RatesPage
         public readonly array $rebaseLines = [],
         /** Why a behind draft could not be caught up, in words; "" when nothing was refused. */
         public readonly string $rebaseRefused = '',
+        /** When the prices went live, when words were published after them. */
+        public readonly string $ratesAt = '',
     ) {
     }
 
@@ -140,6 +142,14 @@ final class RatesPage
     public function liveMeta(): string
     {
         $text = 'Version ' . $this->live->version;
+
+        // Words published after the prices: two dates, each said of its own.
+        if ($this->ratesAt !== '' && $this->ratesAt !== $this->live->publishedAt) {
+            return $text . " \u{b7} rates published " . Format::fmtDateTime($this->ratesAt)
+                . " \u{b7} website text published " . Format::fmtDateTime($this->live->publishedAt)
+                . ($this->livePublishedBy !== '' ? ' by ' . $this->livePublishedBy : '');
+        }
+
         $when = Format::fmtDateTime($this->live->publishedAt);
         if ($when !== '') {
             $text .= " \u{b7} published " . $when;

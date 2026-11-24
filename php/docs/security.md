@@ -165,6 +165,13 @@ What each flag actually buys:
 table says whether you may do anything. A perfectly valid Google account that is
 not in that table gets nothing.
 
+**Three roles, two doors.** Owners ("Admin" on screen) and editors sign in at
+`/admin/login`; marketers at `/marketing/login`, with Google only. `Guard` is
+closed by default: a route that names no roles is for the back office, and every
+route under `/marketing` is for marketers alone. An unknown role reads as a
+marketer, the least there is. The Logins screen can add and remove marketers and
+nobody else. `tests/Http/MarketerTest.php` asks every route in `app/routes.php`.
+
 ---
 
 ## 4. CSRF

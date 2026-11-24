@@ -128,6 +128,15 @@ Afterwards
 
 ---
 
+## Marketers use the same set-up
+
+Nothing extra is needed in Firebase for marketers. Once Google sign-in works for
+you at `/admin/login`, it works for them at `/marketing/login`. Add each one in
+**Admin → Logins**; that list, not Firebase, is what lets them in. They have no
+password, so if Google sign-in is broken they cannot sign in until it is fixed.
+
+---
+
 ## 1. Create the Firebase project
 
 Open <https://console.firebase.google.com> and sign in with the business Google
@@ -300,6 +309,7 @@ If nothing has changed after fifteen minutes, check that you edited the file in
 
 | What you see | What it means | Fix |
 |---|---|---|
+| `/marketing/login` says "Sign-in is not set up on this website yet" | the same as the next line, at the marketers' page | section 2.1, then section 3 |
 | No Google button at all | one of the four `firebase_*` values is empty or missing, or the cache has not caught up | section 2.1, then section 3 |
 | "This website is not on the Firebase project's list of authorized domains..." | the domain is not in Authorized domains | section 1 step 3 |
 | "Your browser blocked the Google sign-in window..." | pop-up blocker | allow pop-ups for speedat.co, try again |
@@ -324,7 +334,8 @@ which is written when the server could not fetch Google's certificates). The
 
 | `reason` contains | Meaning | Fix |
 |---|---|---|
-| `not_an_admin` | the Google email is not in `admins` exactly | section 0 step 4 |
+| `not_an_admin` | the Google email is not in `admins` exactly | your own login: section 0 step 4. **A marketer: Admin → Logins, remove and add again with the exact Google email. Never section 0 step 4 for a marketer: it makes an owner.** |
+| `login_wrong_door` (its own line) | an admin used the marketers' page, or the other way round | admins: `/admin/login`; marketers: `/marketing/login` |
 | `audience` or `issuer` | the token was for another project | `firebase_project_id` is wrong (it must be the Project ID, not the name) |
 | `Could not reach Google` | the server cannot reach Google over HTTPS | ask Hostinger support to check outgoing HTTPS from your hosting plan |
 | `cURL is unavailable` | the PHP `curl` extension is off | hPanel → Advanced → PHP Configuration → PHP extensions → tick `curl` |

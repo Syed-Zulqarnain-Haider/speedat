@@ -441,7 +441,7 @@ final class AdminDesksTest extends AdminViewTestCase
         $html = $this->view()->render('admin/security', ['page' => $this->securityPage(), 'shell' => $this->shell('security')]);
 
         $this->assertStringContains($this->securityPage()->adminsMeta(), $html);
-        $this->assertStringContains('2 admins', $this->securityPage()->adminsMeta());
+        $this->assertStringContains('1 admin, 1 editor', $this->securityPage()->adminsMeta());
         $this->assertStringContains('signed in as boss@speedat.test', $this->securityPage()->adminsMeta());
         $this->assertStringContains('<span class="tag role">Admin</span>', $html);
         $this->assertStringContains('<span class="tag">2FA on</span>', $html);
@@ -485,7 +485,7 @@ final class AdminDesksTest extends AdminViewTestCase
     {
         $html = $this->view()->render('admin/login', ['page' => $this->loginPage()]);
 
-        $this->assertStringContains('<h1>Rates admin</h1>', $html);
+        $this->assertStringContains('<h1>Admin sign in</h1>', $html);
         $this->assertStringContains('Sign in with the account that was added as an admin.', $html);
         $this->assertStringContains('action="' . Routes::LOGIN_GOOGLE . '"', $html);
         $this->assertStringContains('>Continue with Google</button>', $html);

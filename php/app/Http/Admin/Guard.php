@@ -124,7 +124,7 @@ final class Guard
             $admin = self::admin($app);
 
             if ($admin === null) {
-                return self::toLogin($app);
+                return self::toLogin($app, true);
             }
 
             self::assertRole($app, $admin, $roles);
@@ -210,13 +210,20 @@ final class Guard
         ]);
 
         throw HttpError::forbidden(
-            $admin->isMarketer() ? 'Your login can only change the website text.' : 'Your login cannot open that.'
+            $admin->isMarketer() ? 'Your login can only change the website text.' : 'Your login cannot open that.',
+            ['home' => Door::forRole($admin->role)->home],
         );
     }
 
     /** Where an anonymous caller is sent: the sign-in of the area they asked for. 302, so the browser comes back with a GET. */
-    public static function toLogin(App $app): Response
+    public static function toLogin(App $app, bool $lost = false): Response
     {
-        return Response::redirect($app->request->basePath . Door::forPath($app->request->path)->login, 302)->noStore();
+        $door = Door::forPath($app->request->path);
+
+        // A marketer whose session ended under an open page is told so. The
+        // admin's answer carries nothing, as it always has.
+        $path = $lost && $door->isMarketing() ? Notice::url($door->login, ['err' => 'signedout']) : $door->login;
+
+        return Response::redirect($app->request->basePath . $path, 302)->noStore();
     }
 }

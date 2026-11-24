@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Speedat\Domain\Seo;
 
+use Speedat\Core\Str;
 use Speedat\Domain\Pricing\Format;
 use Speedat\Domain\SiteDoc\Review;
 
@@ -487,7 +488,8 @@ final class JsonLd
         return [
             '@type'      => 'FAQPage',
             '@id'        => $this->url->absolute($route->path) . '#faq',
-            'name'       => $route->title,
+            // The heading the page prints, when it has one of its own.
+            'name'       => Str::squish($this->facts->content()->faqH1) !== '' ? Str::squish($this->facts->content()->faqH1) : $route->title,
             'mainEntity' => $questions,
         ];
     }

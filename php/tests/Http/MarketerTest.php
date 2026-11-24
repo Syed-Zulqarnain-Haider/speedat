@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Speedat\Tests\Http;
 
+use Speedat\Core\App;
 use Speedat\Core\Clock;
 use Speedat\Core\Config;
 use Speedat\Core\Csrf;
 use Speedat\Core\Db;
 use Speedat\Core\Paths;
+use Speedat\Core\Request;
 use Speedat\Core\Router;
 use Speedat\Core\Session;
 use Speedat\Domain\Ops\VersionsTable;
@@ -16,9 +18,11 @@ use Speedat\Domain\SiteDoc\Hold;
 use Speedat\Domain\SiteDoc\Live;
 use Speedat\Domain\SiteDoc\PublishArgs;
 use Speedat\Domain\SiteDoc\Repo;
+use Speedat\Domain\SiteDoc\Schema;
 use Speedat\Domain\SiteDoc\SiteData;
 use Speedat\Http\Admin\Admins;
 use Speedat\Http\Admin\AdminUser;
+use Speedat\Http\Admin\PagesPublisher;
 use Speedat\Http\Admin\PendingLogin;
 use Speedat\View\Admin\ContentFields;
 use Speedat\View\Admin\Routes;
@@ -49,7 +53,7 @@ final class MarketerTest extends AdminTestCase
         $checked = 0;
 
         foreach ($this->routesUnder('/admin') as [$method, $path]) {
-            if (in_array($path, self::OPEN, true)) {
+            if (in_array($path, self::OPEN, true) || $this->isPostAddress($method, $path)) {
                 continue;
             }
 
@@ -80,7 +84,7 @@ final class MarketerTest extends AdminTestCase
         $checked = 0;
 
         foreach ($this->routesUnder('/marketing') as [$method, $path]) {
-            if (in_array($path, self::OPEN, true)) {
+            if (in_array($path, self::OPEN, true) || $this->isPostAddress($method, $path)) {
                 continue;
             }
             foreach ([self::OWNER, self::EDITOR] as $email) {
@@ -96,11 +100,11 @@ final class MarketerTest extends AdminTestCase
             $this->sid = '';
             $answer = $method === 'GET' ? $this->get($path) : $this->post($path, [Csrf::FIELD => 'x']);
             $this->assertSame(302, $answer->response->status, $path);
-            $this->assertSame(Routes::MARKETING_LOGIN, $this->location($answer), $path . ' sent a stranger to the wrong sign-in');
+            $this->assertStringContains(Routes::MARKETING_LOGIN, $this->location($answer), $path . ' sent a stranger to the wrong sign-in');
             $checked++;
         }
 
-        $this->assertSame(6, $checked);
+        $this->assertSame(7, $checked);
         $this->assertSame(1, $this->liveVersion());
         $this->assertSame(Routes::LOGIN, $this->location($this->get(Routes::RATES)), 'the admin lost its own sign-in');
     }
@@ -305,7 +309,8 @@ final class MarketerTest extends AdminTestCase
         $this->signIn();
         $answer = $this->adminPost(Routes::PUBLISH, ['expectedBase' => '1']);
 
-        $this->assertStringContains('conflict=', $this->location($answer));
+        $this->assertStringContains('caughtup=2', $this->location($answer));
+        $this->assertStringContains('Your changes are kept', $this->adminGet(Routes::REVIEW, ['caughtup' => '2'])->body());
         $this->assertSame('New words', Repo::getLatestVersion()->data->content->heroTitle);
     }
 
@@ -372,8 +377,8 @@ final class MarketerTest extends AdminTestCase
     {
         $this->marketer();
 
-        $this->assertStringContains('nochange=1', $this->location($this->publish([])));
-        $this->assertStringContains('nochange=1', $this->location($this->publish(['heroTitle' => Repo::getLatestVersion()->data->content->heroTitle])));
+        $this->assertStringContains('pagessame=1', $this->location($this->publish([])));
+        $this->assertStringContains('pagessame=1', $this->location($this->publish(['heroTitle' => Repo::getLatestVersion()->data->content->heroTitle])));
         $this->assertSame(1, $this->liveVersion());
     }
 
@@ -532,6 +537,167 @@ final class MarketerTest extends AdminTestCase
         $this->assertStringNotContains('name="code"', $this->get(Routes::LOGIN, [], [], $cookies)->body(), 'the admin page asked for a marketer\'s code');
         $step = $this->get(Routes::MARKETING_LOGIN, [], [], $cookies);
         $this->assertStringContains('action="' . Routes::MARKETING_LOGIN_CODE . '"', $step->body());
+
+        // The right code, at the wrong door and then at the right one.
+        $code  = $this->totp()->codeAt($secret);
+        $wrong = $this->atDoor(Routes::LOGIN, Routes::LOGIN_CODE, ['code' => $code], $cookies);
+        $this->assertStringContains('err=expired', $this->location($wrong));
+        $this->assertNull($wrong->cookie(Session::COOKIE));
+        $this->assertSame(0, (int) Db::value('SELECT COUNT(*) FROM sessions'));
+
+        $right = $this->atDoor(Routes::MARKETING_LOGIN, Routes::MARKETING_LOGIN_CODE, ['code' => $code], $cookies);
+        $this->assertSame(Routes::MARKETING, $this->location($right));
+        $this->assertNotNull($right->cookie(Session::COOKIE));
+    }
+
+    public function testAMarketerTurnsTheirSecondFactorOnAndOffAndOnlyWithACode(): void
+    {
+        $this->marketer();
+        $other = $this->sid;
+        $this->signIn(self::MARKETER);
+
+        $this->adminPost(Routes::MARKETING_TOTP_BEGIN);
+        $secret = Admins::secret(Admins::row(self::MARKETER));
+        $this->assertStringContains('err=code', $this->location($this->adminPost(Routes::MARKETING_TOTP_CONFIRM, ['code' => '000000'])));
+        $this->assertFalse(Admins::find(self::MARKETER)->totpEnabled);
+
+        $on = $this->adminPost(Routes::MARKETING_TOTP_CONFIRM, ['code' => $this->totp()->codeAt($secret)]);
+        $this->assertStringContains(Routes::MARKETING_SECURITY . '?totpon=1', $this->location($on));
+        $this->assertTrue(Admins::find(self::MARKETER)->totpEnabled);
+        $this->assertFalse($this->sessionExists($other), 'another device stayed signed in');
+        $this->sid = (string) $on->cookie(Session::COOKIE);
+
+        foreach (['', '000000'] as $bad) {
+            $this->assertStringContains('err=code', $this->location($this->adminPost(Routes::MARKETING_TOTP_DISABLE, ['code' => $bad])));
+        }
+        $this->assertTrue(Admins::find(self::MARKETER)->totpEnabled);
+
+        // Guessing is limited here as it is at the sign-in.
+        $last = 0;
+        for ($i = 0; $i < 6; $i++) {
+            $last = $this->adminPost(Routes::MARKETING_TOTP_DISABLE, ['code' => '000000'])->response->status;
+        }
+        $this->assertSame(429, $last, 'codes may be guessed without limit');
+    }
+
+    public function testTheSessionCheckGivesAWorkingTokenAndNothingToAnybodyElse(): void
+    {
+        $this->assertSame(302, $this->get(Routes::MARKETING_SESSION)->response->status);
+
+        $this->marketer();
+        $token = $this->adminGet(Routes::MARKETING_SESSION)->json()['token'] ?? '';
+        $answer = $this->post(Routes::MARKETING_PUBLISH, [Csrf::FIELD => $token, 'base' => '1', 'content' => ['heroTitle' => 'x']], [], $this->cookies());
+        $this->assertSame(303, $answer->response->status);
+
+        $ended = $this->post(Routes::MARKETING_PUBLISH, ['base' => '1', 'content' => ['heroTitle' => 'y']]);
+        $this->assertStringContains('err=signedout', $this->location($ended));
+        $this->assertStringContains('You were signed out', $this->get(Routes::MARKETING_LOGIN, ['err' => 'signedout'])->body());
+        $this->assertStringNotContains('0004', $this->get(Routes::MARKETING_LOGIN, ['err' => 'nomarketer'])->body(), 'another screen\'s message was shown to a stranger');
+    }
+
+    public function testAnAddressThatIsPostedToGoesToItsScreen(): void
+    {
+        foreach ([
+            Routes::MARKETING_LOGIN_GOOGLE => Routes::MARKETING_LOGIN,
+            Routes::MARKETING_PUBLISH      => Routes::MARKETING,
+            Routes::LOGIN_GOOGLE           => Routes::LOGIN,
+            Routes::PAGES_PUBLISH          => Routes::PAGES,
+        ] as $posted => $screen) {
+            $this->assertSame($screen, $this->location($this->get($posted)), $posted);
+        }
+    }
+
+    public function testARefusalPointsAtTheReadersOwnArea(): void
+    {
+        $this->marketer();
+        $this->assertStringContains('Back to the marketing area', $this->adminGet(Routes::INBOX)->body());
+        $this->signIn();
+        $this->assertStringContains('Back to the admin', $this->adminGet(Routes::MARKETING_SECURITY)->body());
+    }
+
+    public function testEnterInABoxCannotPublish(): void
+    {
+        $this->marketer();
+        $body = $this->adminGet(Routes::MARKETING)->body();
+        $this->assertTrue(strpos($body, '<button type="submit" disabled hidden>') < strpos($body, 'data-publish'));
+    }
+
+    public function testNoBoxTakesMoreThanAPublishWill(): void
+    {
+        foreach (ContentFields::pageFields() as $name => $field) {
+            $this->assertSame(Schema::contentCap($name), $field->maxLength, $name);
+        }
+    }
+
+    public function testAQuestionNeedsItsAnswerAndAnOldStandardSentenceIsRefused(): void
+    {
+        $this->marketer();
+        $faq = Repo::getLatestVersion()->data->content->faq;
+
+        $refused = $this->publish(['faq' => $faq . "\nHow much to Mars?"]);
+        $this->assertSame(422, $refused->response->status);
+        $this->assertStringContains('has no answer', $refused->body());
+        $this->assertSame(303, $this->publish(['faq' => $faq . "\nHow much to Mars? | Ask us."])->response->status);
+    }
+
+    public function testAWordsPublishNeverLandsOnPricesItDidNotSee(): void
+    {
+        $this->admin();
+        $this->marketer();
+        $stale = Repo::getLatestVersion();
+        $this->draftPrice(7777.0);
+        Repo::publishVersion(new PublishArgs(data: Repo::getDraft()->data, by: self::OWNER, source: 'admin', summary: 'prices'));
+
+        $cookies = $this->cookies();
+        $app     = new App(Request::synthetic('POST', Routes::MARKETING_PUBLISH, ['base' => '1', 'content' => ['heroTitle' => 'Words']], [], [], $cookies));
+        $result  = PagesPublisher::publish($app, Admins::find(self::MARKETER), $stale);
+
+        $this->assertSame('', $result->refused, 'a lost race was not built again');
+        $live = Repo::getLatestVersion();
+        $this->assertSame(['Words', 7777.0], [$live->data->content->heroTitle, $this->priceIn($live->data)]);
+
+        // The same press again finds its words there, and is not an error.
+        $again = PagesPublisher::publish($app, Admins::find(self::MARKETER), $stale);
+        $this->assertSame(['', 3], [$again->refused, Repo::getLatestVersion()->version]);
+    }
+
+    public function testTheOwnersOwnWebsiteTextScreenPublishesWordsAndKeepsTheirDraft(): void
+    {
+        $this->admin();
+        $draft = $this->draftPrice(7777.0);
+        $this->signIn();
+
+        $answer = $this->adminPost(Routes::PAGES_PUBLISH, ['base' => '1', 'content' => ['aboutH1' => 'About our office']]);
+
+        $this->assertStringContains('pageslive=2', $this->location($answer));
+        $this->assertSame($draft->revision, Repo::getDraft()->revision);
+        $this->assertFalse($this->priceIsLive(7777.0));
+        $this->assertStringContains('<h1>About our office</h1>', $this->get('/about')->body());
+        $this->assertStringContains('About: heading on the page', (string) Db::value('SELECT summary FROM versions WHERE version = 2'));
+    }
+
+    public function testAnEditorCannotRemoveAMarketer(): void
+    {
+        $this->marketer();
+        $theirs = $this->sid;
+        $this->admin(self::EDITOR, 'editor');
+        $this->signIn(self::EDITOR);
+
+        $this->assertSame(403, $this->adminPost(Routes::USERS_REMOVE, ['email' => self::MARKETER])->response->status);
+        $this->assertNotNull(Admins::row(self::MARKETER));
+        $this->assertTrue($this->sessionExists($theirs));
+    }
+
+    public function testEveryPageTakesItsOwnTitleDescriptionAndHeading(): void
+    {
+        $this->marketer();
+        foreach (['services' => 'Services', 'about' => 'About', 'contact' => 'Contact', 'faq' => 'Faq'] as $path => $key) {
+            $this->publish(['seo' . $key . 'Title' => $key . ' T', 'seo' . $key . 'Desc' => $key . ' D', $path . 'H1' => $key . ' H']);
+            $head = $this->headOf('/' . $path);
+            $this->assertStringContains('<title>' . $key . ' T</title>', $head);
+            $this->assertStringContains($key . ' D', $head);
+            $this->assertStringContains('<h1>' . $key . ' H</h1>', $head);
+        }
     }
 
     public function testARemovedMarketerCannotSignInAgain(): void
@@ -568,11 +734,25 @@ final class MarketerTest extends AdminTestCase
     public function testTheRollBackQuestionSaysHowManyTextChangesGoWithIt(): void
     {
         $this->marketer();
-        $this->publish(['heroTitle' => 'One']);
-        $this->publish(['heroTitle' => 'Two']);
+        $this->draftPrice(7777.0);
+        $this->publish(['heroTitle' => 'One', 'contactLede' => 'Two']);
         $this->signIn();
 
-        $this->assertStringContains('undoes 2 website text changes', $this->adminGet(Routes::RATES, ['rollback' => '1'])->body());
+        // Only words: no price moves and the draft is safe, and it says so.
+        $words = $this->adminGet(Routes::RATES, ['rollback' => '1'])->body();
+        $this->assertStringContains('Only text changes (2 pieces); prices do not.', $words);
+        $this->assertStringContains('stays as they are', $words);
+        $this->assertStringNotContains('will be replaced', $words);
+        $done = $this->adminPost(Routes::ROLLBACK, ['version' => '1', 'confirm' => '1', 'expectedLive' => '2']);
+        $this->assertStringContains('wordsback=1', $this->location($done));
+        Repo::catchUpDraft();
+        $this->assertSame(7777.0, $this->priceIn(Repo::getDraft()->data));
+
+        // Prices published on top: a version is the whole website, and it says that.
+        $this->adminPost(Routes::PUBLISH, ['expectedBase' => '3']);
+        $both = $this->adminGet(Routes::RATES, ['rollback' => '2'])->body();
+        $this->assertStringContains('Customers see its prices immediately', $both);
+        $this->assertStringContains('pieces of website text', $both);
     }
 
     public function testAHalfFinishedCountryInTheDraftDoesNotLeaveItBehind(): void
@@ -628,6 +808,12 @@ final class MarketerTest extends AdminTestCase
 
     /* --------------------------------------------------------------- helpers */
 
+    /** A GET of an address that is posted to: it goes to its screen, which has its own guard. */
+    private function isPostAddress(string $method, string $path): bool
+    {
+        return $method === 'GET' && in_array($path, [Routes::PAGES_PUBLISH, Routes::MARKETING_PUBLISH], true);
+    }
+
     private function marketer(): void
     {
         if (Admins::row(self::OWNER) === null) {
@@ -635,6 +821,24 @@ final class MarketerTest extends AdminTestCase
         }
         $this->admin(self::MARKETER, 'marketer', null);
         $this->signIn(self::MARKETER);
+    }
+
+    /**
+     * Any post to a sign-in, with the visitor token its page printed.
+     *
+     * @param array<string,string> $post
+     * @param array<string,string> $cookies
+     */
+    private function atDoor(string $door, string $path, array $post, array $cookies): Answer
+    {
+        $page = $this->get($door, [], [], $cookies);
+        preg_match('/name="' . preg_quote(Csrf::FIELD, '/') . '" value="([^"]+)"/', $page->body(), $m);
+        $anon = $page->cookie(Session::ANON_COOKIE);
+        if ($anon !== null) {
+            $cookies[Session::ANON_COOKIE] = $anon;
+        }
+
+        return $this->post($path, $post + [Csrf::FIELD => html_entity_decode($m[1] ?? '')], [], $cookies);
     }
 
     /** A real Google sign-in post, carrying the visitor token the login page would have printed. */

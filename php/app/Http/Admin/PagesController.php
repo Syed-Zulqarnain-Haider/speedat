@@ -31,7 +31,7 @@ final class PagesController
             return $this->render($app, $admin, $result->live, $result);
         }
 
-        $codes = $result->version > 0 ? ['pageslive' => $result->version] : ['nochange' => true];
+        $codes = $result->version > 0 ? ['pageslive' => $result->version] : ['pagessame' => true];
 
         return Response::redirect($app->request->basePath . Notice::url(Routes::PAGES, $codes), 303)->noStore();
     }
@@ -41,10 +41,11 @@ final class PagesController
         return $app->page('admin/pages', [
             'page' => new PagesPage(
                 live: $live,
-                typed: $result?->form?->typed ?? [],
-                // A refused form keeps the version it was opened at: its
-                // unchanged boxes are still that version's words.
-                base: $result?->form?->base ?? $live->version,
+                typed: $result?->form->typed ?? [],
+                // A refused form keeps its own base - even one nobody can find. Given
+                // the live number, a second press would put every old box over
+                // somebody else's words.
+                base: $result === null ? $live->version : ($result->form->base ?? 0),
                 error: $result?->refused ?? Notice::error($app),
                 toast: Notice::toast($app),
             ),

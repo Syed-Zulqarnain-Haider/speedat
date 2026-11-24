@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Speedat\View\Admin;
 
+use Speedat\Domain\SiteDoc\Schema;
+
 /**
  * "Website pages" - the words on the site. Port of ContentForm.tsx, with the
  * same labels and the same "blank = automatic" hints.
@@ -35,79 +37,79 @@ final class ContentFields
             self::seoGroup($site, $readOnly),
             ['heading' => 'Home', 'rows' => [
                 ['type' => 'grid2', 'fields' => [
-                    Field::text('content[heroTitle]', 'Headline (blank = automatic)', $c('heroTitle'), '', self::headlineHint($c('heroTitle')), 200, $readOnly),
+                    Field::text('content[heroTitle]', 'Headline (blank = automatic)', $c('heroTitle'), '', self::headlineHint($c('heroTitle')), Schema::contentCap('heroTitle'), $readOnly),
                     Field::text(
                         'content[heroSub]',
-                        'Line under the headline (blank = automatic)',
+                        'Line under the headline (blank = none)',
                         $c('heroSub'),
                         '',
-                        "Blank = automatic: the lowest 1 kg price (pickup included) and the day span, e.g. 1 kg from PKR 5,000 \u{b7} 3 to 10 days. While prices are on hold: Pickup in Lahore \u{b7} 3 to 10 days. Keep your own line to about ten words so the country tiles stay on the first phone screen.",
-                        200,
+                        'Keep it to about ten words, so the country tiles stay on the first phone screen.',
+                        Schema::contentCap('heroSub'),
                         $readOnly,
                     ),
-                    Field::text('content[promise]', 'Line under the calculator (blank = none)', $c('promise'), '', '', 200, $readOnly),
+                    Field::text('content[promise]', 'Line under the calculator (blank = none)', $c('promise'), '', '', Schema::contentCap('promise'), $readOnly),
                 ]],
                 ['type' => 'field', 'fields' => [
-                    Field::area('content[stats]', 'Extra line under the headline (optional, one per line: Label | Value; blank = none)', $c('stats'), 'Years in business | 12', '', false, 2000, $readOnly),
+                    Field::area('content[stats]', 'Extra line under the headline (optional, one per line: Label | Value; blank = none)', $c('stats'), 'Years in business | 12', '', false, Schema::contentCap('stats'), $readOnly),
                 ]],
             ]],
             ['heading' => 'Rates board', 'rows' => [
                 ['type' => 'grid2', 'fields' => [
-                    Field::text('content[routesTitle]', 'Caption', $c('routesTitle'), '', 'The heading of the rates table on the home page and on Services, e.g. Rates.', 120, $readOnly),
+                    Field::text('content[routesTitle]', 'Caption', $c('routesTitle'), '', 'The heading of the rates table on the home page and on Services, e.g. Rates.', Schema::contentCap('routesTitle'), $readOnly),
                     Field::text(
                         'content[routesNote]',
                         'Second line of the caption (blank = automatic)',
                         $c('routesNote'),
                         '',
                         "Blank = automatic: the parcel weight and the pickup charge, e.g. 1 kg parcel \u{b7} pickup PKR 500 included.",
-                        200,
+                        Schema::contentCap('routesNote'),
                         $readOnly,
                     ),
                 ]],
             ]],
             ['heading' => 'Services page', 'rows' => [
                 ['type' => 'field', 'fields' => [
-                    Field::text('content[servicesLede]', 'Line under the heading', $c('servicesLede'), '', '', 300, $readOnly),
+                    Field::text('content[servicesLede]', 'Line under the heading', $c('servicesLede'), '', '', Schema::contentCap('servicesLede'), $readOnly),
                 ]],
                 ['type' => 'field', 'fields' => [
-                    Field::area('content[services]', 'Services, one per line: icon | Title | text (the icon word is kept for older pages and not shown)', $c('services'), '', '', false, 4000, $readOnly),
+                    Field::area('content[services]', 'Services, one per line: icon | Title | text (the icon word is kept for older pages and not shown)', $c('services'), '', '', false, Schema::contentCap('services'), $readOnly),
                 ]],
             ]],
             ['heading' => 'Contact line (inner pages)', 'rows' => [
                 ['type' => 'grid2', 'fields' => [
-                    Field::text('content[ctaTitle]', 'Heading (optional)', $c('ctaTitle'), '', '', 160, $readOnly),
-                    Field::text('content[ctaSub]', 'Line under the heading (optional)', $c('ctaSub'), '', '', 300, $readOnly),
+                    Field::text('content[ctaTitle]', 'Contact line: heading (optional)', $c('ctaTitle'), '', 'Above the WhatsApp button on Services, About, Contact and FAQ.', Schema::contentCap('ctaTitle'), $readOnly),
+                    Field::text('content[ctaSub]', 'Contact line: text (optional)', $c('ctaSub'), '', '', Schema::contentCap('ctaSub'), $readOnly),
                 ]],
             ]],
             ['heading' => 'About page', 'rows' => [
                 ['type' => 'field', 'fields' => [
-                    Field::area('content[story]', 'Our story (one paragraph per line)', $c('story'), '', '', false, 8000, $readOnly),
+                    Field::area('content[story]', 'Our story (one paragraph per line)', $c('story'), '', '', false, Schema::contentCap('story'), $readOnly),
                 ]],
                 ['type' => 'grid2', 'fields' => [
-                    Field::area('content[mission]', 'Mission (optional)', $c('mission'), '', '', false, 2000, $readOnly),
-                    Field::area('content[vision]', 'Vision (optional)', $c('vision'), '', '', false, 2000, $readOnly),
+                    Field::area('content[mission]', 'Mission (optional)', $c('mission'), '', '', false, Schema::contentCap('mission'), $readOnly),
+                    Field::area('content[vision]', 'Vision (optional)', $c('vision'), '', '', false, Schema::contentCap('vision'), $readOnly),
                 ]],
                 ['type' => 'field', 'fields' => [
-                    Field::area('content[values]', 'Values (optional), one per line: Value | one-line explanation', $c('values'), '', '', false, 4000, $readOnly),
+                    Field::area('content[values]', 'Values (optional), one per line: Value | one-line explanation', $c('values'), '', '', false, Schema::contentCap('values'), $readOnly),
                 ]],
             ]],
             ['heading' => 'Contact page', 'rows' => [
                 ['type' => 'field', 'fields' => [
-                    Field::text('content[contactLede]', 'Line under the heading', $c('contactLede'), '', '', 300, $readOnly),
+                    Field::text('content[contactLede]', 'Line under the heading', $c('contactLede'), '', '', Schema::contentCap('contactLede'), $readOnly),
                 ]],
                 ['type' => 'grid2', 'fields' => [
-                    Field::text('content[address]', 'Office address', $c('address'), '', '', 300, $readOnly),
-                    Field::text('content[hours]', 'Working hours', $c('hours'), '', '', 200, $readOnly),
-                    Field::text('content[phone2]', 'Second phone number (optional)', $c('phone2'), '', '', 40, $readOnly),
-                    Field::text('content[mapUrl]', 'Google Maps link (optional; blank = search by address)', $c('mapUrl'), '', '', 500, $readOnly),
+                    Field::text('content[address]', 'Office address', $c('address'), '', '', Schema::contentCap('address'), $readOnly),
+                    Field::text('content[hours]', 'Working hours', $c('hours'), '', '', Schema::contentCap('hours'), $readOnly),
+                    Field::text('content[phone2]', 'Second phone number (optional)', $c('phone2'), '', '', Schema::contentCap('phone2'), $readOnly),
+                    Field::text('content[mapUrl]', 'Google Maps link (optional; blank = search by address)', $c('mapUrl'), '', '', Schema::contentCap('mapUrl'), $readOnly),
                 ]],
             ]],
             ['heading' => 'FAQ page', 'rows' => [
                 ['type' => 'field', 'fields' => [
-                    Field::text('content[faqLede]', 'Line under the heading (optional)', $c('faqLede'), '', '', 300, $readOnly),
+                    Field::text('content[faqLede]', 'Line under the heading (optional)', $c('faqLede'), '', '', Schema::contentCap('faqLede'), $readOnly),
                 ]],
                 ['type' => 'field', 'fields' => [
-                    Field::area('content[faq]', 'Questions, one per line: Question? | Answer', $c('faq'), '', '', false, 8000, $readOnly),
+                    Field::area('content[faq]', 'Questions, one per line: Question? | Answer', $c('faq'), '', 'One question on each line, then a vertical bar, then its answer. Example: How long does it take? | 3 to 10 days.', false, Schema::contentCap('faq'), $readOnly),
                 ]],
             ]],
         ];
@@ -194,11 +196,11 @@ final class ContentFields
             $h1    = strtolower($key) . 'H1';
 
             $fields = [
-                Field::text('content[' . $title . ']', $page . ': Google title (blank = automatic)', $site->content($title), '', self::lengthHint($site->content($title), 60), 120, $readOnly),
-                Field::text('content[' . $desc . ']', $page . ': Google description (blank = automatic)', $site->content($desc), '', self::lengthHint($site->content($desc), 160), 300, $readOnly),
+                Field::text('content[' . $title . ']', $page . ': Google title (blank = automatic)', $site->content($title), '', self::lengthHint($site->content($title), 60), Schema::contentCap($title), $readOnly),
+                Field::text('content[' . $desc . ']', $page . ': Google description (blank = automatic)', $site->content($desc), '', self::lengthHint($site->content($desc), 160), Schema::contentCap($desc), $readOnly),
             ];
             if ($key !== 'Home') {
-                $fields[] = Field::text('content[' . $h1 . ']', $page . ': heading on the page (blank = automatic)', $site->content($h1), '', '', 120, $readOnly);
+                $fields[] = Field::text('content[' . $h1 . ']', $page . ': heading on the page (blank = automatic)', $site->content($h1), '', '', Schema::contentCap($h1), $readOnly);
             }
 
             $rows[] = ['type' => 'grid2', 'fields' => $fields];

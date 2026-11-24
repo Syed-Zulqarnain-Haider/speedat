@@ -11,6 +11,7 @@ use Speedat\Core\Log;
 use Speedat\Core\Response;
 use Speedat\Core\Str;
 use Speedat\Domain\Auth\FirebaseBrowser;
+use Speedat\Http\Page;
 use Speedat\View\Admin\Routes;
 use Speedat\View\Admin\UsersPage;
 
@@ -37,6 +38,7 @@ final class UsersController
                 users: Admins::all(),
                 googleReady: FirebaseBrowser::config() !== null,
                 passwordsOn: Config::bool('auth.allow_password_login', false),
+                signInUrl: Page::url($app)?->absolute(Routes::MARKETING_LOGIN) ?? Routes::MARKETING_LOGIN,
                 error: Notice::error($app),
                 toast: Notice::toast($app),
             ),

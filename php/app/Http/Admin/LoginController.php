@@ -89,6 +89,10 @@ final class LoginController
     private const GOOGLE_UNAVAILABLE = 'The server could not reach Google to check sign-ins. Try again in a few minutes; '
         . 'if it keeps happening, check storage/logs for login_google_unavailable.';
 
+    /** The same, for somebody with no server to look at. */
+    private const GOOGLE_UNAVAILABLE_PLAIN = 'Google sign-in could not be checked just now. Try again in a few minutes; '
+        . 'if it keeps happening, tell your Speedat admin.';
+
     /** The refusal, worded the same whichever half failed. */
     private const REFUSED = 'Email or password is wrong.';
 
@@ -115,7 +119,7 @@ final class LoginController
         return $this->render(
             $app,
             $pending === null ? LoginPage::STEP_CREDENTIALS : LoginPage::STEP_CODE,
-            Notice::error($app),
+            Notice::error($app, ['code', 'expired', 'nocode', 'signedout']),
             $pending['email'] ?? $app->request->query('email', '', 190),
         );
     }
@@ -222,7 +226,7 @@ final class LoginController
             // an admin.
             Log::error('login_google_unavailable', ['reason' => $e->getMessage()]);
 
-            return $this->render($app, LoginPage::STEP_CREDENTIALS, self::GOOGLE_UNAVAILABLE, '', 503)
+            return $this->render($app, LoginPage::STEP_CREDENTIALS, $this->door->isMarketing() ? self::GOOGLE_UNAVAILABLE_PLAIN : self::GOOGLE_UNAVAILABLE, '', 503)
                 ->header('Retry-After', '60');
         } catch (FirebaseTokenError $e) {
             Log::warn('login_google_refused', ['reason' => $e->getMessage()]);
@@ -400,7 +404,7 @@ final class LoginController
 
             return $this->render($app, LoginPage::STEP_CREDENTIALS, $this->door->isMarketing()
                 ? 'This sign-in is for marketers. Your account signs in at ' . Door::admin()->login . '.'
-                : 'This sign-in is for admins. Your account signs in at ' . Door::marketing()->login . '.', '', 403);
+                : 'This sign-in is for admins. Your account signs in at ' . Door::marketing()->login . '.', '', 403, Door::forRole($role)->login);
         }
 
         if ((int) ($row['totp_enabled'] ?? 0) === 1) {
@@ -515,6 +519,10 @@ final class LoginController
      */
     private function googleRefused(): string
     {
+        if ($this->door->isMarketing()) {
+            return 'That Google account was not accepted. Use the account your Speedat admin added, or ask them to check it.';
+        }
+
         return 'That Google sign-in was refused. '
             . ($this->passwordsEnabled() ? 'Try again, or use your email and password.' : 'Try again.');
     }
@@ -542,7 +550,7 @@ final class LoginController
         return Response::redirect($app->request->basePath . Notice::url($this->door->login, $codes), 303)->noStore();
     }
 
-    private function render(App $app, string $step, string $error, string $email = '', int $status = 200): Response
+    private function render(App $app, string $step, string $error, string $email = '', int $status = 200, string $otherDoor = ''): Response
     {
         $doc     = Live::site();
         $company = $doc->data->company;
@@ -562,7 +570,7 @@ final class LoginController
         $warning = '';
         if (!$googleReady && !$passwords) {
             $warning = 'Sign-in is not configured on this deployment yet. In config/config.php, either set '
-                . 'auth.firebase_project_id to your Firebase project, or set auth.allow_password_login to true. '
+                . 'the four auth.firebase_* values from your Firebase project, or set auth.allow_password_login to true. '
                 . 'Then reload this page.';
         } elseif (Admins::count() === 0) {
             $warning = 'Nobody has been added as an admin yet, so nobody can sign in. Put an auth.setup_token line '
@@ -580,6 +588,7 @@ final class LoginController
             googleReady: $googleReady,
             configWarning: $warning,
             passwordsEnabled: $passwords,
+            otherDoor: $otherDoor,
         );
 
         // allowFirebaseAuth(): this page, and only this page, gets the Firebase

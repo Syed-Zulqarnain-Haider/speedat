@@ -73,7 +73,7 @@ $this->layout('admin/layouts/plain', [
   <main class="login-main">
     <div class="login-card">
       <p class="eyebrow">Admin</p>
-      <h1>Rates admin</h1>
+      <h1>Admin sign in</h1>
       <p class="lede"><?= e($page->lede()) ?></p>
 
       <?php if ($page->blocked()) { ?>
@@ -178,6 +178,9 @@ $this->layout('admin/layouts/plain', [
       <?php } ?>
       <?php } ?>
 
+      <?php if ($page->otherDoor !== '') { ?>
+    <p><a class="btn outline big" href="<?= e($this->url($page->otherDoor)) ?>">Go to your sign-in page</a></p>
+    <?php } ?>
       <p class="login-back">
         <a class="link" href="<?= e($this->url(Routes::SITE)) ?>">&#8592; Back to the website</a>
       </p>

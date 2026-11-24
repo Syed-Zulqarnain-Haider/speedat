@@ -1328,10 +1328,10 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
        later 00NN_*.sql in
        filename order. All of them are safe to import twice.
        SEE: "Import has been successfully finished", and then, under
-       Structure, TWELVE tables:
-         admins  app_settings  audit_log  draft  leads  quotes  rate_limits
-         schema_migrations  sessions  shipment_events  shipments  versions
-       Fewer than twelve means an import stopped early. Read the error.
+       Structure, THIRTEEN tables:
+         admins  app_settings  audit_log  draft  leads  page_views  quotes
+         rate_limits  schema_migrations  sessions  shipment_events  shipments  versions
+       Fewer than thirteen means an import stopped early. Read the error.
 
     5. FILL IN THE CONFIGURATION.
        File Manager -> speedat_main/php/config/. Right-click
@@ -1512,6 +1512,12 @@ function installText(string $zipName, string $builtAt, bool $testsRan): string
     --------
     Keep, for every release: the previous zip, and a database dump taken just
     before the import.
+      FIRST: if the previous zip has no
+             speedat_main/php/db/migrations/0004_marketer_role.sql, remove every
+             marketer before you upload it. Older releases treat a marketer as an
+             editor, who can see prices and the inbox. In phpMyAdmin -> SQL:
+               DELETE FROM admins WHERE role = 'marketer';
+             It also drops hand-written Google titles the next time it saves.
       Code:  upload the previous zip to domains/<your-domain>/, Extract here
              overwriting, then REDO STEP 3 - an extract-over re-creates the
              same group-writable modes on every file it replaces. config.php

@@ -53,7 +53,7 @@ final class Notice
      */
     private const NUMERIC = [
         'published', 'restored', 'conflict', 'bulk', 'kept', 'lead',
-        'base', 'rollback', 'rolledback', 'pageslive',
+        'base', 'rollback', 'rolledback', 'pageslive', 'caughtup',
     ];
 
     /** The codes that are simply present or absent. */
@@ -64,13 +64,14 @@ final class Notice
         // threw away - the toast has to say so. `noname`: a country's name box
         // arrived empty, and the stored name was kept.
         'replaced', 'noname',
-        'useradded', 'userremoved',
+        'useradded', 'userremoved', 'wordsback', 'pagessame', 'signedout',
     ];
 
     /** `err=<word>` and the sentence each word means. */
     private const ERRORS = [
         'code'       => 'That code was not right, or it has already been used. Try the next one.',
         'expired'    => 'That took too long. Sign in again.',
+        'signedout'  => 'You were signed out, so nothing was published. Sign in again.',
         'nocode'     => 'Enter the 6-digit code from your authenticator app.',
         'totp_on'    => 'Two-factor sign-in is already on for this account.',
         'totp_off'   => 'Two-factor sign-in is not on for this account.',
@@ -82,8 +83,8 @@ final class Notice
         'userexists' => 'That address can already sign in, so nothing was changed.',
         'nouser'     => 'That is not a marketer who can sign in, so nothing was changed.',
         'nomarketer' => 'The marketer could not be added. If this is the first one, import 0004_marketer_role.sql in phpMyAdmin, then try again.',
-        'pagesbase'  => 'This page was opened at a version that cannot be found. Copy your text, reload the page and make the change again.',
-        'pagesraced' => 'Somebody published at the same moment. Your text is still in the boxes: press Publish text again.',
+        'pagesbase'  => 'This page was opened at a version that cannot be found. Copy your text, open the latest version and make the change again.',
+        'pagesraced' => 'Somebody published at the same moment. Your text is still in the boxes: publish it again.',
         'nolead'     => 'That enquiry is not in the inbox any more.',
         'noshipment' => 'That shipment does not exist.',
         'badstatus'  => 'That is not a status a shipment can move to from where it is now.',
@@ -142,8 +143,14 @@ final class Notice
     /* ------------------------------------------------------------ reading */
 
     /** The one-off line admin.js shows as a toast, or "". */
-    public static function toast(App $app): string
+    public static function toast(App $app, ?array $only = null): string
     {
+        // A page with few messages names them, so an address somebody was sent
+        // cannot make it say another screen's.
+        if ($only !== null && array_intersect(array_keys($app->request->query), $only) === []) {
+            return '';
+        }
+
         $q = $app->request;
 
         $published = self::number($q, 'published');
@@ -168,9 +175,10 @@ final class Notice
 
         return match (true) {
             self::number($q, 'pageslive') > 0 => 'Published - version ' . self::number($q, 'pageslive') . ' is live',
-            self::flag($q, 'useradded')     => 'Marketer added',
+            self::flag($q, 'useradded')     => 'Marketer added. Send them the sign-in link on this page',
             self::flag($q, 'userremoved')   => 'Marketer removed and signed out',
-            self::flag($q, 'nochange')      => 'Nothing was changed',
+            self::flag($q, 'pagessame')     => 'Nothing was changed, so nothing was published',
+            self::flag($q, 'signedout')     => 'You were signed out',
             self::flag($q, 'discarded')     => 'Draft discarded',
             self::flag($q, 'added')         => 'Country added',
             self::flag($q, 'removed')       => 'Country removed',
@@ -221,6 +229,13 @@ final class Notice
             return 'Version ' . $live . ' was published meanwhile. Reload to see it, then apply your changes again.';
         }
 
+        $caught = self::number($app->request, 'caughtup');
+
+        if ($caught > 0) {
+            return 'Version ' . $caught . ' went live while you were reviewing, so nothing was published. '
+                . 'Your changes are kept and now include it. Check the list, then publish again.';
+        }
+
         return self::flag($app->request, 'nochange') ? 'There is nothing to publish.' : '';
     }
 
@@ -250,7 +265,8 @@ final class Notice
      * edits in the draft that promise is only true of the published history,
      * so it says exactly that, and says what happens to the rest.
      */
-    public static function rollbackQuestion(App $app, int $draftChanges = 0, int $pagesSince = 0): string
+    /** @param array{words:int,wordsOnly:bool,rates:int}|null $effect what it would do, from `Repo::rollbackEffect()` */
+    public static function rollbackQuestion(App $app, int $draftChanges = 0, ?array $effect = null): string
     {
         $version = self::rollbackAsked($app);
 
@@ -258,25 +274,44 @@ final class Notice
             return '';
         }
 
+        // Undoing words is a smaller thing than undoing prices, and the owner's
+        // unpublished edits are not touched by it. Saying otherwise makes
+        // somebody leave a mistake on the website to save work that is safe.
+        if ($effect !== null && $effect['wordsOnly'] && $effect['words'] > 0) {
+            return 'Put the website text of version ' . $version . ' back on the website now? '
+                . 'Only text changes (' . self::some($effect['words'], 'piece') . '); prices do not. '
+                . ($draftChanges > 0 ? 'Your ' . self::some($draftChanges, 'unpublished change') . ' in the editor ' . ($draftChanges === 1 ? 'stays' : 'stay') . ' as they are. ' : '')
+                . 'It is published as a new version, so it can be undone the same way.';
+        }
+
         $question = 'Put version ' . $version . ' back on the website now? '
             . 'Customers see its prices immediately, and it is published as a new version, ';
 
-        // The words go back too: a version is the whole website.
-        $words = $pagesSince > 0
-            ? ' This also undoes ' . $pagesSince . ' website text change' . ($pagesSince === 1 ? '' : 's') . ' published since then.'
-            : '';
+        // A version is the whole website, so say what else goes with it.
+        $also = '';
+        if ($effect !== null && $effect['words'] > 0) {
+            $also .= ' It also changes ' . self::some($effect['words'], 'piece') . ' of website text back.';
+        }
+        if ($effect !== null && $effect['rates'] > 1) {
+            $also .= ' It undoes ' . $effect['rates'] . ' rates publishes, not one.';
+        }
 
         if ($draftChanges > 0) {
             return $question
                 . 'so every published version is kept and it can be undone the same way. '
                 . 'Your ' . $draftChanges . ' unpublished change' . ($draftChanges === 1 ? '' : 's')
                 . ' in the editor will be replaced by version ' . $version . '. '
-                . 'If prices are on hold they stay on hold.' . $words;
+                . 'If prices are on hold they stay on hold.' . $also;
         }
 
         return $question
             . 'so nothing is lost and it can be undone the same way. '
-            . 'If prices are on hold they stay on hold.' . $words;
+            . 'If prices are on hold they stay on hold.' . $also;
+    }
+
+    private static function some(int $n, string $what): string
+    {
+        return $n . ' ' . $what . ($n === 1 ? '' : 's');
     }
 
     /**
@@ -299,6 +334,11 @@ final class Notice
             return '';
         }
 
+        // `wordsback`: the roll-back changed website text and no price.
+        if (self::flag($app->request, 'wordsback')) {
+            return 'Version ' . $version . ' is live: the website text is back as it was. Prices did not change.';
+        }
+
         $line = 'Version ' . $version . ' is live: it carries the prices of the version that was rolled back to. ';
 
         return $line . ($holdOn
@@ -307,9 +347,13 @@ final class Notice
     }
 
     /** The notice above the table: an error code, or a count of prices left alone. */
-    public static function error(App $app): string
+    public static function error(App $app, ?array $only = null): string
     {
         $code = $app->request->query('err', '', 24);
+
+        if ($only !== null && !in_array($code, $only, true)) {
+            return '';
+        }
 
         return self::ERRORS[$code] ?? '';
     }

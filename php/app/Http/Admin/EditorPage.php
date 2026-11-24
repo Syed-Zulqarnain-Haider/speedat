@@ -254,6 +254,7 @@ final class EditorPage
             rebased: $rebased,
             rebaseLines: $rebased?->openLines($draft->data->toArray(), $live->data->toArray()) ?? [],
             rebaseRefused: self::refusedSentence(),
+            ratesAt: $live->ratesAt(),
         );
     }
 
@@ -297,7 +298,7 @@ final class EditorPage
 
         return new RollbackAsk(
             version: $version,
-            question: Notice::rollbackQuestion($app, $draftChanges, Repo::pagesSince($version)),
+            question: Notice::rollbackQuestion($app, $draftChanges, $old === null || $liveVersion < 1 ? null : Repo::rollbackEffect($old, Repo::getVersion($liveVersion) ?? $old)),
             problems: $old === null ? [] : Validate::errors($old->data),
             holdOn: $holdOn,
             unknown: $old === null,

@@ -41,7 +41,7 @@ final class MarketingController
             return $this->render($app, $admin, $result->live, $tab, $result);
         }
 
-        $codes = $result->version > 0 ? ['pageslive' => $result->version] : ['nochange' => true];
+        $codes = $result->version > 0 ? ['pageslive' => $result->version] : ['pagessame' => true];
 
         return Response::redirect(
             $app->request->basePath . Notice::url(Routes::MARKETING, $codes) . '&page=' . rawurlencode($tab),
@@ -51,7 +51,7 @@ final class MarketingController
 
     private function render(App $app, AdminUser $admin, PublishedVersion $live, string $tab, ?PagesResult $result = null): Response
     {
-        [$title, $description, $address] = $this->automatic($app, $live, $tab);
+        [$title, $description, $address] = $this->automatic($app, $live, $tab, $result?->form->content);
 
         return $app->page('marketing/editor', [
             'page' => new PageEditor(
@@ -61,11 +61,14 @@ final class MarketingController
                 autoTitle: $title,
                 autoDescription: $description,
                 address: $address,
-                typed: $result?->form?->typed ?? [],
-                base: $result?->form?->base ?? $live->version,
+                typed: $result?->form->typed ?? [],
+                // A refused form keeps its own base - even one nobody can find. Given
+                // the live number, a second press would put every old box over
+                // somebody else's words.
+                base: $result === null ? $live->version : ($result->form->base ?? 0),
                 recent: Repo::pagesHistory(self::RECENT),
-                error: $result?->refused ?? Notice::error($app),
-                notice: Notice::toast($app),
+                error: $result?->refused ?? '',
+                notice: Notice::toast($app, ['pageslive', 'pagessame']),
             ),
             'admin' => $admin,
             'theme' => Screen::theme($app),
@@ -77,7 +80,7 @@ final class MarketingController
      *
      * @return array{0:string,1:string,2:string} title, description, address
      */
-    private function automatic(App $app, PublishedVersion $live, string $tab): array
+    private function automatic(App $app, PublishedVersion $live, string $tab, ?Content $typed = null): array
     {
         $route = Tabs::route($tab);
         $url   = $route === '' ? null : Page::url($app);
@@ -86,7 +89,7 @@ final class MarketingController
             return ['', '', ''];
         }
 
-        $blank = $live->data->content;
+        $blank = $typed ?? $live->data->content;
         foreach (Content::SEO_FIELDS as $field) {
             $blank = $blank->with($field, '');
         }

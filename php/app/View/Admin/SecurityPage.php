@@ -37,6 +37,8 @@ final class SecurityPage
         public readonly string $error = '',
         /** A one-off confirmation, e.g. "Two-factor sign-in is on". */
         public readonly string $toast = '',
+        /** A marketer: they have no password. */
+        public readonly bool $googleOnly = false,
     ) {
     }
 
@@ -74,17 +76,30 @@ final class SecurityPage
         return count($this->checks) > 0 && $this->passing() === count($this->checks);
     }
 
-    /** "3 admins - signed in as boss@speedat.pk". */
+    /** "2 admins, 1 marketer - signed in as boss@speedat.pk". Each kind of login by its own name. */
     public function adminsMeta(): string
     {
-        $n = count($this->admins);
+        $n = array_count_values(array_map(static fn (array $a): string => Shell::roleName($a['role']), $this->admins));
 
-        return $n . ' admin' . ($n === 1 ? '' : 's') . " \u{b7} signed in as " . $this->viewerEmail;
+        $parts = [];
+        foreach (['Admin', 'Editor', 'Marketer'] as $name) {
+            if (($n[$name] ?? 0) > 0) {
+                $parts[] = $n[$name] . ' ' . strtolower($name) . ($n[$name] === 1 ? '' : 's');
+            }
+        }
+
+        return ($parts === [] ? '0 admins' : implode(', ', $parts)) . " \u{b7} signed in as " . $this->viewerEmail;
     }
 
     /** What the state line under the heading says, on or off. */
     public function totpSentence(): string
     {
+        if ($this->googleOnly) {
+            return $this->totpEnabled
+                ? 'After Google, a 6-digit code from your authenticator app is required.'
+                : 'Your account signs in with Google only.';
+        }
+
         return $this->totpEnabled
             ? 'After your Google or password sign-in, a 6-digit code from your authenticator app is required.'
             : 'Your account signs in with Google or a password only.';
