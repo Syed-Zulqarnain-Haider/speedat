@@ -78,9 +78,13 @@ final class SecurityController
         $page = new SecurityPage(
             viewerEmail: $admin->email,
             totpEnabled: $admin->totpEnabled,
-            admins: Admins::all(),
-            checks: $this->checks($app, $admin),
-            activity: $this->activity(),
+            // A marketer is here for their own second factor. Who else can sign
+            // in, how the server is set up and what everybody did are not read
+            // at all, so there is nothing for the template to leave showing.
+            admins: $admin->isMarketer() ? [] : Admins::all(),
+            checks: $admin->isMarketer() ? [] : $this->checks($app, $admin),
+            activity: $admin->isMarketer() ? [] : $this->activity(),
+            ownAccountOnly: $admin->isMarketer(),
             enrolment: $enrolment,
             error: Notice::error($app),
             toast: Notice::toast($app),

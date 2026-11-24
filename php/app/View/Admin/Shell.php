@@ -21,13 +21,24 @@ namespace Speedat\View\Admin;
 final class Shell
 {
     public const OWNER = 'owner';
+    public const MARKETER = 'marketer';
+
+    /** What a role is called on a screen. The table's word for an admin is "owner". */
+    public static function roleName(string $role): string
+    {
+        return match ($role) {
+            self::OWNER    => 'Admin',
+            'editor'       => 'Editor',
+            default        => 'Marketer',
+        };
+    }
 
     /** @param array<string,int> $badges e.g. ['inbox' => 3, 'shipments' => 1] */
     public function __construct(
         public readonly string $companyName,
         public readonly string $userEmail,
         public readonly string $userRole,
-        /** Which of the five links is the current page: rates|inbox|shipments|analytics|security. */
+        /** Which of the five links is the current page: rates|pages|inbox|shipments|analytics|users|security. */
         public readonly string $current = 'rates',
         public readonly array $badges = [],
         /** The sidebar shows the editor's section sub-list only on the editor itself. */
@@ -55,13 +66,25 @@ final class Shell
         // twice a week, so it stays last. Analytics carries no badge - a number
         // beside a link means something is waiting there, and nothing ever is:
         // the page only reads.
-        $links = [
-            ['rates', 'Rates', Routes::RATES],
-            ['inbox', 'Inbox', Routes::INBOX],
-            ['shipments', 'Shipments', Routes::SHIPMENTS],
-            ['analytics', 'Analytics', Routes::ANALYTICS],
-            ['security', 'Security', Routes::SECURITY],
-        ];
+        //
+        // WEBSITE TEXT AND LOGINS ARE THE OWNER'S, and Website text is all a
+        // marketer has besides their own second factor. Each role is shown only
+        // what the guard will open for it.
+        $owner = $this->isOwner();
+        $links = $this->userRole === self::MARKETER
+            ? [
+                ['pages', 'Website text', Routes::PAGES],
+                ['security', 'Security', Routes::SECURITY],
+            ]
+            : [
+                ['rates', 'Rates', Routes::RATES],
+                ...($owner ? [['pages', 'Website text', Routes::PAGES]] : []),
+                ['inbox', 'Inbox', Routes::INBOX],
+                ['shipments', 'Shipments', Routes::SHIPMENTS],
+                ['analytics', 'Analytics', Routes::ANALYTICS],
+                ...($owner ? [['users', 'Logins', Routes::USERS]] : []),
+                ['security', 'Security', Routes::SECURITY],
+            ];
 
         $out = [];
         foreach ($links as [$key, $label, $href]) {

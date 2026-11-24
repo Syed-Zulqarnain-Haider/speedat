@@ -52,7 +52,8 @@ final class VersionsTable implements Versions
 
         return new LiveVersion(
             $published->version,
-            self::utc($published->publishedAt),
+            // The age of the PRICES: a words-only publish is not a rate update.
+            self::utc($published->ratesAt()),
             $published->data->live,
         );
     }

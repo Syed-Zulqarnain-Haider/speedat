@@ -26,6 +26,10 @@ use Speedat\Domain\Pricing\Engine;
  *   description Google truncates mid-word is a description the owner did not
  *   write.
  *
+ * - BOTH CAN BE WRITTEN BY HAND (2026-11-24): `content.seo<Page>Title` and
+ *   `content.seo<Page>Desc`. Blank is automatic, i.e. exactly the two rules
+ *   above, which is what every version published before that date has.
+ *
  * - THE CANONICAL is `Url::absolute()`: one URL per page, no query, no
  *   trailing slash. It is emitted on every indexable page including the home
  *   page, and it is the same string that goes into `og:url` and the sitemap,
@@ -59,6 +63,13 @@ final class Meta
     /** `<title>` for a route: the leaf, the em dash, the company name - once. */
     public function title(Route $route): string
     {
+        // The owner's own title for this page, printed exactly as typed: what
+        // they wrote in the box is what a searcher reads, with nothing added.
+        $own = Str::squish($this->facts->content()->get('seo' . ucfirst($route->key) . 'Title'));
+        if ($own !== '') {
+            return $own;
+        }
+
         $leaf    = Str::squish($route->title);
         $company = Str::squish($this->facts->companyName());
 
@@ -104,7 +115,9 @@ final class Meta
             default    => '',
         };
 
-        $text = Str::squish($own);
+        // A description written for the search result wins over the lede.
+        $written = Str::squish($content->get('seo' . ucfirst($route->key) . 'Desc'));
+        $text    = $written !== '' ? $written : Str::squish($own);
         if ($text === '') {
             $text = Str::squish($this->facts->siteDescription());
         }

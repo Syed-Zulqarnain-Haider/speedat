@@ -370,7 +370,7 @@ final class EditorPage
         }
 
         try {
-            $at = new \DateTimeImmutable($live->publishedAt);
+            $at = new \DateTimeImmutable($live->ratesAt());
         } catch (\Exception) {
             return 0;
         }

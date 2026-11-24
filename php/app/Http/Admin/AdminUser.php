@@ -14,21 +14,36 @@ namespace Speedat\Http\Admin;
  * `admins`, so a valid Google account (or a session minted before somebody was
  * removed from the table) gets nothing.
  *
- * There are exactly two roles, because the database says so: `admins.role` is
- * `ENUM('owner','editor')`, so an unknown role is refused by MySQL rather than
- * discovered by a permission check later. Anything that is not the string
- * "owner" is read as an editor - the failure direction that withholds a
- * publish rather than granting one.
+ * There are exactly three roles, because the database says so: `admins.role` is
+ * `ENUM('owner','editor','marketer')`, so an unknown role is refused by MySQL
+ * rather than discovered by a permission check later.
+ *
+ *   owner     everything. The screens call this role "Admin".
+ *   editor    the day's work - rates draft, inbox, shipments - but no publish.
+ *   marketer  the words and search titles on the public pages, and nothing else.
+ *
+ * Anything that is neither "owner" nor "editor" is read as a MARKETER, the role
+ * that can do least. It used to be read as an editor, which was the least then.
  */
 final class AdminUser
 {
     public const OWNER  = 'owner';
     public const EDITOR = 'editor';
+    public const MARKETER = 'marketer';
+
+    /** Who works in the back office: every screen that is not told otherwise. */
+    public const STAFF = [self::OWNER, self::EDITOR];
+
+    /** Anybody signed in: their own second factor, and signing out. */
+    public const ANYONE = [self::OWNER, self::EDITOR, self::MARKETER];
+
+    /** Who may publish website text. An editor may not publish anything. */
+    public const WRITERS = [self::OWNER, self::MARKETER];
 
     public function __construct(
         public readonly string $email,
         public readonly string $name,
-        /** self::OWNER or self::EDITOR. */
+        /** self::OWNER, self::EDITOR or self::MARKETER. */
         public readonly string $role,
         /** Whether this admin has a confirmed second factor. */
         public readonly bool $totpEnabled = false,
@@ -42,6 +57,17 @@ final class AdminUser
     public function isOwner(): bool
     {
         return $this->role === self::OWNER;
+    }
+
+    /** A role as the table spells it, with anything unknown read as the least there is. */
+    public static function role(mixed $stored): string
+    {
+        return in_array($stored, self::STAFF, true) ? (string) $stored : self::MARKETER;
+    }
+
+    public function isMarketer(): bool
+    {
+        return $this->role === self::MARKETER;
     }
 
     /** The name to show, falling back to the address when the row has none. */

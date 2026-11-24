@@ -93,7 +93,7 @@ final class Admins
         return new AdminUser(
             email: is_string($row['email'] ?? null) ? $row['email'] : '',
             name: is_string($row['name'] ?? null) ? $row['name'] : '',
-            role: ($row['role'] ?? '') === AdminUser::OWNER ? AdminUser::OWNER : AdminUser::EDITOR,
+            role: AdminUser::role($row['role'] ?? null),
             totpEnabled: (int) ($row['totp_enabled'] ?? 0) === 1,
         );
     }
@@ -120,13 +120,58 @@ final class Admins
         foreach ($rows as $row) {
             $out[] = [
                 'email'   => (string) ($row['email'] ?? ''),
-                'role'    => ($row['role'] ?? '') === AdminUser::OWNER ? AdminUser::OWNER : AdminUser::EDITOR,
+                'role'    => AdminUser::role($row['role'] ?? null),
                 'totp'    => (int) ($row['totp_enabled'] ?? 0) === 1,
                 'addedAt' => Iso::of($row['created_at'] ?? null),
             ];
         }
 
         return $out;
+    }
+
+    /* ----------------------------------------------------------- marketers */
+
+    /**
+     * Let one Google address in as a marketer. Throws when the address is
+     * already in the table (its PRIMARY KEY) or the database has not got the
+     * role (migration 0004); the caller says which in words.
+     */
+    public static function addMarketer(string $email, string $name, string $by): void
+    {
+        $row = [
+            'email'         => Str::email($email),
+            'name'          => Str::limit($name !== '' ? $name : $email, 190),
+            'role'          => AdminUser::MARKETER,
+            'added_by'      => Str::limit($by, 190),
+            'created_at'    => Clock::sql(),
+            'password_hash' => null,
+        ];
+
+        Caps::assert('admins', array_filter($row, is_string(...)));
+        Db::insert('admins', $row);
+    }
+
+    /**
+     * Take a marketer's access away, and their sessions with it. The role is in
+     * the WHERE clause, so no address posted here can remove an admin.
+     */
+    public static function removeMarketer(string $email): bool
+    {
+        $clean = Str::email($email);
+
+        if ($clean === '') {
+            return false;
+        }
+
+        return Db::transaction(static function () use ($clean): bool {
+            if (Db::exec('DELETE FROM admins WHERE email = ? AND role = ?', [$clean, AdminUser::MARKETER]) !== 1) {
+                return false;
+            }
+
+            Db::exec('DELETE FROM sessions WHERE email = ?', [$clean]);
+
+            return true;
+        });
     }
 
     /* ------------------------------------------------------------ password */

@@ -37,6 +37,8 @@ final class SecurityPage
         public readonly string $error = '',
         /** A one-off confirmation, e.g. "Two-factor sign-in is on". */
         public readonly string $toast = '',
+        /** A marketer's view: their own second factor and nothing about anybody else. */
+        public readonly bool $ownAccountOnly = false,
     ) {
     }
 

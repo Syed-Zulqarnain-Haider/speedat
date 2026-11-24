@@ -68,6 +68,23 @@ final class Content
         public readonly string $phone2 = '',
         /** One per line: `Question? | Answer`. */
         public readonly string $faq = '',
+        // On-page SEO (2026-11-24). Each is "blank = automatic": the page keeps
+        // the title, description or heading it has always generated. They come
+        // after `faq` so every field before them keeps its place in a diff.
+        public readonly string $seoHomeTitle = '',
+        public readonly string $seoHomeDesc = '',
+        public readonly string $seoServicesTitle = '',
+        public readonly string $seoServicesDesc = '',
+        public readonly string $seoAboutTitle = '',
+        public readonly string $seoAboutDesc = '',
+        public readonly string $seoContactTitle = '',
+        public readonly string $seoContactDesc = '',
+        public readonly string $seoFaqTitle = '',
+        public readonly string $seoFaqDesc = '',
+        public readonly string $servicesH1 = '',
+        public readonly string $aboutH1 = '',
+        public readonly string $contactH1 = '',
+        public readonly string $faqH1 = '',
     ) {
     }
 
@@ -82,6 +99,20 @@ final class Content
         'ctaTitle', 'ctaSub', 'contactLede', 'faqLede',
         'services', 'story', 'mission', 'vision', 'values',
         'address', 'hours', 'mapUrl', 'phone2', 'faq',
+        ...self::SEO_FIELDS,
+    ];
+
+    /**
+     * The on-page SEO fields, which no document written before 2026-11-24
+     * carries. A missing one reads as "" - automatic - and is not a fault.
+     *
+     * @var list<string>
+     */
+    public const SEO_FIELDS = [
+        'seoHomeTitle', 'seoHomeDesc', 'seoServicesTitle', 'seoServicesDesc',
+        'seoAboutTitle', 'seoAboutDesc', 'seoContactTitle', 'seoContactDesc',
+        'seoFaqTitle', 'seoFaqDesc',
+        'servicesH1', 'aboutH1', 'contactH1', 'faqH1',
     ];
 
     /** @param array<string,mixed> $a */
@@ -112,6 +143,20 @@ final class Content
             mapUrl: Text::of($a['mapUrl'] ?? ''),
             phone2: Text::of($a['phone2'] ?? ''),
             faq: Text::of($a['faq'] ?? ''),
+            seoHomeTitle: Text::of($a['seoHomeTitle'] ?? ''),
+            seoHomeDesc: Text::of($a['seoHomeDesc'] ?? ''),
+            seoServicesTitle: Text::of($a['seoServicesTitle'] ?? ''),
+            seoServicesDesc: Text::of($a['seoServicesDesc'] ?? ''),
+            seoAboutTitle: Text::of($a['seoAboutTitle'] ?? ''),
+            seoAboutDesc: Text::of($a['seoAboutDesc'] ?? ''),
+            seoContactTitle: Text::of($a['seoContactTitle'] ?? ''),
+            seoContactDesc: Text::of($a['seoContactDesc'] ?? ''),
+            seoFaqTitle: Text::of($a['seoFaqTitle'] ?? ''),
+            seoFaqDesc: Text::of($a['seoFaqDesc'] ?? ''),
+            servicesH1: Text::of($a['servicesH1'] ?? ''),
+            aboutH1: Text::of($a['aboutH1'] ?? ''),
+            contactH1: Text::of($a['contactH1'] ?? ''),
+            faqH1: Text::of($a['faqH1'] ?? ''),
         );
     }
 
@@ -143,6 +188,20 @@ final class Content
             'mapUrl'        => $this->mapUrl,
             'phone2'        => $this->phone2,
             'faq'           => $this->faq,
+            'seoHomeTitle'     => $this->seoHomeTitle,
+            'seoHomeDesc'      => $this->seoHomeDesc,
+            'seoServicesTitle' => $this->seoServicesTitle,
+            'seoServicesDesc'  => $this->seoServicesDesc,
+            'seoAboutTitle'    => $this->seoAboutTitle,
+            'seoAboutDesc'     => $this->seoAboutDesc,
+            'seoContactTitle'  => $this->seoContactTitle,
+            'seoContactDesc'   => $this->seoContactDesc,
+            'seoFaqTitle'      => $this->seoFaqTitle,
+            'seoFaqDesc'       => $this->seoFaqDesc,
+            'servicesH1'       => $this->servicesH1,
+            'aboutH1'          => $this->aboutH1,
+            'contactH1'        => $this->contactH1,
+            'faqH1'            => $this->faqH1,
         ];
     }
 

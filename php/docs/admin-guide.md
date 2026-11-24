@@ -424,7 +424,38 @@ If you need the prices off the site while you think, **Hold prices** first
 
 ---
 
-## 11. Things that are meant to be this way
+## 11. Marketers: logins that can only change the words
+
+Three kinds of login, and what each may do:
+
+| | Admin | Editor | Marketer |
+|---|---|---|---|
+| Website text, Google titles and descriptions | yes | draft only | yes, live at once |
+| Prices | yes | draft only | no |
+| Inbox, shipments, analytics | yes | yes | no |
+| Publish prices, resume prices, roll back | yes | no | no |
+| Add and remove marketers | yes | no | no |
+
+**Adding one:** Admin, *Logins*, type their Google email exactly as Google shows
+it, *Add marketer*. They open `/admin/login` and press *Continue with Google*.
+There is no password. Google sign-in has to be set up first
+([firebase-setup.md](./firebase-setup.md)). Nothing is needed in the Firebase
+console for each person: the *Logins* list is what lets them in.
+
+**Removing one** signs them out straight away.
+
+**What they publish is live at once.** Only the words change: prices, the price
+hold and the prices you have not published yet are left alone, and the "rates
+updated" date does not move. Each publish is in *History* with their email. The
+office address, hours, second phone and map link stay with the admin, in *Rates
+-> Website pages*.
+
+**Going back to an older release?** Remove every marketer first. Older releases
+do not know the role and treat it as an editor, who can see prices and the inbox.
+
+---
+
+## 12. Things that are meant to be this way
 
 - **The editor is not the website.** Typing is not publishing.
 - **A blank price box means "not offered", never "free".**

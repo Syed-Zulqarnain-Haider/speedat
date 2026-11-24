@@ -179,7 +179,8 @@ exists, so:
 2. Format **SQL**, character set **utf8mb4**. Go.
 3. Expect *"Import has been successfully finished, 12 queries executed."*
 4. **Then import every later migration, in filename order.** Today that is
-   two more files: `0002_session_csrf_secret.sql` and `0003_page_views.sql`.
+   three more files: `0002_session_csrf_secret.sql`, `0003_page_views.sql` and
+   `0004_marketer_role.sql` (needed before a marketer can be added).
    `0002` is not optional —
    without it the CSRF secret falls back to one derived from the session row and
    **every admin is signed out again by their own second factor**. The file

@@ -80,6 +80,15 @@ final class Routes
      */
     public const ANALYTICS_PRESETS = [7, 30, 90];
 
+    /** Website text: the marketer's screen, and the owner's. */
+    public const PAGES         = '/admin/pages';
+    public const PAGES_PUBLISH = '/admin/pages/publish';
+
+    /** Logins: who may sign in. Owner only. */
+    public const USERS        = '/admin/users';
+    public const USERS_ADD    = '/admin/users/add';
+    public const USERS_REMOVE = '/admin/users/remove';
+
     public const SECURITY      = '/admin/security';
     public const TOTP_BEGIN    = '/admin/security/totp/begin';
     public const TOTP_CONFIRM  = '/admin/security/totp/confirm';

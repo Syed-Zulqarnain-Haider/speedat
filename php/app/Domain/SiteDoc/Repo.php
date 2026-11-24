@@ -67,14 +67,14 @@ final class Repo
     /** The document customers see right now, or null on an empty database. */
     public static function getLatestVersion(): ?PublishedVersion
     {
-        $row = Db::one('SELECT version, published_at, data FROM versions ORDER BY version DESC LIMIT 1');
+        $row = Db::one('SELECT version, published_at, source, data FROM versions ORDER BY version DESC LIMIT 1');
 
         return $row === null ? null : self::toPublished($row);
     }
 
     public static function getVersion(int $version): ?PublishedVersion
     {
-        $row = Db::one('SELECT version, published_at, data FROM versions WHERE version = ?', [$version]);
+        $row = Db::one('SELECT version, published_at, source, data FROM versions WHERE version = ?', [$version]);
 
         return $row === null ? null : self::toPublished($row);
     }
@@ -647,7 +647,8 @@ final class Repo
     /* --------------------------------------------------------- publish */
 
     /**
-     * Insert the next version atomically and re-base the draft onto it.
+     * Insert the next version atomically and re-base the draft onto it (unless
+     * `keepDraft` says the draft is somebody else's work - see PublishArgs).
      *
      * Every publish path - admin, import, email auto-publish, seed, scripts -
      * comes through here, so the document is checked against the schema once
@@ -732,35 +733,42 @@ final class Repo
                     ]
                 );
 
-                // THE DRAFT BECOMES THE PUBLISHED DOCUMENT, whatever it held.
-                // On an admin publish that is the same document; on a
-                // roll-back it is not, and any unpublished edits in the editor
-                // are replaced. That is still the right shape - a draft left
-                // holding the bad prices would put them back on the next
-                // publish - but it is not "nothing is lost", so the roll-back
-                // question counts those edits and says so before the owner
-                // confirms (`Http\Admin\Notice::rollbackQuestion()`).
-                Db::exec(
-                    'INSERT INTO draft (id, base_version, data, updated_at, updated_by) VALUES (:id, :v, :d, :at, :by)'
-                    . ' ON DUPLICATE KEY UPDATE base_version = :v2, data = :d2, updated_at = :at2, updated_by = :by2',
-                    [
-                        ':id'  => self::DRAFT_ID,
-                        ':v'   => $version,
-                        ':d'   => $json,
-                        ':at'  => $at,
-                        ':by'  => $by,
-                        ':v2'  => $version,
-                        ':d2'  => $json,
-                        ':at2' => $at,
-                        ':by2' => $by,
-                    ]
+                if (!$args->keepDraft) {
+                    // THE DRAFT BECOMES THE PUBLISHED DOCUMENT, whatever it held.
+                    // On an admin publish that is the same document; on a
+                    // roll-back it is not, and any unpublished edits in the editor
+                    // are replaced. That is still the right shape - a draft left
+                    // holding the bad prices would put them back on the next
+                    // publish - but it is not "nothing is lost", so the roll-back
+                    // question counts those edits and says so before the owner
+                    // confirms (`Http\Admin\Notice::rollbackQuestion()`).
+                    Db::exec(
+                        'INSERT INTO draft (id, base_version, data, updated_at, updated_by) VALUES (:id, :v, :d, :at, :by)'
+                        . ' ON DUPLICATE KEY UPDATE base_version = :v2, data = :d2, updated_at = :at2, updated_by = :by2',
+                        [
+                            ':id'  => self::DRAFT_ID,
+                            ':v'   => $version,
+                            ':d'   => $json,
+                            ':at'  => $at,
+                            ':by'  => $by,
+                            ':v2'  => $version,
+                            ':d2'  => $json,
+                            ':at2' => $at,
+                            ':by2' => $by,
+                        ]
+                    );
+
+                    // The draft now IS the published document, so a note about
+                    // how it was once carried onto an older version is history.
+                    self::clearRebaseState();
+                }
+
+                return new PublishedVersion(
+                    Migrate::migrate(json_decode($json, true) ?: []),
+                    $version,
+                    self::iso($at),
+                    self::ratesAt($version, $args->source),
                 );
-
-                // The draft now IS the published document, so a note about
-                // how it was once carried onto an older version is history.
-                self::clearRebaseState();
-
-                return new PublishedVersion(Migrate::migrate(json_decode($json, true) ?: []), $version, self::iso($at));
             });
         } finally {
             self::unlock();
@@ -866,7 +874,23 @@ final class Repo
             Migrate::migrate(Db::unjson($row['data'])),
             (int) $row['version'],
             self::iso($row['published_at']),
+            self::ratesAt((int) $row['version'], (string) ($row['source'] ?? '')),
         );
+    }
+
+    /** When the prices in this version went live, or "" when this publish was the one that set them. */
+    private static function ratesAt(int $version, string $source): string
+    {
+        if ($source !== PublishArgs::PAGES) {
+            return '';
+        }
+
+        $at = Db::value(
+            'SELECT published_at FROM versions WHERE version < ? AND source <> ? ORDER BY version DESC LIMIT 1',
+            [$version, PublishArgs::PAGES]
+        );
+
+        return $at === null ? '' : self::iso($at);
     }
 
     /** @param array<string,mixed> $row */

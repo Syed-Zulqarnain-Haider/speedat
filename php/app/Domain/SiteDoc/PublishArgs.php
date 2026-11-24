@@ -11,6 +11,9 @@ namespace Speedat\Domain\SiteDoc;
  */
 final class PublishArgs
 {
+    /** The `source` of a publish that changed only the words on the pages. */
+    public const PAGES = 'pages';
+
     /** @param array<array-key,mixed>|null $raw */
     public function __construct(
         public readonly SiteData $data,
@@ -55,6 +58,18 @@ final class PublishArgs
          * when it is no longer the row the card described.
          */
         public readonly ?string $expectedRevision = null,
+        /**
+         * Leave the draft row exactly as it is.
+         *
+         * A publish normally makes the draft the document it published. One
+         * that did not come from the draft - the website-text screen, which
+         * builds its document from the LIVE version - must not: the draft is
+         * where the owner's unpublished prices are, and replacing it would
+         * throw them away. Left alone it is simply one version behind, and
+         * `Repo::catchUpDraft()` carries the owner's edits onto the new
+         * version the next time the editor opens or the cron runs.
+         */
+        public readonly bool $keepDraft = false,
     ) {
     }
 }

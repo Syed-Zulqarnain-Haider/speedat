@@ -94,7 +94,7 @@ $brandPlate = '<span class="brand-plate">'
     <?= $this->partial('admin/partials/nav', ['shell' => $shell, 'variant' => 'side']) ?>
     <div class="admin-user">
       <span class="mono admin-email" title="<?= e($shell->userEmail) ?>"><?= e($shell->userEmail) ?></span>
-      <span class="tag"><?= e($shell->userRole) ?></span>
+      <span class="tag"><?= e(\Speedat\View\Admin\Shell::roleName($shell->userRole)) ?></span>
       <div class="admin-user-actions">
         <a class="btn outline small" href="<?= e($this->url(\Speedat\View\Admin\Routes::SITE)) ?>">View website &#8599;</a>
         <?= $themeToggle ?>

@@ -53,7 +53,7 @@ final class Notice
      */
     private const NUMERIC = [
         'published', 'restored', 'conflict', 'bulk', 'kept', 'lead',
-        'base', 'rollback', 'rolledback',
+        'base', 'rollback', 'rolledback', 'pageslive',
     ];
 
     /** The codes that are simply present or absent. */
@@ -64,6 +64,7 @@ final class Notice
         // threw away - the toast has to say so. `noname`: a country's name box
         // arrived empty, and the stored name was kept.
         'replaced', 'noname',
+        'useradded', 'userremoved',
     ];
 
     /** `err=<word>` and the sentence each word means. */
@@ -77,6 +78,12 @@ final class Notice
         'novalue'    => 'Nothing was changed: enter a value first.',
         'noservice'  => 'Nothing was changed: choose at least one service.',
         'nodest'     => 'That country is not in the editor.',
+        'bademail'   => 'That is not an email address. Type the Google address they sign in with.',
+        'userexists' => 'That address can already sign in, so nothing was changed.',
+        'nouser'     => 'That is not a marketer who can sign in, so nothing was changed.',
+        'nomarketer' => 'The marketer could not be added. If this is the first one, import 0004_marketer_role.sql in phpMyAdmin, then try again.',
+        'pagesbase'  => 'This page was opened at a version that cannot be found. Copy your text, reload the page and make the change again.',
+        'pagesraced' => 'Somebody published at the same moment. Your text is still in the boxes: press Publish text again.',
         'nolead'     => 'That enquiry is not in the inbox any more.',
         'noshipment' => 'That shipment does not exist.',
         'badstatus'  => 'That is not a status a shipment can move to from where it is now.',
@@ -160,6 +167,10 @@ final class Notice
         }
 
         return match (true) {
+            self::number($q, 'pageslive') > 0 => 'Published - version ' . self::number($q, 'pageslive') . ' is live',
+            self::flag($q, 'useradded')     => 'Marketer added',
+            self::flag($q, 'userremoved')   => 'Marketer removed and signed out',
+            self::flag($q, 'nochange')      => 'Nothing was changed',
             self::flag($q, 'discarded')     => 'Draft discarded',
             self::flag($q, 'added')         => 'Country added',
             self::flag($q, 'removed')       => 'Country removed',

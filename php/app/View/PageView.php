@@ -193,7 +193,7 @@ final class PageView
         }
 
         if ($doc->version() > 0) {
-            $when = Format::fmtDate($doc->publishedAt());
+            $when = Format::fmtDate($doc->ratesAt());
             if ($when !== '') {
                 $facts[] = FootFact::plain('Rates updated ' . $when);
             }

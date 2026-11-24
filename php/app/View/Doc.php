@@ -104,6 +104,12 @@ final class Doc
         return $this->published->publishedAt;
     }
 
+    /** When the prices last went live; a words-only publish does not move it. */
+    public function ratesAt(): string
+    {
+        return $this->published->ratesAt();
+    }
+
     public function holdOn(): bool
     {
         return $this->hold->on;

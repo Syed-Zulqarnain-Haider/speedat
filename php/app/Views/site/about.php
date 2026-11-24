@@ -18,7 +18,7 @@ declare(strict_types=1);
 $this->layout('site/layout', ['page' => $view->page]);
 ?>
 <section class="page">
-<?= $this->partial('site/partials/page-head', ['title' => $view->title]) ?>
+<?= $this->partial('site/partials/page-head', ['title' => $view->doc->content()->aboutH1 !== '' ? $view->doc->content()->aboutH1 : $view->title]) ?>
 <?php if ($view->story !== []) { ?>
   <div class="story">
 <?php foreach ($view->story as $paragraph) { ?>

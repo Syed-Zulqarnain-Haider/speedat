@@ -65,6 +65,10 @@ final class Schema
             'ctaTitle' => 120, 'ctaSub' => 300, 'contactLede' => 400, 'faqLede' => 300,
             'story' => 6000, 'mission' => 600, 'vision' => 600, 'values' => 3000,
             'address' => 300, 'hours' => 120, 'mapUrl' => 500, 'phone2' => 80, 'faq' => 12000,
+            'seoHomeTitle' => 120, 'seoHomeDesc' => 300, 'seoServicesTitle' => 120, 'seoServicesDesc' => 300,
+            'seoAboutTitle' => 120, 'seoAboutDesc' => 300, 'seoContactTitle' => 120, 'seoContactDesc' => 300,
+            'seoFaqTitle' => 120, 'seoFaqDesc' => 300,
+            'servicesH1' => 120, 'aboutH1' => 120, 'contactH1' => 120, 'faqH1' => 120,
         ],
         'settings' => [
             'currency' => 8, 'workingDays' => 120, 'holidays' => 4000, 'addons' => 2000, 'disclaimer' => 2000,
@@ -142,8 +146,20 @@ final class Schema
         }
 
         foreach ($caps as $field => $max) {
+            // The SEO fields arrived after documents were already stored, so a
+            // missing one is an old document and not a broken one.
+            if ($path === 'content' && in_array($field, Content::SEO_FIELDS, true) && !array_key_exists($field, $value)) {
+                continue;
+            }
+
             self::text($issues, $path . '.' . $field, $value, $field, $max);
         }
+    }
+
+    /** How many characters a content field may hold, or 0 for a field there is not. */
+    public static function contentCap(string $field): int
+    {
+        return self::CAPS['content'][$field] ?? 0;
     }
 
     /**

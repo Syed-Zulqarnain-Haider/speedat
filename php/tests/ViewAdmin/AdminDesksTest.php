@@ -443,7 +443,7 @@ final class AdminDesksTest extends AdminViewTestCase
         $this->assertStringContains($this->securityPage()->adminsMeta(), $html);
         $this->assertStringContains('2 admins', $this->securityPage()->adminsMeta());
         $this->assertStringContains('signed in as boss@speedat.test', $this->securityPage()->adminsMeta());
-        $this->assertStringContains('<span class="tag role">owner</span>', $html);
+        $this->assertStringContains('<span class="tag role">Admin</span>', $html);
         $this->assertStringContains('<span class="tag">2FA on</span>', $html);
         $this->assertStringContains('<span class="meta">2FA off</span>', $html);
 

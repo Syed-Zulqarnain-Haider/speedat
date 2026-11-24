@@ -22,7 +22,21 @@ final class PublishedVersion
         public readonly int $version,
         /** ISO 8601 in UTC, e.g. "2026-09-27T06:00:00.000Z". */
         public readonly string $publishedAt,
+        /** When the PRICES last went live, when a words-only publish came after them; see ratesAt(). */
+        private readonly string $ratesAt = '',
     ) {
+    }
+
+    /**
+     * When the rates were last published, in the same format.
+     *
+     * Not `publishedAt`: fixing a spelling mistake publishes a version too, and
+     * it must not tell a customer the rates were updated today, or restart the
+     * clock on the office's "these prices are old" warning.
+     */
+    public function ratesAt(): string
+    {
+        return $this->ratesAt !== '' ? $this->ratesAt : $this->publishedAt;
     }
 
     /** The sample document, as the fallback serves it. */

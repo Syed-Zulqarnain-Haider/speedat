@@ -55,7 +55,9 @@ final class Live
             $document    = isset($cached['doc']) && is_array($cached['doc']) ? $cached['doc'] : null;
 
             if ($document !== null) {
-                return self::$site = new PublishedVersion(Migrate::migrate($document), $version, $publishedAt);
+                $ratesAt = isset($cached['ratesAt']) ? (string) $cached['ratesAt'] : '';
+
+                return self::$site = new PublishedVersion(Migrate::migrate($document), $version, $publishedAt, $ratesAt);
             }
         }
 
@@ -76,6 +78,7 @@ final class Live
         self::write('site', [
             'version'     => $live->version,
             'publishedAt' => $live->publishedAt,
+            'ratesAt'     => $live->ratesAt(),
             'doc'         => $live->data->toArray(),
         ]);
 

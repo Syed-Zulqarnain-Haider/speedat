@@ -16,7 +16,7 @@ declare(strict_types=1);
 $this->layout('site/layout', ['page' => $view->page]);
 ?>
 <section class="page">
-<?= $this->partial('site/partials/page-head', ['title' => 'Questions', 'lede' => $view->lede]) ?>
+<?= $this->partial('site/partials/page-head', ['title' => $view->doc->content()->faqH1 !== '' ? $view->doc->content()->faqH1 : 'Questions', 'lede' => $view->lede]) ?>
 <?php if ($view->items !== []) { ?>
   <dl class="faq-list">
 <?php foreach ($view->items as $item) { ?>

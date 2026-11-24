@@ -43,12 +43,16 @@ $activity  = $page->activityRows();
       <h1>Security</h1>
     </div>
     <div class="topbar-right">
+      <?php if ($page->ownAccountOnly) { ?>
+      <span class="meta">signed in as <?= e($page->viewerEmail) ?></span>
+      <?php } else { ?>
       <?php if ($page->checksPass()) { ?>
       <span class="pill live"><?= e($page->checksPill()) ?></span>
       <?php } else { ?>
       <span class="pill hold"><?= e($page->checksPill()) ?></span>
       <?php } ?>
       <span class="meta"><?= e($page->adminsMeta()) ?></span>
+      <?php } ?>
     </div>
   </div>
 
@@ -119,6 +123,7 @@ $activity  = $page->activityRows();
         <?php } ?>
       </div>
 
+      <?php if (!$page->ownAccountOnly) { ?>
       <div class="panel">
         <h2 class="step">Admins</h2>
         <?php if ($admins === []) { ?>
@@ -128,7 +133,7 @@ $activity  = $page->activityRows();
           <?php foreach ($admins as $admin) { ?>
           <li>
             <span class="mono admin-email"><?= e($admin['email']) ?></span>
-            <span class="tag role"><?= e($admin['role']) ?></span>
+            <span class="tag role"><?= e(\Speedat\View\Admin\Shell::roleName($admin['role'])) ?></span>
             <?php if ($admin['totp']) { ?>
             <span class="tag">2FA on</span>
             <?php } else { ?>
@@ -141,11 +146,14 @@ $activity  = $page->activityRows();
         <?php } ?>
         <p class="hint panel-note">
           Admins live in the <code>admins</code> table and every sign-in is checked against it. Adding or removing one
-          is a database change an owner makes deliberately, not a button on this page.
+          is a database change an owner makes deliberately, not a button on this page. Marketers are added and removed
+          on the Logins page.
         </p>
       </div>
+      <?php } ?>
     </div>
 
+    <?php if (!$page->ownAccountOnly) { ?>
     <div>
       <div class="panel">
         <h2 class="step">Deployment checks</h2>
@@ -184,5 +192,6 @@ $activity  = $page->activityRows();
         <?php } ?>
       </div>
     </div>
+    <?php } ?>
   </div>
 </section>

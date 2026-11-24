@@ -65,7 +65,7 @@ $invalid = static function (string $field) use ($view, $focus): string {
 };
 ?>
 <section class="page">
-<?= $this->partial('site/partials/page-head', ['title' => 'Contact', 'lede' => $view->lede]) ?>
+<?= $this->partial('site/partials/page-head', ['title' => $view->doc->content()->contactH1 !== '' ? $view->doc->content()->contactH1 : 'Contact', 'lede' => $view->lede]) ?>
   <a class="reach-big" href="<?= e($view->waHref) ?>" target="_blank" rel="noopener"><?= $this->partial('site/partials/icon', ['id' => 'i-wa']) ?><?= e($view->waText) ?></a>
 <?php if ($view->facts !== []) { ?>
 <?= $this->partial('site/partials/facts', ['facts' => $view->facts]) ?>

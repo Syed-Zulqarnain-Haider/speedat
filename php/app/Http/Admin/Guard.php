@@ -30,8 +30,11 @@ use Speedat\View\Admin\Routes;
  *      for; `Admins` says whether that address may still sign in. Both, every
  *      request: a session minted before somebody was removed from the table is
  *      not an admin any more.
- *   2. ROLE. Owner-only actions are refused here, not in the template. Hiding a
- *      Publish button is a courtesy to an editor; this is the control.
+ *   2. ROLE. Every wrapper names the roles it lets through, and the default is
+ *      the back office (`AdminUser::STAFF`) - so a MARKETER IS REFUSED UNLESS A
+ *      ROUTE SAYS OTHERWISE, and a screen added next month is closed to them
+ *      because nobody remembered. Hiding a button is a courtesy; this is the
+ *      control.
  *   3. CSRF. `Core\Csrf::assert()`, which also checks the Origin. Without it,
  *      any page on the internet can make a signed-in owner's browser publish a
  *      price change.
@@ -81,36 +84,48 @@ final class Guard
      * Wrap a GET handler.
      *
      * @param  callable(App, AdminUser, array<string,string>): Response $handler
+     * @param  list<string>                                             $roles   who may open it
      * @return callable(App, array<string,string>): Response
      */
-    public static function page(callable $handler): callable
+    public static function page(callable $handler, array $roles = AdminUser::STAFF): callable
     {
-        return static function (App $app, array $params = []) use ($handler): Response {
+        return static function (App $app, array $params = []) use ($handler, $roles): Response {
             $admin = self::admin($app);
 
             if ($admin === null) {
                 return self::toLogin($app);
             }
+
+            // `/admin` is where every sign-in lands and what the logo links to.
+            // For a marketer that is not a screen, so it is a way to theirs.
+            if ($admin->isMarketer() && $app->request->path === Routes::RATES) {
+                return Response::redirect($app->request->basePath . Routes::PAGES, 302)->noStore();
+            }
+
+            self::assertRole($app, $admin, $roles);
 
             return $handler($app, $admin, $params);
         };
     }
 
     /**
-     * Wrap a POST handler: session, a body that arrived, CSRF, per-admin rate
-     * limit.
+     * Wrap a POST handler: session, role, a body that arrived, CSRF, per-admin
+     * rate limit.
      *
      * @param  callable(App, AdminUser, array<string,string>): Response $handler
+     * @param  list<string>                                             $roles   who may do it
      * @return callable(App, array<string,string>): Response
      */
-    public static function write(callable $handler): callable
+    public static function write(callable $handler, array $roles = AdminUser::STAFF): callable
     {
-        return static function (App $app, array $params = []) use ($handler): Response {
+        return static function (App $app, array $params = []) use ($handler, $roles): Response {
             $admin = self::admin($app);
 
             if ($admin === null) {
                 return self::toLogin($app);
             }
+
+            self::assertRole($app, $admin, $roles);
 
             // A BODY PHP THREW AWAY IS A BAD REQUEST, AND IT IS SAID HERE
             // RATHER THAN BY THE CHECK BELOW.
@@ -177,6 +192,24 @@ final class Guard
 
             return $handler($app, $admin, $params);
         });
+    }
+
+    /** @param list<string> $roles */
+    private static function assertRole(App $app, AdminUser $admin, array $roles): void
+    {
+        if (in_array($admin->role, $roles, true)) {
+            return;
+        }
+
+        Log::warn('admin_role_refused', [
+            'email' => Str::maskEmail($admin->email),
+            'role'  => $admin->role,
+            'path'  => $app->request->path,
+        ]);
+
+        throw HttpError::forbidden(
+            $admin->isMarketer() ? 'Your login can only change the website text.' : 'Only an owner can do that.'
+        );
     }
 
     /** Where an anonymous caller is sent. 302, so the browser comes back with a GET. */

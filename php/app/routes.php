@@ -42,6 +42,10 @@ declare(strict_types=1);
  *                   per-admin write limit, in that order, before the handler.
  *   Guard::owner()  the same, plus the role. Publishing, resuming prices.
  *
+ * All three let the back office through and REFUSE A MARKETER unless the route
+ * names the roles it wants (`AdminUser::WRITERS`, `AdminUser::ANYONE`). A route
+ * that says nothing is closed to them.
+ *
  * The routes NOT behind the guard are the sign-in itself, the code step, the
  * sign-out and the first-run set-up page - each with its own reason written
  * where it is registered. The set-up page is the odd one: it guards itself, and
@@ -68,10 +72,12 @@ use Speedat\Http\Admin\HoldController;
 use Speedat\Http\Admin\InboxController;
 use Speedat\Http\Admin\LoginController;
 use Speedat\Http\Admin\OpsController;
+use Speedat\Http\Admin\PagesController;
 use Speedat\Http\Admin\RatesController;
 use Speedat\Http\Admin\SecurityController;
 use Speedat\Http\Admin\SetupController;
 use Speedat\Http\Admin\ShipmentsController;
+use Speedat\Http\Admin\UsersController;
 use Speedat\Http\ContactController;
 use Speedat\Http\QuoteApiController;
 use Speedat\Http\SeoController;
@@ -92,6 +98,8 @@ return static function (Router $router): void {
     $inbox     = new InboxController();
     $shipments = new ShipmentsController();
     $analytics = new AnalyticsController();
+    $pages     = new PagesController();
+    $users     = new UsersController();
     $ops       = new OpsController();
 
     /* ------------------------------------------------------- the five pages */
@@ -326,19 +334,51 @@ return static function (Router $router): void {
         static fn (App $app, AdminUser $admin): Response => $analytics->page($app, $admin)
     ));
 
+    /* ------------------------------------------------------ website text */
+
+    // The only screen a marketer has. It publishes words and nothing else, from
+    // the live document rather than the draft - see Http\Admin\PagesController.
+    $router->get(Admin::PAGES, Guard::page(
+        static fn (App $app, AdminUser $admin): Response => $pages->page($app, $admin),
+        AdminUser::WRITERS,
+    ));
+    $router->post(Admin::PAGES_PUBLISH, Guard::write(
+        static fn (App $app, AdminUser $admin): Response => $pages->publish($app, $admin),
+        AdminUser::WRITERS,
+    ));
+
+    /* ------------------------------------------------------------ logins */
+
+    $router->get(Admin::USERS, Guard::page(
+        static fn (App $app, AdminUser $admin): Response => $users->page($app, $admin),
+        [AdminUser::OWNER],
+    ));
+    $router->post(Admin::USERS_ADD, Guard::owner(
+        static fn (App $app, AdminUser $admin): Response => $users->add($app, $admin)
+    ));
+    $router->post(Admin::USERS_REMOVE, Guard::owner(
+        static fn (App $app, AdminUser $admin): Response => $users->remove($app, $admin)
+    ));
+
     /* ---------------------------------------------------------- security */
 
+    // A person's own second factor, so every role has it. What a marketer is
+    // shown on the page is only that; the controller leaves the rest out.
     $router->get(Admin::SECURITY, Guard::page(
-        static fn (App $app, AdminUser $admin): Response => $security->page($app, $admin)
+        static fn (App $app, AdminUser $admin): Response => $security->page($app, $admin),
+        AdminUser::ANYONE,
     ));
     $router->post(Admin::TOTP_BEGIN, Guard::write(
-        static fn (App $app, AdminUser $admin): Response => $security->begin($app, $admin)
+        static fn (App $app, AdminUser $admin): Response => $security->begin($app, $admin),
+        AdminUser::ANYONE,
     ));
     $router->post(Admin::TOTP_CONFIRM, Guard::write(
-        static fn (App $app, AdminUser $admin): Response => $security->confirm($app, $admin)
+        static fn (App $app, AdminUser $admin): Response => $security->confirm($app, $admin),
+        AdminUser::ANYONE,
     ));
     $router->post(Admin::TOTP_DISABLE, Guard::write(
-        static fn (App $app, AdminUser $admin): Response => $security->disable($app, $admin)
+        static fn (App $app, AdminUser $admin): Response => $security->disable($app, $admin),
+        AdminUser::ANYONE,
     ));
 
     /* ------------------------------------------------------ operational */

@@ -19,7 +19,7 @@ declare(strict_types=1);
 $this->layout('site/layout', ['page' => $view->page]);
 ?>
 <section class="page">
-<?= $this->partial('site/partials/page-head', ['title' => 'Services', 'lede' => $view->lede]) ?>
+<?= $this->partial('site/partials/page-head', ['title' => $view->doc->content()->servicesH1 !== '' ? $view->doc->content()->servicesH1 : 'Services', 'lede' => $view->lede]) ?>
 <?php if ($view->items !== []) { ?>
   <ul class="svc-list">
 <?php foreach ($view->items as $item) { ?>

@@ -32,6 +32,7 @@ final class ContentFields
         $c = static fn (string $key): string => $site->content($key);
 
         return [
+            self::seoGroup($site, $readOnly),
             ['heading' => 'Home', 'rows' => [
                 ['type' => 'grid2', 'fields' => [
                     Field::text('content[heroTitle]', 'Headline (blank = automatic)', $c('heroTitle'), '', self::headlineHint($c('heroTitle')), 200, $readOnly),
@@ -110,6 +111,112 @@ final class ContentFields
                 ]],
             ]],
         ];
+    }
+
+    /**
+     * Words in the record that are facts about the business rather than copy:
+     * where the office is, when it is open, how to ring it. They are the
+     * owner's, and are not on the website-text screen.
+     */
+    private const OWNER_ONLY = ['address', 'hours', 'phone2', 'mapUrl'];
+
+    /**
+     * The groups as the website-text screen draws them: search titles first,
+     * and without the owner's own fields.
+     *
+     * @return list<array{heading:string,rows:list<array{type:string,fields:list<Field>}>}>
+     */
+    public static function pageGroups(Site $site): array
+    {
+        $out = [];
+
+        foreach (self::groups($site) as $group) {
+            $rows = [];
+            foreach ($group['rows'] as $row) {
+                $fields = array_values(array_filter(
+                    $row['fields'],
+                    static fn (Field $f): bool => !in_array(self::key($f), self::OWNER_ONLY, true),
+                ));
+                if ($fields !== []) {
+                    $rows[] = ['type' => $row['type'], 'fields' => $fields];
+                }
+            }
+            if ($rows !== []) {
+                $out[] = ['heading' => $group['heading'], 'rows' => $rows];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Every field the website-text screen may write, by its name in the
+     * document. THIS LIST IS THE PERMISSION - `Http\Admin\PagesForm` writes
+     * nothing that is not on it - and it is made from what the screen draws, so
+     * the two cannot differ.
+     *
+     * @return array<string,Field>
+     */
+    public static function pageFields(): array
+    {
+        $out = [];
+
+        foreach (self::pageGroups(Site::fromArray([])) as $group) {
+            foreach ($group['rows'] as $row) {
+                foreach ($row['fields'] as $field) {
+                    $out[self::key($field)] = $field;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /** `content[heroTitle]` -> `heroTitle`. */
+    private static function key(Field $field): string
+    {
+        return preg_match('/^content\[([A-Za-z0-9]+)\]$/', $field->name, $m) === 1 ? $m[1] : '';
+    }
+
+    /**
+     * On-page SEO, page by page: the title and the sentence a search engine
+     * shows, and the page's own heading. Blank is always "as it is now".
+     *
+     * @return array{heading:string,rows:list<array{type:string,fields:list<Field>}>}
+     */
+    private static function seoGroup(Site $site, bool $readOnly): array
+    {
+        $rows = [];
+
+        foreach (['Home' => 'Home', 'Services' => 'Services', 'About' => 'About', 'Contact' => 'Contact', 'Faq' => 'FAQ'] as $key => $page) {
+            $title = 'seo' . $key . 'Title';
+            $desc  = 'seo' . $key . 'Desc';
+            $h1    = strtolower($key) . 'H1';
+
+            $fields = [
+                Field::text('content[' . $title . ']', $page . ': Google title (blank = automatic)', $site->content($title), '', self::lengthHint($site->content($title), 60), 120, $readOnly),
+                Field::text('content[' . $desc . ']', $page . ': Google description (blank = automatic)', $site->content($desc), '', self::lengthHint($site->content($desc), 160), 300, $readOnly),
+            ];
+            if ($key !== 'Home') {
+                $fields[] = Field::text('content[' . $h1 . ']', $page . ': heading on the page (blank = automatic)', $site->content($h1), '', '', 120, $readOnly);
+            }
+
+            $rows[] = ['type' => 'grid2', 'fields' => $fields];
+        }
+
+        return ['heading' => 'Search engines (SEO)', 'rows' => $rows];
+    }
+
+    /** "54 of 60 characters", or what happens past the number. */
+    private static function lengthHint(string $text, int $best): string
+    {
+        $len = mb_strlen(trim($text));
+
+        return match (true) {
+            $len === 0    => 'Best under ' . $best . ' characters.',
+            $len <= $best => $len . ' of ' . $best . ' characters.',
+            default       => $len . ' characters: Google usually cuts it at about ' . $best . '.',
+        };
     }
 
     /**
