@@ -133,7 +133,7 @@ final class ErrorPage
                 : ErrorView::failed(
                     $page,
                     $error !== null && $status >= 400 && $status < 500 ? $message : ErrorView::ERROR_LINE,
-                    self::isAdmin($app) ? AdminRoutes::RATES : '',
+                    self::backTo($app),
                 );
 
             return $app->page('site/error', ['view' => $view], $status);
@@ -151,12 +151,18 @@ final class ErrorPage
         return Response::text($message . "\n", $status);
     }
 
-    /** Under `/admin`, normalised the same way wantsJson() reads `/api`. */
-    private static function isAdmin(App $app): bool
+    /** The front page of the back-office area this path is in, "" on a customer page. Normalised as wantsJson() reads `/api`. */
+    private static function backTo(App $app): string
     {
         $path = Url::normalise($app->request->path);
 
-        return $path === AdminRoutes::RATES || str_starts_with($path, AdminRoutes::RATES . '/');
+        foreach ([AdminRoutes::RATES, AdminRoutes::MARKETING] as $area) {
+            if ($path === $area || str_starts_with($path, $area . '/')) {
+                return $area;
+            }
+        }
+
+        return '';
     }
 
     /**

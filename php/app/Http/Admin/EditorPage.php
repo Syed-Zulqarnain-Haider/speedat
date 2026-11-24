@@ -178,7 +178,7 @@ final class EditorPage
 
         $diff     = Diff::of($live->data, $draft->data);
         $rebased  = Repo::rebaseNote();
-        $versions = Repo::listVersions(self::HISTORY);
+        $versions = Repo::history(self::HISTORY, self::HISTORY);
         $hold     = Live::hold();
 
         $filter = $app->request->query('q', '', 80);
@@ -239,7 +239,7 @@ final class EditorPage
             // carrier as the rate, beside a download button that said
             // otherwise. The draft is still exportable, at `?draft=1`, where
             // it says so in the file. No BOM here - see `Csv::BOM`.
-            csv: Csv::document(Csv::liveComment($live->version, $live->publishedAt, Clock::utcNow()), $liveSite),
+            csv: Csv::document(Csv::liveComment($live->version, $live->ratesAt(), Clock::utcNow()), $liveSite),
             review: $withReview ? self::review($app, $draft, $live, $diff, $hold->on) : null,
             publishedNotice: $noticeText,
             publishedNoticeKind: $noticeKind,
@@ -297,7 +297,7 @@ final class EditorPage
 
         return new RollbackAsk(
             version: $version,
-            question: Notice::rollbackQuestion($app, $draftChanges),
+            question: Notice::rollbackQuestion($app, $draftChanges, Repo::pagesSince($version)),
             problems: $old === null ? [] : Validate::errors($old->data),
             holdOn: $holdOn,
             unknown: $old === null,

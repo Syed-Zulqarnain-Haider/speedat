@@ -19,8 +19,8 @@ use Speedat\Domain\Auth\FirebaseToken;
 use Speedat\Domain\Auth\FirebaseTokenError;
 use Speedat\Domain\Auth\GoogleCertificates;
 use Speedat\Domain\SiteDoc\Live;
+use Speedat\View\Admin\Door;
 use Speedat\View\Admin\LoginPage;
-use Speedat\View\Admin\Routes;
 
 /**
  * Getting in: Google or a password, then the six-digit code.
@@ -57,6 +57,11 @@ use Speedat\View\Admin\Routes;
  */
 final class LoginController
 {
+    /** @param Door $door which of the two sign-in pages this is */
+    public function __construct(private readonly Door $door)
+    {
+    }
+
     /** Attempts per account per window. The per-address bucket is this times four. */
     private const ACCOUNT_ATTEMPTS = 10;
 
@@ -100,11 +105,12 @@ final class LoginController
         // Somebody who is already in does not need this page, and a login form
         // rendered under a live session is how a second session gets started by
         // accident.
-        if (Guard::admin($app) !== null) {
-            return Response::redirect($app->request->basePath . Routes::RATES, 302)->noStore();
+        $signedIn = Guard::admin($app);
+        if ($signedIn !== null) {
+            return Response::redirect($app->request->basePath . Door::forRole($signedIn->role)->home, 302)->noStore();
         }
 
-        $pending = PendingLogin::current($app);
+        $pending = $this->pending($app);
 
         return $this->render(
             $app,
@@ -291,7 +297,7 @@ final class LoginController
     {
         $app->csrf()->assert($app->request);
 
-        $pending = PendingLogin::current($app);
+        $pending = $this->pending($app);
 
         if ($pending === null) {
             return $this->toLogin($app, ['err' => 'expired']);
@@ -361,6 +367,21 @@ final class LoginController
     /* ------------------------------------------------------------ internals */
 
     /**
+     * The half-finished sign-in this browser carries, when it belongs at THIS
+     * door. One begun at the other is not shown here, and its code is not
+     * accepted here.
+     *
+     * @return array{email:string,method:string,id:string}|null
+     */
+    private function pending(App $app): ?array
+    {
+        $pending = PendingLogin::current($app);
+        $admin   = $pending === null ? null : Admins::find($pending['email']);
+
+        return $admin !== null && $this->door->admits($admin->role) ? $pending : null;
+    }
+
+    /**
      * The first factor is in. Either the account needs a code, or it does not
      * and this is a sign-in.
      *
@@ -369,13 +390,25 @@ final class LoginController
     private function firstFactorPassed(App $app, array $row, string $method): Response
     {
         $email = (string) ($row['email'] ?? '');
+        $role  = AdminUser::role($row['role'] ?? null);
+
+        // THE WRONG DOOR. Said only here, to somebody who has just proved who
+        // they are, so it tells a stranger nothing about anybody's account.
+        if (!$this->door->admits($role)) {
+            Audit::log($email, 'login_wrong_door', ['method' => $method, 'door' => $this->door->key], $app->request);
+            Log::warn('login_wrong_door', ['email' => Str::maskEmail($email), 'door' => $this->door->key]);
+
+            return $this->render($app, LoginPage::STEP_CREDENTIALS, $this->door->isMarketing()
+                ? 'This sign-in is for marketers. Your account signs in at ' . Door::admin()->login . '.'
+                : 'This sign-in is for admins. Your account signs in at ' . Door::marketing()->login . '.', '', 403);
+        }
 
         if ((int) ($row['totp_enabled'] ?? 0) === 1) {
             PendingLogin::begin($app, $email, $method);
 
             Audit::log($email, 'login_first_factor', ['method' => $method, 'awaiting' => 'totp'], $app->request);
 
-            return Response::redirect($app->request->basePath . Routes::LOGIN, 303)->noStore();
+            return Response::redirect($app->request->basePath . $this->door->login, 303)->noStore();
         }
 
         return $this->signIn($app, $email, $method, false);
@@ -391,7 +424,7 @@ final class LoginController
 
         Audit::log($email, 'login', ['method' => $method, 'secondFactor' => $withCode], $app->request);
 
-        return Response::redirect($app->request->basePath . Routes::RATES, 303)->noStore();
+        return Response::redirect($app->request->basePath . $this->door->home, 303)->noStore();
     }
 
     /**
@@ -471,7 +504,7 @@ final class LoginController
 
     private function passwordsEnabled(): bool
     {
-        return Config::bool('auth.allow_password_login', false);
+        return $this->door->password !== '' && Config::bool('auth.allow_password_login', false);
     }
 
     /**
@@ -506,7 +539,7 @@ final class LoginController
     /** @param array<string,int|string|bool> $codes */
     private function toLogin(App $app, array $codes): Response
     {
-        return Response::redirect($app->request->basePath . Notice::url(Routes::LOGIN, $codes), 303)->noStore();
+        return Response::redirect($app->request->basePath . Notice::url($this->door->login, $codes), 303)->noStore();
     }
 
     private function render(App $app, string $step, string $error, string $email = '', int $status = 200): Response
@@ -551,7 +584,7 @@ final class LoginController
 
         // allowFirebaseAuth(): this page, and only this page, gets the Firebase
         // SDK's sources in its CSP - see Core\App::applySecurityHeaders().
-        return $app->page('admin/login', [
+        return $app->page($this->door->template, [
             'page'     => $page,
             'firebase' => self::firebaseConfigJson(),
             'theme'    => $app->request->cookie('theme') === 'dark' ? 'dark' : 'light',

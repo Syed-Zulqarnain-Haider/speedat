@@ -19,7 +19,8 @@ final class PublishArgs
         public readonly SiteData $data,
         /** Who published; stored in the history. */
         public readonly string $by,
-        /** "admin" | "import:<file>" | "email:<from>" | "restore:<n>" | "seed". */
+        /** "admin" | "import:<file>" | "email:<from>" | "restore:<n>" | "seed" |
+         *  "pages" and "pages:restore:<n>" (words only; see PAGES). */
         public readonly string $source,
         public readonly string $summary,
         public readonly int $changeCount = 0,

@@ -67,24 +67,18 @@ final class Shell
         // beside a link means something is waiting there, and nothing ever is:
         // the page only reads.
         //
-        // WEBSITE TEXT AND LOGINS ARE THE OWNER'S, and Website text is all a
-        // marketer has besides their own second factor. Each role is shown only
-        // what the guard will open for it.
+        // WEBSITE TEXT AND LOGINS ARE THE OWNER'S, so only an owner is shown
+        // them. A marketer is never in this frame: they have their own.
         $owner = $this->isOwner();
-        $links = $this->userRole === self::MARKETER
-            ? [
-                ['pages', 'Website text', Routes::PAGES],
-                ['security', 'Security', Routes::SECURITY],
-            ]
-            : [
-                ['rates', 'Rates', Routes::RATES],
-                ...($owner ? [['pages', 'Website text', Routes::PAGES]] : []),
-                ['inbox', 'Inbox', Routes::INBOX],
-                ['shipments', 'Shipments', Routes::SHIPMENTS],
-                ['analytics', 'Analytics', Routes::ANALYTICS],
-                ...($owner ? [['users', 'Logins', Routes::USERS]] : []),
-                ['security', 'Security', Routes::SECURITY],
-            ];
+        $links = [
+            ['rates', 'Rates', Routes::RATES],
+            ...($owner ? [['pages', 'Website text', Routes::PAGES]] : []),
+            ['inbox', 'Inbox', Routes::INBOX],
+            ['shipments', 'Shipments', Routes::SHIPMENTS],
+            ['analytics', 'Analytics', Routes::ANALYTICS],
+            ...($owner ? [['users', 'Logins', Routes::USERS]] : []),
+            ['security', 'Security', Routes::SECURITY],
+        ];
 
         $out = [];
         foreach ($links as [$key, $label, $href]) {

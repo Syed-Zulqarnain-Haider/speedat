@@ -24,12 +24,12 @@ final class Routes
     /**
      * Path prefixes that are never indexed and never listed.
      *
-     * `/admin` is the whole back office. `/api` is every machine endpoint. Both
-     * appear in robots.txt as `Disallow` and neither ever appears in the
+     * `/admin` is the whole back office, `/marketing` the marketers' own area and
+     * `/api` every machine endpoint. All appear in robots.txt as `Disallow` and none ever appears in the
      * sitemap - RobotsTest and SitemapTest assert both directions, because
      * "excluded" that is only true in one of the two files is not excluded.
      */
-    public const DISALLOWED = ['/admin', '/api'];
+    public const DISALLOWED = ['/admin', '/marketing', '/api'];
 
     /** @return list<Route> in the order the sitemap prints them */
     public static function all(): array

@@ -15,7 +15,7 @@ namespace Speedat\Domain\Seo;
  *
  * robots.txt IS NOT A SECURITY CONTROL and this file is not treated as one.
  * It is a published list of the paths worth attacking, which is exactly why
- * the only two entries are the two prefixes that are already obvious from any
+ * the only entries are the prefixes that are already obvious from any
  * link on the site, and why the admin is protected by a server-side session
  * check on every route rather than by this. The `Disallow` lines are here to
  * keep an admin login form out of the index, not to keep anyone out of it.
@@ -80,7 +80,7 @@ final class Robots
         }
 
         // The named AI crawlers, welcomed onto the public site and kept out of
-        // the same two prefixes as everyone else. robots.txt is not a security
+        // the same prefixes as everyone else. robots.txt is not a security
         // control (the admin is guarded server-side on every route); these
         // Disallow lines only keep a login form and the machine endpoints out
         // of an assistant's index, they do not keep anyone out of them.

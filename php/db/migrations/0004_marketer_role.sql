@@ -13,7 +13,8 @@
 -- IF YOU EVER GO BACK TO AN OLDER RELEASE, delete the marketers FIRST:
 --     DELETE FROM admins WHERE role = 'marketer';
 --   Releases before this one read any role that is not "owner" as "editor",
---   which may edit prices and read the inbox.
+--   which may edit prices and read the inbox. They also drop the hand-written
+--   Google titles, descriptions and headings the next time anything is saved.
 
 ALTER TABLE admins
     MODIFY role ENUM('owner','editor','marketer') NOT NULL DEFAULT 'editor';

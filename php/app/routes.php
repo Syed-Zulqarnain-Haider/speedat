@@ -43,7 +43,7 @@ declare(strict_types=1);
  *   Guard::owner()  the same, plus the role. Publishing, resuming prices.
  *
  * All three let the back office through and REFUSE A MARKETER unless the route
- * names the roles it wants (`AdminUser::WRITERS`, `AdminUser::ANYONE`). A route
+ * names the roles it wants (`AdminUser::MARKETERS`). A route
  * that says nothing is closed to them.
  *
  * The routes NOT behind the guard are the sign-in itself, the code step, the
@@ -71,6 +71,7 @@ use Speedat\Http\Admin\Guard;
 use Speedat\Http\Admin\HoldController;
 use Speedat\Http\Admin\InboxController;
 use Speedat\Http\Admin\LoginController;
+use Speedat\Http\Admin\MarketingController;
 use Speedat\Http\Admin\OpsController;
 use Speedat\Http\Admin\PagesController;
 use Speedat\Http\Admin\RatesController;
@@ -82,6 +83,7 @@ use Speedat\Http\ContactController;
 use Speedat\Http\QuoteApiController;
 use Speedat\Http\SeoController;
 use Speedat\Http\SiteController;
+use Speedat\View\Admin\Door;
 use Speedat\View\Admin\Routes as Admin;
 
 return static function (Router $router): void {
@@ -90,7 +92,9 @@ return static function (Router $router): void {
     $quotes  = new QuoteApiController();
     $seo     = new SeoController();
 
-    $login     = new LoginController();
+    $login     = new LoginController(Door::admin());
+    $marketingLogin = new LoginController(Door::marketing());
+    $marketing = new MarketingController();
     $setup     = new SetupController();
     $security  = new SecurityController();
     $rates     = new RatesController();
@@ -336,15 +340,15 @@ return static function (Router $router): void {
 
     /* ------------------------------------------------------ website text */
 
-    // The only screen a marketer has. It publishes words and nothing else, from
-    // the live document rather than the draft - see Http\Admin\PagesController.
+    // The admin's. It publishes words and nothing else, from the live document
+    // rather than the draft - see Http\Admin\PagesPublisher.
     $router->get(Admin::PAGES, Guard::page(
         static fn (App $app, AdminUser $admin): Response => $pages->page($app, $admin),
-        AdminUser::WRITERS,
+        [AdminUser::OWNER],
     ));
     $router->post(Admin::PAGES_PUBLISH, Guard::write(
         static fn (App $app, AdminUser $admin): Response => $pages->publish($app, $admin),
-        AdminUser::WRITERS,
+        [AdminUser::OWNER],
     ));
 
     /* ------------------------------------------------------------ logins */
@@ -362,23 +366,51 @@ return static function (Router $router): void {
 
     /* ---------------------------------------------------------- security */
 
-    // A person's own second factor, so every role has it. What a marketer is
-    // shown on the page is only that; the controller leaves the rest out.
     $router->get(Admin::SECURITY, Guard::page(
-        static fn (App $app, AdminUser $admin): Response => $security->page($app, $admin),
-        AdminUser::ANYONE,
+        static fn (App $app, AdminUser $admin): Response => $security->page($app, $admin)
     ));
     $router->post(Admin::TOTP_BEGIN, Guard::write(
-        static fn (App $app, AdminUser $admin): Response => $security->begin($app, $admin),
-        AdminUser::ANYONE,
+        static fn (App $app, AdminUser $admin): Response => $security->begin($app, $admin)
     ));
     $router->post(Admin::TOTP_CONFIRM, Guard::write(
-        static fn (App $app, AdminUser $admin): Response => $security->confirm($app, $admin),
-        AdminUser::ANYONE,
+        static fn (App $app, AdminUser $admin): Response => $security->confirm($app, $admin)
     ));
     $router->post(Admin::TOTP_DISABLE, Guard::write(
+        static fn (App $app, AdminUser $admin): Response => $security->disable($app, $admin)
+    ));
+
+    /* --------------------------------------------------- the marketers' area */
+
+    // Their own sign-in, their own screens, nothing shared with /admin but the
+    // guard, the sessions and the table. See View\Admin\Door.
+    $router->get(Admin::MARKETING_LOGIN, static fn (App $app): Response => $marketingLogin->form($app));
+    $router->post(Admin::MARKETING_LOGIN_GOOGLE, static fn (App $app): Response => $marketingLogin->google($app));
+    $router->post(Admin::MARKETING_LOGIN_CODE, static fn (App $app): Response => $marketingLogin->code($app));
+    $router->post(Admin::MARKETING_LOGOUT, static fn (App $app): Response => $marketingLogin->logout($app));
+
+    $router->get(Admin::MARKETING, Guard::page(
+        static fn (App $app, AdminUser $admin): Response => $marketing->page($app, $admin),
+        AdminUser::MARKETERS,
+    ));
+    $router->post(Admin::MARKETING_PUBLISH, Guard::write(
+        static fn (App $app, AdminUser $admin): Response => $marketing->publish($app, $admin),
+        AdminUser::MARKETERS,
+    ));
+    $router->get(Admin::MARKETING_SECURITY, Guard::page(
+        static fn (App $app, AdminUser $admin): Response => $security->page($app, $admin),
+        AdminUser::MARKETERS,
+    ));
+    $router->post(Admin::MARKETING_TOTP_BEGIN, Guard::write(
+        static fn (App $app, AdminUser $admin): Response => $security->begin($app, $admin),
+        AdminUser::MARKETERS,
+    ));
+    $router->post(Admin::MARKETING_TOTP_CONFIRM, Guard::write(
+        static fn (App $app, AdminUser $admin): Response => $security->confirm($app, $admin),
+        AdminUser::MARKETERS,
+    ));
+    $router->post(Admin::MARKETING_TOTP_DISABLE, Guard::write(
         static fn (App $app, AdminUser $admin): Response => $security->disable($app, $admin),
-        AdminUser::ANYONE,
+        AdminUser::MARKETERS,
     ));
 
     /* ------------------------------------------------------ operational */

@@ -46,7 +46,7 @@ $this->layout('admin/layouts/shell', ['title' => 'Logins', 'shell' => $shell, 't
         </label>
         <button class="btn primary" type="submit" data-once data-busy-text="Adding&#8230;">Add marketer</button>
       </div>
-      <p class="hint">Type it exactly as Google shows it, dots included. They sign in at <?= e($this->url(Routes::LOGIN)) ?> with Continue with Google; there is no password to send.</p>
+      <p class="hint">Type it exactly as Google shows it, dots included. They sign in at <strong><?= e($this->url(Routes::MARKETING_LOGIN)) ?></strong> with Continue with Google; there is no password to send.</p>
     </form>
   </div>
 

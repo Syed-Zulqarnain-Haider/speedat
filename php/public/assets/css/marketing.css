@@ -1,0 +1,354 @@
+/* =====================================================================
+   marketing.css - the marketers' area (/marketing). Their own frame: a top
+   bar, one page at a time, a publish bar that stays in reach. Built on the
+   same tokens as the site, scoped under .mk-body so it can touch nothing
+   else. Everything is at least 14px and every control 48px.
+   ===================================================================== */
+.mk-body {
+  --tap: 48px;
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--paper-2, #f5f3ee);
+  color: var(--ink);
+}
+.mk-skip {
+  position: absolute;
+  inset-inline-start: 8px;
+  top: -60px;
+  padding: 12px 16px;
+  background: var(--ink);
+  color: var(--surface);
+  z-index: 5;
+}
+.mk-skip:focus {
+  top: 8px;
+}
+.mk-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 4px solid var(--brand-yellow);
+}
+.mk-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+.mk-brand img {
+  height: 28px;
+  width: auto;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--brand-yellow);
+}
+.mk-nav {
+  display: flex;
+  gap: 4px;
+}
+.mk-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 8px;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+.mk-nav a:hover,
+.mk-tabs a:hover {
+  text-decoration: underline;
+}
+.mk-nav a[aria-current] {
+  background: var(--paper-2, #f5f3ee);
+}
+.mk-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-inline-start: auto;
+  min-width: 0;
+}
+.mk-user .btn {
+  min-height: 48px;
+}
+.mk-email {
+  max-width: 30ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.mk-main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+.mk-main:focus {
+  outline: none;
+}
+.mk-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.mk-head h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1.15;
+}
+.mk-lede {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+.mk-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  margin: 0 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+.mk-tabs a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 16px;
+  border-bottom: 3px solid transparent;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mk-tabs a[aria-current] {
+  border-bottom-color: var(--ink);
+}
+.mk-body .notice {
+  margin: 0 0 16px;
+}
+.mk-card {
+  margin: 0 0 20px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  min-inline-size: 0;
+}
+.mk-card legend {
+  padding: 0 8px;
+  margin-inline-start: -8px;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.mk-field {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 24px;
+}
+.mk-card .mk-field:last-child {
+  margin-bottom: 0;
+}
+.mk-field label {
+  font-weight: 600;
+}
+.mk-field input,
+.mk-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 12px;
+  border: 1px solid #767676;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: max(1rem, 1em);
+  line-height: 1.5;
+}
+.mk-field textarea {
+  resize: vertical;
+}
+.mk-body :focus-visible {
+  outline: 3px solid #0b57d0;
+  outline-offset: 2px;
+}
+:root[data-theme="dark"] .mk-body :focus-visible {
+  outline-color: #8ab4f8;
+}
+.mk-body .hint {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.mk-body .hint.over {
+  color: var(--orange-ink);
+  font-weight: 600;
+}
+.mk-serp {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 24px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.mk-serp-url {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.mk-serp-title {
+  color: #1a0dab;
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+:root[data-theme="dark"] .mk-serp-title {
+  color: #8ab4f8;
+}
+.mk-serp-desc {
+  line-height: 1.5;
+}
+.mk-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 14px 20px;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 -6px 20px -14px rgba(10, 26, 51, 0.5);
+}
+.mk-form {
+  scroll-padding-bottom: 120px;
+}
+.mk-state {
+  margin: 0;
+  color: var(--muted);
+}
+.mk-state.dirty {
+  color: var(--ink);
+  font-weight: 600;
+}
+.mk-recent {
+  margin-top: 32px;
+}
+.mk-recent h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  margin: 0 0 8px;
+}
+.mk-recent ul {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.mk-recent li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.mk-recent time {
+  color: var(--muted);
+}
+.mk-narrow {
+  max-width: 560px;
+}
+.mk-narrow .btn,
+.mk-narrow input {
+  min-height: 48px;
+}
+
+/* ---------- sign in ---------- */
+.mk-login {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 24px 16px;
+  box-sizing: border-box;
+}
+.mk-login-card {
+  width: min(420px, 100%);
+  box-sizing: border-box;
+  padding: 32px 24px;
+  border-top: 6px solid var(--brand-yellow);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 20px 50px -30px rgba(10, 26, 51, 0.5);
+}
+.mk-login-logo {
+  height: 36px;
+  width: auto;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--brand-yellow);
+}
+.mk-login-tag {
+  margin: 20px 0 0;
+  font-weight: 700;
+  color: var(--muted);
+}
+.mk-login-card h1 {
+  margin: 4px 0 8px;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+.mk-login-card form {
+  margin: 20px 0 12px;
+}
+.mk-login-card .btn {
+  width: 100%;
+  min-height: 48px;
+}
+.mk-login-card .notice {
+  margin: 16px 0;
+}
+.mk-login-back {
+  margin: 24px 0 0;
+}
+.mk-login-back a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--ink);
+  font-weight: 600;
+}
+@media (max-width: 560px) {
+  .mk-user {
+    margin-inline-start: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .mk-bar .btn {
+    width: 100%;
+  }
+  /* The resting line is a comfort, not news: on a phone the bar is the button
+     alone until there is something to publish. */
+  .mk-state:not(.dirty) {
+    display: none;
+  }
+  .mk-bar {
+    padding-block: 10px;
+  }
+  .mk-card {
+    padding: 16px;
+  }
+}

@@ -92,17 +92,61 @@ final class Repo
 
         $out = [];
         foreach ($rows as $row) {
-            $out[] = new VersionMeta(
-                version: (int) $row['version'],
-                publishedAt: self::iso($row['published_at']),
-                publishedBy: (string) $row['published_by'],
-                source: (string) $row['source'],
-                summary: (string) $row['summary'],
-                changeCount: (int) $row['change_count'],
-            );
+            $out[] = self::toMeta($row);
         }
 
         return $out;
+    }
+
+    /**
+     * The history list: the newest versions of any kind, and always the newest
+     * RATES publishes among them. A busy afternoon of wording changes must not
+     * push the last set of prices - and its Roll back button - off the screen.
+     *
+     * @return list<VersionMeta> newest first
+     */
+    public static function history(int $limit, int $rates): array
+    {
+        $out = [];
+        foreach (self::listVersions($limit) as $meta) {
+            $out[$meta->version] = $meta;
+        }
+
+        $rows = Db::all(
+            'SELECT version, published_at, published_by, source, summary, change_count'
+            . ' FROM versions WHERE source NOT LIKE ? ORDER BY version DESC LIMIT ?',
+            [PublishArgs::PAGES . '%', max(1, min($rates, 100))]
+        );
+        foreach ($rows as $row) {
+            $out[(int) $row['version']] ??= self::toMeta($row);
+        }
+        krsort($out);
+
+        return array_values($out);
+    }
+
+    /**
+     * The newest website-text publishes, for the people who write them.
+     *
+     * @return list<VersionMeta> newest first
+     */
+    public static function pagesHistory(int $limit): array
+    {
+        return array_map(self::toMeta(...), Db::all(
+            'SELECT version, published_at, published_by, source, summary, change_count'
+            . ' FROM versions WHERE source LIKE ? ORDER BY version DESC LIMIT ?',
+            [PublishArgs::PAGES . '%', max(1, min($limit, 100))]
+        ));
+    }
+
+    /** How many website-text publishes would be undone by going back to this version. */
+    public static function pagesSince(int $version): int
+    {
+        return (int) Db::value(
+            'SELECT COUNT(*) FROM versions WHERE version > ? AND source LIKE ?',
+            [$version, PublishArgs::PAGES . '%'],
+            0
+        );
     }
 
     /* ----------------------------------------------------------- draft */
@@ -240,17 +284,18 @@ final class Repo
      */
     public static function catchUpDraft(int $wait = self::LOCK_TIMEOUT): ?RebaseNote
     {
-        $behind = Db::one('SELECT d.base_version AS base, (SELECT MAX(version) FROM versions) AS live FROM draft d WHERE d.id = ?', [self::DRAFT_ID]);
+        $behind = Db::one('SELECT d.base_version AS base, d.data, d.updated_at, d.updated_by, (SELECT MAX(version) FROM versions) AS live FROM draft d WHERE d.id = ?', [self::DRAFT_ID]);
         if ($behind === null || $behind['live'] === null || (int) $behind['base'] === (int) $behind['live']) {
             return null;
         }
 
-        // Refused before for exactly this pair of versions: nothing has changed
-        // that could make it work now, so the editor does not queue on the
+        // Refused before for exactly this pair of versions AND this draft:
+        // nothing has changed that could make it work now, so the editor does not queue on the
         // publisher's lock on every page view to be refused again. A publish,
         // discard or restore clears the refusal (see clearRebaseState()).
         $refused = self::rebaseRefused();
-        if ($refused !== null && $refused['from'] === (int) $behind['base'] && $refused['to'] === (int) $behind['live']) {
+        if ($refused !== null && $refused['from'] === (int) $behind['base'] && $refused['to'] === (int) $behind['live']
+            && $refused['revision'] === self::toDraft(['base_version' => $behind['base']] + $behind)->revision) {
             return null;
         }
 
@@ -302,27 +347,32 @@ final class Repo
                 // of the draft. The same raw-first check publishVersion() makes.
                 $baseRaw = Db::value('SELECT data FROM versions WHERE version = ?', [$draft->baseVersion]);
                 if ($baseRaw === null) {
-                    return self::refuseRebase($draft->baseVersion, $live->version, 'base_missing', 'version ' . $draft->baseVersion . ' no longer exists');
+                    return self::refuseRebase($draft, $live->version, 'base_missing', 'version ' . $draft->baseVersion . ' no longer exists');
                 }
                 $liveRaw = Db::value('SELECT data FROM versions WHERE version = ?', [$live->version]);
                 foreach (['base' => $baseRaw, 'live' => $liveRaw] as $which => $raw) {
                     $doc   = Db::unjson($raw);
                     $issue = is_array($doc) && $doc !== [] ? Schema::firstIssue(Migrate::migrate($doc)->toArray()) : 'not a document';
                     if ($issue !== null) {
-                        return self::refuseRebase($draft->baseVersion, $live->version, 'bad_' . $which, $issue);
+                        return self::refuseRebase($draft, $live->version, 'bad_' . $which, $issue);
                     }
                 }
 
                 $base   = self::getVersion($draft->baseVersion);
                 $result = Rebase::merge($base->data->toArray(), $live->data->toArray(), $draft->data->toArray());
                 $merged = SiteData::fromArray($result['merged']);
-                $issue  = Schema::firstIssue($merged->toArray()) ?? (Validate::errors($merged)[0] ?? null);
+                // Only what the MERGE got wrong. A country the owner has added
+                // and not named yet is already an error in the draft, and is
+                // the publish's to refuse; it must not leave the draft behind,
+                // where publishing it later would undo the live version.
+                $issue  = Schema::firstIssue($merged->toArray())
+                    ?? (array_values(array_diff(Validate::errors($merged), Validate::errors($draft->data)))[0] ?? null);
 
                 if ($issue !== null) {
                     // Never store a document that could not be published. The
                     // draft stays behind; the editor says why, and the review
                     // card's "started from version N" warning stands.
-                    return self::refuseRebase($draft->baseVersion, $live->version, 'merge_invalid', $issue);
+                    return self::refuseRebase($draft, $live->version, 'merge_invalid', $issue);
                 }
 
                 // Written as 'system', not as the last person who typed: the
@@ -397,7 +447,7 @@ final class Repo
      * Why the last catch-up could not be done, for exactly which versions; null
      * when nothing was refused (or it has since been cleared).
      *
-     * @return array{from:int, to:int, reason:string, detail:string}|null
+     * @return array{from:int, to:int, reason:string, detail:string, revision:string}|null
      */
     public static function rebaseRefused(): ?array
     {
@@ -412,13 +462,17 @@ final class Repo
             'to'     => (int) $raw['to'],
             'reason' => is_scalar($raw['reason'] ?? null) ? (string) $raw['reason'] : '',
             'detail' => is_scalar($raw['detail'] ?? null) ? (string) $raw['detail'] : '',
+            // The draft it was refused for. An edit to it may be the very thing
+            // that was needed - a country given its name - so it is tried again.
+            'revision' => is_scalar($raw['revision'] ?? null) ? (string) $raw['revision'] : '',
         ];
     }
 
     /** Remember a refusal (inside the catch-up's transaction), log it, and return the "nothing done" answer. */
-    private static function refuseRebase(int $from, int $to, string $reason, string $detail): ?RebaseNote
+    private static function refuseRebase(Draft $draft, int $to, string $reason, string $detail): ?RebaseNote
     {
-        self::putSetting(self::REBASE_REFUSED, ['from' => $from, 'to' => $to, 'reason' => $reason, 'detail' => $detail], Clock::sql());
+        $from = $draft->baseVersion;
+        self::putSetting(self::REBASE_REFUSED, ['from' => $from, 'to' => $to, 'reason' => $reason, 'detail' => $detail, 'revision' => $draft->revision], Clock::sql());
         Log::warn('draft_rebase_refused', ['from' => $from, 'to' => $to, 'reason' => $reason, 'detail' => $detail]);
 
         return null;
@@ -581,10 +635,18 @@ final class Repo
 
         $summary = 'Rolled back to version ' . $version;
 
+        // UNDOING WORDS IS NOT A RATES PUBLISH. When nothing but website text
+        // differs, the prices keep their own date and the draft - the owner's
+        // unpublished prices - is left where it is, exactly as it was when the
+        // words went live.
+        $wordsOnly = $live !== null
+            && $live->data->withContent($document->content)->toArray() == $document->toArray();
+
         $published = self::publishVersion(new PublishArgs(
             data: $document,
             by: $by,
-            source: 'restore:' . $version,
+            keepDraft: $wordsOnly,
+            source: ($wordsOnly ? PublishArgs::PAGES . ':' : '') . 'restore:' . $version,
             summary: $summary,
             changeCount: $diff?->count ?? 0,
             // The version being undone has to still be the live one. If
@@ -881,16 +943,29 @@ final class Repo
     /** When the prices in this version went live, or "" when this publish was the one that set them. */
     private static function ratesAt(int $version, string $source): string
     {
-        if ($source !== PublishArgs::PAGES) {
+        if (!str_starts_with($source, PublishArgs::PAGES)) {
             return '';
         }
 
         $at = Db::value(
-            'SELECT published_at FROM versions WHERE version < ? AND source <> ? ORDER BY version DESC LIMIT 1',
-            [$version, PublishArgs::PAGES]
+            'SELECT published_at FROM versions WHERE version < ? AND source NOT LIKE ? ORDER BY version DESC LIMIT 1',
+            [$version, PublishArgs::PAGES . '%']
         );
 
         return $at === null ? '' : self::iso($at);
+    }
+
+    /** @param array<string,mixed> $row */
+    private static function toMeta(array $row): VersionMeta
+    {
+        return new VersionMeta(
+            version: (int) $row['version'],
+            publishedAt: self::iso($row['published_at']),
+            publishedBy: (string) $row['published_by'],
+            source: (string) $row['source'],
+            summary: (string) $row['summary'],
+            changeCount: (int) $row['change_count'],
+        );
     }
 
     /** @param array<string,mixed> $row */

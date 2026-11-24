@@ -34,11 +34,8 @@ final class AdminUser
     /** Who works in the back office: every screen that is not told otherwise. */
     public const STAFF = [self::OWNER, self::EDITOR];
 
-    /** Anybody signed in: their own second factor, and signing out. */
-    public const ANYONE = [self::OWNER, self::EDITOR, self::MARKETER];
-
-    /** Who may publish website text. An editor may not publish anything. */
-    public const WRITERS = [self::OWNER, self::MARKETER];
+    /** The marketers' area. The back office has screens of its own for everything in it. */
+    public const MARKETERS = [self::MARKETER];
 
     public function __construct(
         public readonly string $email,

@@ -171,7 +171,7 @@ final class RatesController
                 'publishedAt' => $live->publishedAt,
             ]);
             $marker  = 'v' . $live->version;
-            $comment = Csv::liveComment($live->version, $live->publishedAt, Clock::utcNow());
+            $comment = Csv::liveComment($live->version, $live->ratesAt(), Clock::utcNow());
         }
 
         Audit::log($admin->email, 'rates_exported', [
@@ -836,6 +836,18 @@ final class RatesController
             Log::warn('publish_draft_moved', ['by' => $admin->email, 'current' => $draft->revision]);
 
             return $this->toReview($app, ['err' => 'reviewmoved']);
+        }
+
+        // A DRAFT THAT IS BEHIND IS NOT PUBLISHED: as it stands it would undo
+        // the version it has not caught up with - the marketer's words, most
+        // often. The catch-up normally ran when the card was drawn; this is for
+        // the publish that landed since. The one exception is a catch-up that
+        // was tried and refused, which the card has already explained.
+        if ($draft->baseVersion < $live->version && Repo::catchUpDraft() !== null) {
+            return $this->toReview($app, ['conflict' => $live->version]);
+        }
+        if ($draft->baseVersion < $live->version && Repo::rebaseRefused() === null) {
+            return $this->toReview($app, ['conflict' => $live->version]);
         }
 
         $goLive = $app->request->postBool('goLive');

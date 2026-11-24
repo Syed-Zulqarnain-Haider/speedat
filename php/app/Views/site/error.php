@@ -27,7 +27,7 @@ $this->layout('site/layout', ['page' => $view->page]);
 <?= $this->partial('site/partials/page-head', ['title' => $view->title, 'lede' => $view->line]) ?>
   <div class="nf-actions">
 <?php if ($view->adminHref !== '') { ?>
-    <a class="btn primary big" href="<?= e($this->url($view->adminHref)) ?>">Back to the admin</a>
+    <a class="btn primary big" href="<?= e($this->url($view->adminHref)) ?>"><?= $view->adminHref === '/marketing' ? 'Back to the marketing area' : 'Back to the admin' ?></a>
 <?php } else { ?>
     <a class="btn primary big" href="<?= e($this->url('/')) ?>">Get a price</a>
 <?php } ?>

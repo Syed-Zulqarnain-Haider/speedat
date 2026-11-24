@@ -32,7 +32,6 @@ $this->layout('admin/layouts/shell', [
     'toast' => $page->toast,
 ]);
 
-$enrolment = $page->enrolling() ? $page->enrolment : null;
 $admins    = $page->adminRows();
 $activity  = $page->activityRows();
 ?>
@@ -43,87 +42,25 @@ $activity  = $page->activityRows();
       <h1>Security</h1>
     </div>
     <div class="topbar-right">
-      <?php if ($page->ownAccountOnly) { ?>
-      <span class="meta">signed in as <?= e($page->viewerEmail) ?></span>
-      <?php } else { ?>
       <?php if ($page->checksPass()) { ?>
       <span class="pill live"><?= e($page->checksPill()) ?></span>
       <?php } else { ?>
       <span class="pill hold"><?= e($page->checksPill()) ?></span>
       <?php } ?>
       <span class="meta"><?= e($page->adminsMeta()) ?></span>
-      <?php } ?>
     </div>
   </div>
 
   <div class="grid2 sec-grid">
     <div>
-      <div class="panel totp">
-        <h2 class="step">Two-factor sign-in</h2>
-        <p class="totp-state">
-          <span class="pill<?= $page->totpEnabled ? ' live' : '' ?>"><?= $page->totpEnabled ? 'on' : 'off' ?></span>
-          <span class="meta"><?= e($page->totpSentence()) ?></span>
-        </p>
-        <?php if ($page->error !== '') { ?>
-        <div class="notice err" role="alert"><?= e($page->error) ?></div>
-        <?php } ?>
+      <?= $this->partial('admin/partials/totp', [
+          'page'    => $page,
+          'begin'   => Routes::TOTP_BEGIN,
+          'confirm' => Routes::TOTP_CONFIRM,
+          'disable' => Routes::TOTP_DISABLE,
+          'cancel'  => Routes::SECURITY,
+      ]) ?>
 
-        <?php if (!$page->totpEnabled && $enrolment === null) { ?>
-        <form method="post" action="<?= e($this->url(Routes::TOTP_BEGIN)) ?>">
-          <?= $csrf->field() ?>
-          <button class="btn primary" type="submit" data-once data-busy-text="Preparing&#8230;">Set up an authenticator app</button>
-        </form>
-        <?php } ?>
-
-        <?php if ($enrolment !== null) { ?>
-        <div class="card qr">
-          <p class="hint">Scan this with Google Authenticator, Authy or 1Password, then enter the code it shows.</p>
-          <?php if ($enrolment['qrDataUrl'] !== '') { ?>
-          <img src="<?= e($enrolment['qrDataUrl']) ?>" alt="QR code for the authenticator app" width="200" height="200">
-          <?php } else { ?>
-          <?php /* The QR is drawn with gd, which Hostinger lets an account switch
-                   off. Rather than a broken image, say so and let the key be
-                   typed - every authenticator app accepts that. */ ?>
-          <p class="hint">This server cannot draw the QR image. Add the account by hand with the key below.</p>
-          <?php } ?>
-          <details class="fold"<?= $enrolment['qrDataUrl'] === '' ? ' open' : '' ?>>
-            <summary>Cannot scan? Enter the key by hand</summary>
-            <code class="secret"><?= e($enrolment['secret']) ?></code>
-          </details>
-        </div>
-        <form method="post" action="<?= e($this->url(Routes::TOTP_CONFIRM)) ?>">
-          <?= $csrf->field() ?>
-          <div class="inline">
-            <label class="field code-field">
-              <span>6-digit code</span>
-              <input type="text" class="code" name="code" inputmode="numeric" autocomplete="one-time-code"
-                     maxlength="7" pattern="[0-9 ]{6,7}" required autofocus>
-            </label>
-            <button class="btn primary" type="submit">Turn on</button>
-            <?php /* Cancel is a link, not a button: it changes nothing except
-                     which page you are looking at, and the pending enrolment
-                     expires on its own. */ ?>
-            <a class="btn outline" href="<?= e($this->url(Routes::SECURITY)) ?>">Cancel</a>
-          </div>
-        </form>
-        <?php } ?>
-
-        <?php if ($page->totpEnabled) { ?>
-        <form method="post" action="<?= e($this->url(Routes::TOTP_DISABLE)) ?>">
-          <?= $csrf->field() ?>
-          <div class="inline">
-            <label class="field code-field">
-              <span>Current code to turn off</span>
-              <input type="text" class="code" name="code" inputmode="numeric" autocomplete="one-time-code"
-                     maxlength="7" pattern="[0-9 ]{6,7}" required>
-            </label>
-            <button class="btn danger outline" type="submit" data-confirm="Confirm turn off">Turn off two-factor</button>
-          </div>
-        </form>
-        <?php } ?>
-      </div>
-
-      <?php if (!$page->ownAccountOnly) { ?>
       <div class="panel">
         <h2 class="step">Admins</h2>
         <?php if ($admins === []) { ?>
@@ -150,10 +87,8 @@ $activity  = $page->activityRows();
           on the Logins page.
         </p>
       </div>
-      <?php } ?>
     </div>
 
-    <?php if (!$page->ownAccountOnly) { ?>
     <div>
       <div class="panel">
         <h2 class="step">Deployment checks</h2>
@@ -192,6 +127,5 @@ $activity  = $page->activityRows();
         <?php } ?>
       </div>
     </div>
-    <?php } ?>
   </div>
 </section>

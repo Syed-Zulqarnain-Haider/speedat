@@ -13,7 +13,7 @@ use Speedat\Core\Str;
 use Speedat\Domain\Auth\AuthError;
 use Speedat\Domain\Auth\Password;
 use Speedat\Domain\Notify\Notifier;
-use Speedat\View\Admin\Routes;
+use Speedat\View\Admin\Door;
 use Speedat\View\Admin\SecurityPage;
 
 /**
@@ -84,11 +84,14 @@ final class SecurityController
             admins: $admin->isMarketer() ? [] : Admins::all(),
             checks: $admin->isMarketer() ? [] : $this->checks($app, $admin),
             activity: $admin->isMarketer() ? [] : $this->activity(),
-            ownAccountOnly: $admin->isMarketer(),
             enrolment: $enrolment,
             error: Notice::error($app),
             toast: Notice::toast($app),
         );
+
+        if ($admin->isMarketer()) {
+            return $app->page('marketing/security', ['page' => $page, 'admin' => $admin, 'theme' => Screen::theme($app)]);
+        }
 
         return $app->page('admin/security', [
             'page'  => $page,
@@ -101,7 +104,7 @@ final class SecurityController
     public function begin(App $app, AdminUser $admin): Response
     {
         if ($admin->totpEnabled) {
-            return $this->back($app, ['err' => 'totp_on']);
+            return $this->back($app, $admin, ['err' => 'totp_on']);
         }
 
         try {
@@ -109,32 +112,32 @@ final class SecurityController
         } catch (AuthError $e) {
             Log::warn('totp_enrol_refused', ['email' => Str::maskEmail($admin->email), 'reason' => $e->getMessage()]);
 
-            return $this->back($app, ['err' => 'totp_on']);
+            return $this->back($app, $admin, ['err' => 'totp_on']);
         }
 
         Audit::log($admin->email, 'totp_enrol_started', [], $app->request);
 
-        return $this->back($app, ['enrol' => true]);
+        return $this->back($app, $admin, ['enrol' => true]);
     }
 
     /** POST /admin/security/totp/confirm - the code that proves the app scanned it. */
     public function confirm(App $app, AdminUser $admin): Response
     {
         if ($admin->totpEnabled) {
-            return $this->back($app, ['err' => 'totp_on']);
+            return $this->back($app, $admin, ['err' => 'totp_on']);
         }
 
         $row = Admins::row($admin->email);
 
         if ($row === null || Admins::secret($row) === '') {
-            return $this->back($app, ['err' => 'noenrol']);
+            return $this->back($app, $admin, ['err' => 'noenrol']);
         }
 
         $step = Admins::checkCode($row, $app->request->post('code', '', 12));
 
         if ($step === null) {
             // The QR is still on screen for the next attempt: ?enrol=1 stays.
-            return $this->back($app, ['err' => 'code', 'enrol' => true]);
+            return $this->back($app, $admin, ['err' => 'code', 'enrol' => true]);
         }
 
         // The step is recorded with the flag in one statement, so the code that
@@ -144,26 +147,26 @@ final class SecurityController
 
         Audit::log($admin->email, 'totp_enabled', [], $app->request);
 
-        return $this->back($app, ['totpon' => true]);
+        return $this->back($app, $admin, ['totpon' => true]);
     }
 
     /** POST /admin/security/totp/disable - and only with a current code. */
     public function disable(App $app, AdminUser $admin): Response
     {
         if (!$admin->totpEnabled) {
-            return $this->back($app, ['err' => 'totp_off']);
+            return $this->back($app, $admin, ['err' => 'totp_off']);
         }
 
         $row = Admins::row($admin->email);
 
         if ($row === null) {
-            return $this->back($app, ['err' => 'totp_off']);
+            return $this->back($app, $admin, ['err' => 'totp_off']);
         }
 
         if (!Admins::verifyCode($row, $app->request->post('code', '', 12))) {
             Audit::log($admin->email, 'totp_disable_refused', [], $app->request);
 
-            return $this->back($app, ['err' => 'code']);
+            return $this->back($app, $admin, ['err' => 'code']);
         }
 
         Admins::disableTotp($admin->email);
@@ -171,7 +174,7 @@ final class SecurityController
 
         Audit::log($admin->email, 'totp_disabled', [], $app->request);
 
-        return $this->back($app, ['totpoff' => true]);
+        return $this->back($app, $admin, ['totpoff' => true]);
     }
 
     /* ------------------------------------------------------------ internals */
@@ -303,8 +306,8 @@ final class SecurityController
     }
 
     /** @param array<string,int|string|bool> $codes */
-    private function back(App $app, array $codes): Response
+    private function back(App $app, AdminUser $admin, array $codes): Response
     {
-        return Response::redirect($app->request->basePath . Notice::url(Routes::SECURITY, $codes), 303)->noStore();
+        return Response::redirect($app->request->basePath . Notice::url(Door::forRole($admin->role)->security, $codes), 303)->noStore();
     }
 }

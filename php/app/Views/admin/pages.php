@@ -40,8 +40,6 @@ $this->layout('admin/layouts/shell', ['title' => 'Website text', 'shell' => $she
     <div class="btn-row">
       <button class="btn primary" type="submit" data-once data-busy-text="Publishing&#8230;"<?= $page->ready() ? '' : ' disabled' ?>>Publish text</button>
     </div>
-    <p class="hint"><?= $page->canRollBack
-        ? 'Every publish is a version in the rates History, with the name of who made it, and can be rolled back there.'
-        : 'Made a mistake? Change it back and publish again, or ask an admin to undo it.' ?></p>
+    <p class="hint">Every publish is a version in the rates History, with the name of who made it, and can be rolled back there.</p>
   </form>
 </section>

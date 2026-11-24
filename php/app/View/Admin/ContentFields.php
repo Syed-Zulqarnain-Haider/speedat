@@ -157,11 +157,11 @@ final class ContentFields
      *
      * @return array<string,Field>
      */
-    public static function pageFields(): array
+    public static function pageFields(?Site $site = null): array
     {
         $out = [];
 
-        foreach (self::pageGroups(Site::fromArray([])) as $group) {
+        foreach (self::pageGroups($site ?? Site::fromArray([])) as $group) {
             foreach ($group['rows'] as $row) {
                 foreach ($row['fields'] as $field) {
                     $out[self::key($field)] = $field;

@@ -11,6 +11,7 @@ use Speedat\Core\Log;
 use Speedat\Core\RateLimit;
 use Speedat\Core\Response;
 use Speedat\Core\Str;
+use Speedat\View\Admin\Door;
 use Speedat\View\Admin\Routes;
 
 /**
@@ -96,10 +97,11 @@ final class Guard
                 return self::toLogin($app);
             }
 
-            // `/admin` is where every sign-in lands and what the logo links to.
-            // For a marketer that is not a screen, so it is a way to theirs.
-            if ($admin->isMarketer() && $app->request->path === Routes::RATES) {
-                return Response::redirect($app->request->basePath . Routes::PAGES, 302)->noStore();
+            // Somebody at the other area's front page is sent to their own.
+            // Every other page that is not theirs is refused, below.
+            $own = Door::forRole($admin->role);
+            if ($own->home !== $app->request->path && in_array($app->request->path, [Routes::RATES, Routes::MARKETING], true)) {
+                return Response::redirect($app->request->basePath . $own->home, 302)->noStore();
             }
 
             self::assertRole($app, $admin, $roles);
@@ -208,13 +210,13 @@ final class Guard
         ]);
 
         throw HttpError::forbidden(
-            $admin->isMarketer() ? 'Your login can only change the website text.' : 'Only an owner can do that.'
+            $admin->isMarketer() ? 'Your login can only change the website text.' : 'Your login cannot open that.'
         );
     }
 
-    /** Where an anonymous caller is sent. 302, so the browser comes back with a GET. */
+    /** Where an anonymous caller is sent: the sign-in of the area they asked for. 302, so the browser comes back with a GET. */
     public static function toLogin(App $app): Response
     {
-        return Response::redirect($app->request->basePath . Routes::LOGIN, 302)->noStore();
+        return Response::redirect($app->request->basePath . Door::forPath($app->request->path)->login, 302)->noStore();
     }
 }

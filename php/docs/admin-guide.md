@@ -437,10 +437,15 @@ Three kinds of login, and what each may do:
 | Add and remove marketers | yes | no | no |
 
 **Adding one:** Admin, *Logins*, type their Google email exactly as Google shows
-it, *Add marketer*. They open `/admin/login` and press *Continue with Google*.
+it, *Add marketer*. They open `speedat.co/marketing/login` (their own sign-in page; yours stays
+`/admin/login`) and press *Continue with Google*.
 There is no password. Google sign-in has to be set up first
 ([firebase-setup.md](./firebase-setup.md)). Nothing is needed in the Firebase
 console for each person: the *Logins* list is what lets them in.
+
+**Their area is separate.** Marketers work at `/marketing`, one website page at a
+time, with a preview of how it looks in Google. Nothing under `/admin` opens for
+them, and the admin sign-in sends them to theirs.
 
 **Removing one** signs them out straight away.
 

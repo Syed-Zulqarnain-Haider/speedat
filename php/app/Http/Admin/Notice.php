@@ -250,7 +250,7 @@ final class Notice
      * edits in the draft that promise is only true of the published history,
      * so it says exactly that, and says what happens to the rest.
      */
-    public static function rollbackQuestion(App $app, int $draftChanges = 0): string
+    public static function rollbackQuestion(App $app, int $draftChanges = 0, int $pagesSince = 0): string
     {
         $version = self::rollbackAsked($app);
 
@@ -261,17 +261,22 @@ final class Notice
         $question = 'Put version ' . $version . ' back on the website now? '
             . 'Customers see its prices immediately, and it is published as a new version, ';
 
+        // The words go back too: a version is the whole website.
+        $words = $pagesSince > 0
+            ? ' This also undoes ' . $pagesSince . ' website text change' . ($pagesSince === 1 ? '' : 's') . ' published since then.'
+            : '';
+
         if ($draftChanges > 0) {
             return $question
                 . 'so every published version is kept and it can be undone the same way. '
                 . 'Your ' . $draftChanges . ' unpublished change' . ($draftChanges === 1 ? '' : 's')
                 . ' in the editor will be replaced by version ' . $version . '. '
-                . 'If prices are on hold they stay on hold.';
+                . 'If prices are on hold they stay on hold.' . $words;
         }
 
         return $question
             . 'so nothing is lost and it can be undone the same way. '
-            . 'If prices are on hold they stay on hold.';
+            . 'If prices are on hold they stay on hold.' . $words;
     }
 
     /**

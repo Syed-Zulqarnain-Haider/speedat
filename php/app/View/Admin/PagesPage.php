@@ -15,7 +15,6 @@ final class PagesPage
         public readonly PublishedVersion $live,
         public readonly array $typed = [],
         public readonly int $base = 0,
-        public readonly bool $canRollBack = false,
         public readonly string $error = '',
         public readonly string $toast = '',
     ) {

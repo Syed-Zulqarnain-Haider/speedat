@@ -117,7 +117,13 @@ final class Meta
 
         // A description written for the search result wins over the lede.
         $written = Str::squish($content->get('seo' . ucfirst($route->key) . 'Desc'));
-        $text    = $written !== '' ? $written : Str::squish($own);
+        if ($written !== '') {
+            // Printed as typed: where a search engine cuts it is told to the
+            // writer beside the box, and is not this file's to do for them.
+            return $written;
+        }
+
+        $text = Str::squish($own);
         if ($text === '') {
             $text = Str::squish($this->facts->siteDescription());
         }

@@ -80,7 +80,19 @@ final class Routes
      */
     public const ANALYTICS_PRESETS = [7, 30, 90];
 
-    /** Website text: the marketer's screen, and the owner's. */
+    /** The marketers' own area: see View\Admin\Door. Nothing of theirs is under /admin. */
+    public const MARKETING              = '/marketing';
+    public const MARKETING_PUBLISH      = '/marketing/publish';
+    public const MARKETING_LOGIN        = '/marketing/login';
+    public const MARKETING_LOGIN_GOOGLE = '/marketing/login/google';
+    public const MARKETING_LOGIN_CODE   = '/marketing/login/code';
+    public const MARKETING_LOGOUT       = '/marketing/logout';
+    public const MARKETING_SECURITY     = '/marketing/account';
+    public const MARKETING_TOTP_BEGIN   = '/marketing/account/totp/begin';
+    public const MARKETING_TOTP_CONFIRM = '/marketing/account/totp/confirm';
+    public const MARKETING_TOTP_DISABLE = '/marketing/account/totp/disable';
+
+    /** The admin's own Website text screen. */
     public const PAGES         = '/admin/pages';
     public const PAGES_PUBLISH = '/admin/pages/publish';
 

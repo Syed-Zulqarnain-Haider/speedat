@@ -48,10 +48,10 @@ final class UsersController
     /** POST /admin/users/add */
     public function add(App $app, AdminUser $admin): Response
     {
-        $email = Str::email($app->request->post('email', '', 190));
+        $email = Str::email($app->request->post('email', '', 400));
         $name  = Str::squish($app->request->post('name', '', 120));
 
-        if ($email === '' || !Str::isEmail($email)) {
+        if ($email === '' || !Str::isEmail($email) || mb_strlen($email) > 190) {
             return $this->back($app, ['err' => 'bademail']);
         }
 

@@ -40,9 +40,7 @@ final class Screen
     /** The admin frame for one page. */
     public static function shell(AdminUser $admin, string $current, bool $sections = false): Shell
     {
-        // A marketer has no inbox and no shipments, so nothing is counted for
-        // them: a badge is information about a screen they may not open.
-        $counts = $admin->isMarketer() ? null : self::counts();
+        $counts = self::counts();
 
         return new Shell(
             companyName: self::companyName(),
@@ -50,8 +48,8 @@ final class Screen
             userRole: $admin->role,
             current: $current,
             badges: [
-                'inbox'     => $counts?->leadsNew() ?? 0,
-                'shipments' => $counts?->shipmentsException() ?? 0,
+                'inbox'     => $counts->leadsNew(),
+                'shipments' => $counts->shipmentsException(),
             ],
             showSections: $sections,
         );
